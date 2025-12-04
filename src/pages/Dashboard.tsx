@@ -1,6 +1,6 @@
-import { Plus, TrendingUp, DollarSign, Zap } from 'lucide-react';
+import { Plus, TrendingUp, DollarSign, Zap, Trash2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { getAllJobs } from '../lib/db';
+import { getAllJobs, deleteJob } from '../lib/db';
 import { Job } from '../types';
 
 interface DashboardProps {
@@ -19,9 +19,26 @@ export default function Dashboard({ onNewJob, onEditJob }: DashboardProps) {
 
   const loadJobs = async () => {
     setLoading(true);
-    const allJobs = await getAllJobs();
-    setJobs(allJobs);
-    setLoading(false);
+    try {
+      const allJobs = await getAllJobs();
+      setJobs(allJobs);
+    } catch (error) {
+      console.error('Error loading jobs:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteJob = async (id: string) => {
+    if (window.confirm('Are you sure you want to delete this job?')) {
+      try {
+        await deleteJob(id);
+        await loadJobs();
+      } catch (error) {
+        console.error('Error deleting job:', error);
+        alert('Error deleting job');
+      }
+    }
   };
 
   const sortedJobs = [...jobs].sort((a, b) => {
@@ -166,7 +183,18 @@ export default function Dashboard({ onNewJob, onEditJob }: DashboardProps) {
                         {new Date(job.createdAt).toLocaleDateString()}
                       </td>
                       <td className="px-6 py-4 text-sm text-right">
-                        <button className="text-blue-600 hover:text-blue-800 font-medium">Edit</button>
+                        <div className="flex items-center justify-end gap-2">
+                          <button className="text-blue-600 hover:text-blue-800 font-medium">Edit</button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteJob(job.id);
+                            }}
+                            className="text-red-600 hover:text-red-800"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

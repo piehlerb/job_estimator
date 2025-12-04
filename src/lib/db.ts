@@ -140,3 +140,51 @@ export async function deleteJob(id: string): Promise<void> {
     request.onsuccess = () => resolve();
   });
 }
+
+export async function updateSystem(system: ChipSystem): Promise<void> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['systems'], 'readwrite');
+    const store = transaction.objectStore('systems');
+    const request = store.put(system);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve();
+  });
+}
+
+export async function deleteSystem(id: string): Promise<void> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['systems'], 'readwrite');
+    const store = transaction.objectStore('systems');
+    const request = store.delete(id);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve();
+  });
+}
+
+export async function updatePricingVariable(variable: PricingVariable): Promise<void> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['pricingVariables'], 'readwrite');
+    const store = transaction.objectStore('pricingVariables');
+    const request = store.put(variable);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve();
+  });
+}
+
+export async function deletePricingVariable(id: string): Promise<void> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['pricingVariables'], 'readwrite');
+    const store = transaction.objectStore('pricingVariables');
+    const request = store.delete(id);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve();
+  });
+}

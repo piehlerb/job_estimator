@@ -1,7 +1,20 @@
 import { ArrowLeft, Plus, Trash2, Edit2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { getAllSystems, getAllPricingVariables } from '../lib/db';
+import {
+  getAllSystems,
+  getAllPricingVariables,
+  addSystem,
+  updateSystem,
+  deleteSystem,
+  addPricingVariable,
+  updatePricingVariable,
+  deletePricingVariable,
+} from '../lib/db';
 import { ChipSystem, PricingVariable } from '../types';
+
+function generateId(): string {
+  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+}
 
 interface SettingsProps {
   onBack: () => void;
@@ -41,20 +54,61 @@ export default function Settings({ onBack }: SettingsProps) {
     setLoading(false);
   };
 
-  const handleSaveSystem = (e: React.FormEvent) => {
+  const handleSaveSystem = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('System saved:', systemForm);
-    setShowSystemForm(false);
-    setEditingSystem(null);
-    setSystemForm({ name: '', chipPrice: '', installPrice: '' });
+    if (!systemForm.name.trim()) return;
+
+    try {
+      const system: ChipSystem = {
+        id: editingSystem?.id || generateId(),
+        name: systemForm.name,
+        chipPrice: parseFloat(systemForm.chipPrice) || 0,
+        installPrice: parseFloat(systemForm.installPrice) || 0,
+        createdAt: editingSystem?.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      if (editingSystem) {
+        await updateSystem(system);
+      } else {
+        await addSystem(system);
+      }
+
+      await loadData();
+      setShowSystemForm(false);
+      setEditingSystem(null);
+      setSystemForm({ name: '', chipPrice: '', installPrice: '' });
+    } catch (error) {
+      console.error('Error saving system:', error);
+    }
   };
 
-  const handleSavePricing = (e: React.FormEvent) => {
+  const handleSavePricing = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Pricing saved:', pricingForm);
-    setShowPricingForm(false);
-    setEditingPricing(null);
-    setPricingForm({ name: '', value: '' });
+    if (!pricingForm.name.trim()) return;
+
+    try {
+      const variable: PricingVariable = {
+        id: editingPricing?.id || generateId(),
+        name: pricingForm.name,
+        value: parseFloat(pricingForm.value) || 0,
+        createdAt: editingPricing?.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      if (editingPricing) {
+        await updatePricingVariable(variable);
+      } else {
+        await addPricingVariable(variable);
+      }
+
+      await loadData();
+      setShowPricingForm(false);
+      setEditingPricing(null);
+      setPricingForm({ name: '', value: '' });
+    } catch (error) {
+      console.error('Error saving pricing variable:', error);
+    }
   };
 
   const handleEditSystem = (system: ChipSystem) => {
@@ -167,7 +221,13 @@ export default function Settings({ onBack }: SettingsProps) {
                         >
                           <Edit2 size={18} />
                         </button>
-                        <button className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                        <button
+                          onClick={async () => {
+                            await deleteSystem(system.id);
+                            await loadData();
+                          }}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        >
                           <Trash2 size={18} />
                         </button>
                       </div>
@@ -290,7 +350,13 @@ export default function Settings({ onBack }: SettingsProps) {
                         >
                           <Edit2 size={18} />
                         </button>
-                        <button className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                        <button
+                          onClick={async () => {
+                            await deletePricingVariable(variable.id);
+                            await loadData();
+                          }}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        >
                           <Trash2 size={18} />
                         </button>
                       </div>
