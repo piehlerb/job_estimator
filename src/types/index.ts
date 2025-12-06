@@ -1,8 +1,10 @@
 export interface ChipSystem {
   id: string;
   name: string;
-  chipPrice: number;
-  installPrice: number;
+  feetPerLb: number;
+  boxCost: number;
+  baseSpread: number;
+  topSpread: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -22,13 +24,26 @@ export interface Job {
   floorFootage: number;
   verticalFootage: number;
   crackFillFactor: number;
-  materialCost: number;
-  laborHours: number;
-  gasExpense: number;
-  royaltyPercent: number;
-  seasonalAdjustment: number;
-  totalCost: number;
-  suggestedPrice: number;
+  installDays: number;
+  installDate: string;
+  travelDistance: number;
+  laborers: number;
+  totalPrice: number;
+  // Snapshot of costs at time of job creation
+  baseCostPerGal: number;
+  topCostPerGal: number;
+  crackFillCostPerGal: number;
+  gasCost: number;
+  fullyLoadedEE: number;
+  consumablesCost: number;
+  // Snapshot of system at time of job creation
+  systemSnapshot: {
+    name: string;
+    feetPerLb: number;
+    boxCost: number;
+    baseSpread: number;
+    topSpread: number;
+  };
   createdAt: string;
   updatedAt: string;
   synced: boolean;

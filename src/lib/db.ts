@@ -2,13 +2,9 @@ import { ChipSystem, PricingVariable, Job } from '../types';
 
 const DB_NAME = 'JobEstimator';
 
-interface IndexedDBChipSystem extends ChipSystem {}
-interface IndexedDBPricingVariable extends PricingVariable {}
-interface IndexedDBJob extends Job {}
-
 export async function initDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1);
+    const request = indexedDB.open(DB_NAME, 2);
 
     request.onerror = () => reject(request.error);
     request.onsuccess = () => resolve(request.result);

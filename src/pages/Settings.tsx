@@ -32,8 +32,10 @@ export default function Settings({ onBack }: SettingsProps) {
 
   const [systemForm, setSystemForm] = useState({
     name: '',
-    chipPrice: '',
-    installPrice: '',
+    feetPerLb: '',
+    boxCost: '',
+    baseSpread: '',
+    topSpread: '',
   });
 
   const [pricingForm, setPricingForm] = useState({
@@ -62,8 +64,10 @@ export default function Settings({ onBack }: SettingsProps) {
       const system: ChipSystem = {
         id: editingSystem?.id || generateId(),
         name: systemForm.name,
-        chipPrice: parseFloat(systemForm.chipPrice) || 0,
-        installPrice: parseFloat(systemForm.installPrice) || 0,
+        feetPerLb: parseFloat(systemForm.feetPerLb) || 0,
+        boxCost: parseFloat(systemForm.boxCost) || 0,
+        baseSpread: parseFloat(systemForm.baseSpread) || 0,
+        topSpread: parseFloat(systemForm.topSpread) || 0,
         createdAt: editingSystem?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -77,7 +81,7 @@ export default function Settings({ onBack }: SettingsProps) {
       await loadData();
       setShowSystemForm(false);
       setEditingSystem(null);
-      setSystemForm({ name: '', chipPrice: '', installPrice: '' });
+      setSystemForm({ name: '', feetPerLb: '', boxCost: '', baseSpread: '', topSpread: '' });
     } catch (error) {
       console.error('Error saving system:', error);
     }
@@ -115,8 +119,10 @@ export default function Settings({ onBack }: SettingsProps) {
     setEditingSystem(system);
     setSystemForm({
       name: system.name,
-      chipPrice: system.chipPrice.toString(),
-      installPrice: system.installPrice.toString(),
+      feetPerLb: system.feetPerLb.toString(),
+      boxCost: system.boxCost.toString(),
+      baseSpread: system.baseSpread.toString(),
+      topSpread: system.topSpread.toString(),
     });
     setShowSystemForm(true);
   };
@@ -176,7 +182,7 @@ export default function Settings({ onBack }: SettingsProps) {
                 <button
                   onClick={() => {
                     setEditingSystem(null);
-                    setSystemForm({ name: '', chipPrice: '', installPrice: '' });
+                    setSystemForm({ name: '', feetPerLb: '', boxCost: '', baseSpread: '', topSpread: '' });
                     setShowSystemForm(true);
                   }}
                   className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
@@ -192,7 +198,7 @@ export default function Settings({ onBack }: SettingsProps) {
                   <button
                     onClick={() => {
                       setEditingSystem(null);
-                      setSystemForm({ name: '', chipPrice: '', installPrice: '' });
+                      setSystemForm({ name: '', feetPerLb: '', boxCost: '', baseSpread: '', topSpread: '' });
                       setShowSystemForm(true);
                     }}
                     className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
@@ -211,7 +217,7 @@ export default function Settings({ onBack }: SettingsProps) {
                       <div>
                         <p className="font-semibold text-slate-900">{system.name}</p>
                         <p className="text-sm text-slate-600 mt-1">
-                          Chip: ${system.chipPrice} | Install: ${system.installPrice}
+                          {system.feetPerLb} ft/lb | Box: ${system.boxCost} | Base: {system.baseSpread} | Top: {system.topSpread}
                         </p>
                       </div>
                       <div className="flex gap-2">
@@ -244,34 +250,59 @@ export default function Settings({ onBack }: SettingsProps) {
                   <form onSubmit={handleSaveSystem} className="space-y-4">
                     <div>
                       <label className="block text-sm font-semibold text-slate-900 mb-2">System Name</label>
-                      <input
-                        type="text"
-                        placeholder="e.g., Diamond, Silver"
+                      <select
                         value={systemForm.name}
                         onChange={(e) => setSystemForm({ ...systemForm, name: e.target.value })}
                         className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
+                      >
+                        <option value="">Select system type...</option>
+                        <option value="1/4 chip">1/4 chip</option>
+                        <option value="1/8 chip">1/8 chip</option>
+                        <option value="1/16 chip">1/16 chip</option>
+                      </select>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-semibold text-slate-900 mb-2">Chip Price ($)</label>
+                        <label className="block text-sm font-semibold text-slate-900 mb-2">Feet per lb</label>
                         <input
                           type="number"
                           step="0.01"
                           placeholder="0.00"
-                          value={systemForm.chipPrice}
-                          onChange={(e) => setSystemForm({ ...systemForm, chipPrice: e.target.value })}
+                          value={systemForm.feetPerLb}
+                          onChange={(e) => setSystemForm({ ...systemForm, feetPerLb: e.target.value })}
                           className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-semibold text-slate-900 mb-2">Install Price ($)</label>
+                        <label className="block text-sm font-semibold text-slate-900 mb-2">Box Cost ($)</label>
                         <input
                           type="number"
                           step="0.01"
                           placeholder="0.00"
-                          value={systemForm.installPrice}
-                          onChange={(e) => setSystemForm({ ...systemForm, installPrice: e.target.value })}
+                          value={systemForm.boxCost}
+                          onChange={(e) => setSystemForm({ ...systemForm, boxCost: e.target.value })}
+                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-slate-900 mb-2">Base Spread</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={systemForm.baseSpread}
+                          onChange={(e) => setSystemForm({ ...systemForm, baseSpread: e.target.value })}
+                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-slate-900 mb-2">Top Spread</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={systemForm.topSpread}
+                          onChange={(e) => setSystemForm({ ...systemForm, topSpread: e.target.value })}
                           className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                       </div>
@@ -304,33 +335,91 @@ export default function Settings({ onBack }: SettingsProps) {
             <div>
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-lg font-semibold text-slate-900">Pricing Variables</h3>
-                <button
-                  onClick={() => {
-                    setEditingPricing(null);
-                    setPricingForm({ name: '', value: '' });
-                    setShowPricingForm(true);
-                  }}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
-                >
-                  <Plus size={18} />
-                  New Variable
-                </button>
-              </div>
-
-              {pricingVars.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-slate-600 mb-4">No pricing variables yet</p>
+                <div className="flex gap-2">
+                  {pricingVars.length === 0 && (
+                    <button
+                      onClick={async () => {
+                        const defaultVars = [
+                          { name: 'Base Cost Per Gal', value: 0 },
+                          { name: 'Top Cost Per Gal', value: 0 },
+                          { name: 'Crack Fill Cost', value: 0 },
+                          { name: 'Gas Cost', value: 0 },
+                          { name: 'Fully Loaded EE', value: 0 },
+                          { name: 'Consumables Cost', value: 0 },
+                        ];
+                        for (const varItem of defaultVars) {
+                          await addPricingVariable({
+                            id: generateId(),
+                            name: varItem.name,
+                            value: varItem.value,
+                            createdAt: new Date().toISOString(),
+                            updatedAt: new Date().toISOString(),
+                          });
+                        }
+                        await loadData();
+                      }}
+                      className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors"
+                    >
+                      <Plus size={18} />
+                      Initialize Default Costs
+                    </button>
+                  )}
                   <button
                     onClick={() => {
                       setEditingPricing(null);
                       setPricingForm({ name: '', value: '' });
                       setShowPricingForm(true);
                     }}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
                   >
                     <Plus size={18} />
-                    Create Variable
+                    New Variable
                   </button>
+                </div>
+              </div>
+
+              {pricingVars.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-slate-600 mb-4">No pricing variables yet. Initialize default costs to get started!</p>
+                  <div className="flex gap-3 justify-center">
+                    <button
+                      onClick={async () => {
+                        const defaultVars = [
+                          { name: 'Base Cost Per Gal', value: 0 },
+                          { name: 'Top Cost Per Gal', value: 0 },
+                          { name: 'Crack Fill Cost', value: 0 },
+                          { name: 'Gas Cost', value: 0 },
+                          { name: 'Fully Loaded EE', value: 0 },
+                          { name: 'Consumables Cost', value: 0 },
+                        ];
+                        for (const varItem of defaultVars) {
+                          await addPricingVariable({
+                            id: generateId(),
+                            name: varItem.name,
+                            value: varItem.value,
+                            createdAt: new Date().toISOString(),
+                            updatedAt: new Date().toISOString(),
+                          });
+                        }
+                        await loadData();
+                      }}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors"
+                    >
+                      <Plus size={18} />
+                      Initialize Default Costs
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingPricing(null);
+                        setPricingForm({ name: '', value: '' });
+                        setShowPricingForm(true);
+                      }}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+                    >
+                      <Plus size={18} />
+                      Create Custom Variable
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-3">

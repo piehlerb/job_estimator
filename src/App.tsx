@@ -1,5 +1,4 @@
-import { useState, useEffect } from 'react';
-import { Menu, X, Wifi, WifiOff } from 'lucide-react';
+import { useState } from 'react';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import JobForm from './pages/JobForm';

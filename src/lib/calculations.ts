@@ -1,81 +1,215 @@
-import { ChipSystem, PricingVariable, Job } from '../types';
+import { ChipSystem } from '../types';
+
+export interface CostInputs {
+  baseCostPerGal: number;
+  topCostPerGal: number;
+  crackFillCostPerGal: number;
+  gasCost: number;
+  fullyLoadedEE: number;
+  consumablesCost: number;
+}
+
+export interface JobInputs {
+  floorFootage: number;
+  verticalFootage: number;
+  crackFillFactor: number;
+  installDays: number;
+  installDate: string;
+  travelDistance: number;
+  laborers: number;
+  totalPrice: number;
+}
 
 export interface JobCalculation {
+  // Price metrics
+  pricePerSqft: number;
+
+  // Material needs
+  chipNeeded: number;
   chipCost: number;
-  installCost: number;
+  baseGallons: number;
+  baseCost: number;
+  topGallons: number;
+  topCost: number;
+  crackFillGallons: number;
+  crackFillCost: number;
+
+  // Gas costs
+  gasGeneratorCost: number;
+  gasHeaterCost: number;
+  gasTravelCost: number;
+
+  // Other costs
   laborCost: number;
-  materialCost: number;
-  gasExpense: number;
-  royaltyAmount: number;
-  seasonalAdjustmentAmount: number;
-  totalCost: number;
-  suggestedPrice: number;
-  margin: number;
-  marginPercent: number;
+  consumablesCost: number;
+  royaltyCost: number;
+
+  // Totals
+  totalCosts: number;
+  totalCostsPerSqft: number;
+  jobMargin: number;
+
+  // Suggested pricing
+  suggestedDiscount: number;
+  suggestedCrackPrice: number;
+  suggestedFloorPricePerSqft: number;
+  suggestedVerticalPrice: number;
+  suggestedTotal: number;
+  suggestedMargin: number;
+  suggestedMarginPct: number;
 }
 
 export function calculateJobCosts(
-  job: Partial<Job>,
-  system: ChipSystem | null,
-  hourlyRate: number
+  jobInputs: JobInputs,
+  system: ChipSystem | Pick<ChipSystem, 'feetPerLb' | 'boxCost' | 'baseSpread' | 'topSpread'> | null,
+  costInputs: CostInputs
 ): JobCalculation {
-  const floorFootage = job.floorFootage || 0;
-  const verticalFootage = job.verticalFootage || 0;
-  const crackFillFactor = job.crackFillFactor || 1;
-  const materialCost = job.materialCost || 0;
-  const laborHours = job.laborHours || 0;
-  const gasExpense = job.gasExpense || 0;
-  const royaltyPercent = job.royaltyPercent || 0;
-  const seasonalAdjustment = job.seasonalAdjustment || 0;
+  const {
+    floorFootage,
+    verticalFootage,
+    crackFillFactor,
+    installDays,
+    installDate,
+    travelDistance,
+    laborers,
+    totalPrice,
+  } = jobInputs;
 
-  // Chip and install costs based on system and footage
-  const totalFootage = floorFootage + verticalFootage;
-  const chipCost = system ? totalFootage * system.chipPrice * crackFillFactor : 0;
-  const installCost = system ? totalFootage * system.installPrice : 0;
+  const {
+    baseCostPerGal,
+    topCostPerGal,
+    crackFillCostPerGal,
+    gasCost,
+    fullyLoadedEE,
+    consumablesCost,
+  } = costInputs;
 
-  // Labor cost
-  const laborCost = laborHours * hourlyRate;
+  // Price per sqft
+  const pricePerSqft = floorFootage > 0 ? totalPrice / floorFootage : 0;
 
-  // Subtotal before adjustments
-  const subtotal = chipCost + installCost + laborCost + materialCost + gasExpense;
+  // Chip calculations
+  const chipNeeded = system
+    ? Math.ceil((floorFootage + verticalFootage * 1.1) / system.feetPerLb / 40)
+    : 0;
+  const chipCost = system ? chipNeeded * system.boxCost : 0;
 
-  // Royalty on subtotal
-  const royaltyAmount = (subtotal * royaltyPercent) / 100;
+  // Base calculations
+  const baseGallons = system
+    ? floorFootage / system.baseSpread + (verticalFootage / system.baseSpread) * 1.25
+    : 0;
+  const baseCost = baseGallons * baseCostPerGal;
 
-  // Total cost before seasonal adjustment
-  const costBeforeAdjustment = subtotal + royaltyAmount;
+  // Top calculations
+  const topGallons = system
+    ? floorFootage / system.topSpread + (verticalFootage / system.topSpread) * 1.25
+    : 0;
+  const topCost = topGallons * topCostPerGal;
 
-  // Seasonal adjustment (as percentage)
-  const seasonalAdjustmentAmount = (costBeforeAdjustment * seasonalAdjustment) / 100;
+  // Crack fill calculations
+  const crackFillGallons = crackFillFactor * 0.2;
+  const crackFillCost = crackFillGallons * crackFillCostPerGal;
 
-  // Final total cost
-  const totalCost = costBeforeAdjustment + seasonalAdjustmentAmount;
+  // Gas calculations
+  const gasGeneratorCost = gasCost * 10;
 
-  // Suggested price: cost + 40% markup
-  const suggestedPrice = totalCost * 1.4;
+  // Gas heater cost - check if install date is in winter months (11, 12, 1, 2, 3)
+  const installMonth = new Date(installDate).getMonth() + 1; // getMonth() returns 0-11
+  const isWinterMonth = [11, 12, 1, 2, 3].includes(installMonth);
+  const gasHeaterCost = isWinterMonth ? (gasCost + 1) * 8 : 0;
 
-  // Margin
-  const margin = suggestedPrice - totalCost;
-  const marginPercent = suggestedPrice > 0 ? (margin / suggestedPrice) * 100 : 0;
+  const gasTravelCost = (travelDistance * 2 * gasCost) / 20 + (travelDistance * 2 * gasCost) / 10;
+
+  // Labor cost (laborers * 10 hours * fullyLoadedEE * install days)
+  const laborCost = fullyLoadedEE * 10 * laborers * installDays;
+
+  // Consumables cost (passed through)
+  const consumables = consumablesCost;
+
+  // Royalty cost
+  const royaltyCost = totalPrice * 0.05;
+
+  // Total costs
+  const totalCosts =
+    chipCost +
+    baseCost +
+    topCost +
+    consumables +
+    crackFillCost +
+    gasHeaterCost +
+    gasTravelCost +
+    gasGeneratorCost +
+    royaltyCost +
+    laborCost;
+
+  const totalCostsPerSqft = floorFootage > 0 ? totalCosts / floorFootage : 0;
+
+  // Job margin
+  const jobMargin = totalPrice - totalCosts;
+
+  // Suggested pricing calculations
+  const suggestedDiscount = Math.min(floorFootage, 500) * -1;
+  const suggestedCrackPrice = crackFillCost * 3;
+
+  const suggestedFloorCalc =
+    (totalCosts - suggestedDiscount - suggestedCrackPrice + 2000) /
+    (floorFootage > 0 ? floorFootage : 1);
+  const suggestedFloorPricePerSqft = Math.min(suggestedFloorCalc, 8);
+
+  const suggestedVerticalPrice = verticalFootage * 12;
+
+  const suggestedTotal =
+    suggestedCrackPrice +
+    suggestedFloorPricePerSqft * floorFootage +
+    suggestedVerticalPrice +
+    suggestedDiscount;
+
+  const suggestedMargin = suggestedTotal - totalCosts;
+  const suggestedMarginPct =
+    suggestedTotal > 0 ? (suggestedMargin / suggestedTotal) * 100 : 0;
 
   return {
+    pricePerSqft,
+    chipNeeded,
     chipCost,
-    installCost,
+    baseGallons,
+    baseCost,
+    topGallons,
+    topCost,
+    crackFillGallons,
+    crackFillCost,
+    gasGeneratorCost,
+    gasHeaterCost,
+    gasTravelCost,
     laborCost,
-    materialCost,
-    gasExpense,
-    royaltyAmount,
-    seasonalAdjustmentAmount,
-    totalCost,
-    suggestedPrice,
-    margin,
-    marginPercent,
+    consumablesCost: consumables,
+    royaltyCost,
+    totalCosts,
+    totalCostsPerSqft,
+    jobMargin,
+    suggestedDiscount,
+    suggestedCrackPrice,
+    suggestedFloorPricePerSqft,
+    suggestedVerticalPrice,
+    suggestedTotal,
+    suggestedMargin,
+    suggestedMarginPct,
   };
 }
 
-export function getDefaultHourlyRate(pricingVars: PricingVariable[]): number {
-  const rateVar = pricingVars.find(
-    (v) => v.name.toLowerCase().includes('hourly') || v.name.toLowerCase().includes('rate')
-  );
-  return rateVar ? rateVar.value : 50;
+export function getCostInputsFromPricingVars(pricingVars: Array<{ name: string; value: number }>): CostInputs {
+  const getValue = (searchTerms: string[]) => {
+    const variable = pricingVars.find((v) =>
+      searchTerms.some((term) => v.name.toLowerCase().includes(term.toLowerCase()))
+    );
+    return variable ? variable.value : 0;
+  };
+
+  return {
+    baseCostPerGal: getValue(['base cost', 'base gal', 'base per gal']),
+    topCostPerGal: getValue(['top cost', 'top gal', 'top per gal']),
+    crackFillCostPerGal: getValue(['crack fill', 'crack cost']),
+    gasCost: getValue(['gas cost', 'gas']),
+    fullyLoadedEE: getValue(['fully loaded', 'employee', 'ee']),
+    consumablesCost: getValue(['consumables']),
+  };
 }

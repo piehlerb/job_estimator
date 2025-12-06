@@ -2,14 +2,21 @@ import { Plus, TrendingUp, DollarSign, Zap, Trash2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { getAllJobs, deleteJob } from '../lib/db';
 import { Job } from '../types';
+import { calculateJobCosts } from '../lib/calculations';
 
 interface DashboardProps {
   onNewJob: () => void;
   onEditJob: (id: string) => void;
 }
 
+interface JobWithCalculations extends Job {
+  calculatedTotalCost: number;
+  calculatedSuggestedPrice: number;
+  calculatedMargin: number;
+}
+
 export default function Dashboard({ onNewJob, onEditJob }: DashboardProps) {
-  const [jobs, setJobs] = useState<Job[]>([]);
+  const [jobs, setJobs] = useState<JobWithCalculations[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState<'date' | 'price' | 'margin'>('date');
 
@@ -21,7 +28,40 @@ export default function Dashboard({ onNewJob, onEditJob }: DashboardProps) {
     setLoading(true);
     try {
       const allJobs = await getAllJobs();
-      setJobs(allJobs);
+
+      // Calculate costs for each job using the snapshot data
+      const jobsWithCalc: JobWithCalculations[] = allJobs.map((job) => {
+        const calc = calculateJobCosts(
+          {
+            floorFootage: job.floorFootage,
+            verticalFootage: job.verticalFootage,
+            crackFillFactor: job.crackFillFactor,
+            installDays: job.installDays,
+            installDate: job.installDate,
+            travelDistance: job.travelDistance,
+            laborers: job.laborers || 2, // Default to 2 for old jobs
+            totalPrice: job.totalPrice,
+          },
+          job.systemSnapshot,
+          {
+            baseCostPerGal: job.baseCostPerGal,
+            topCostPerGal: job.topCostPerGal,
+            crackFillCostPerGal: job.crackFillCostPerGal,
+            gasCost: job.gasCost,
+            fullyLoadedEE: job.fullyLoadedEE,
+            consumablesCost: job.consumablesCost,
+          }
+        );
+
+        return {
+          ...job,
+          calculatedTotalCost: calc.totalCosts,
+          calculatedSuggestedPrice: calc.suggestedTotal,
+          calculatedMargin: calc.suggestedMargin,
+        };
+      });
+
+      setJobs(jobsWithCalc);
     } catch (error) {
       console.error('Error loading jobs:', error);
     } finally {
@@ -44,10 +84,10 @@ export default function Dashboard({ onNewJob, onEditJob }: DashboardProps) {
   const sortedJobs = [...jobs].sort((a, b) => {
     switch (sortBy) {
       case 'price':
-        return (b.suggestedPrice || 0) - (a.suggestedPrice || 0);
+        return (b.totalPrice || 0) - (a.totalPrice || 0);
       case 'margin':
-        const marginA = ((a.suggestedPrice || 0) - (a.totalCost || 0)) / (a.suggestedPrice || 1);
-        const marginB = ((b.suggestedPrice || 0) - (b.totalCost || 0)) / (b.suggestedPrice || 1);
+        const marginA = a.calculatedMargin / (a.calculatedSuggestedPrice || 1);
+        const marginB = b.calculatedMargin / (b.calculatedSuggestedPrice || 1);
         return marginB - marginA;
       case 'date':
       default:
@@ -55,8 +95,8 @@ export default function Dashboard({ onNewJob, onEditJob }: DashboardProps) {
     }
   });
 
-  const totalRevenue = jobs.reduce((sum, job) => sum + (job.suggestedPrice || 0), 0);
-  const totalCost = jobs.reduce((sum, job) => sum + (job.totalCost || 0), 0);
+  const totalRevenue = jobs.reduce((sum, job) => sum + (job.totalPrice || 0), 0);
+  const totalCost = jobs.reduce((sum, job) => sum + job.calculatedTotalCost, 0);
   const potentialProfit = totalRevenue - totalCost;
 
   return (
@@ -156,7 +196,7 @@ export default function Dashboard({ onNewJob, onEditJob }: DashboardProps) {
                 <tr className="bg-slate-50 border-b border-slate-200">
                   <th className="px-6 py-3 text-left text-sm font-semibold text-slate-700">Job Name</th>
                   <th className="px-6 py-3 text-right text-sm font-semibold text-slate-700">Total Cost</th>
-                  <th className="px-6 py-3 text-right text-sm font-semibold text-slate-700">Suggested Price</th>
+                  <th className="px-6 py-3 text-right text-sm font-semibold text-slate-700">Your Price</th>
                   <th className="px-6 py-3 text-right text-sm font-semibold text-slate-700">Margin</th>
                   <th className="px-6 py-3 text-right text-sm font-semibold text-slate-700">Date</th>
                   <th className="px-6 py-3 text-right text-sm font-semibold text-slate-700">Action</th>
@@ -164,7 +204,7 @@ export default function Dashboard({ onNewJob, onEditJob }: DashboardProps) {
               </thead>
               <tbody>
                 {sortedJobs.map((job) => {
-                  const margin = ((job.suggestedPrice || 0) - (job.totalCost || 0)) / (job.suggestedPrice || 1);
+                  const margin = job.totalPrice > 0 ? (job.totalPrice - job.calculatedTotalCost) / job.totalPrice : 0;
                   return (
                     <tr
                       key={job.id}
@@ -172,11 +212,11 @@ export default function Dashboard({ onNewJob, onEditJob }: DashboardProps) {
                       onClick={() => onEditJob(job.id)}
                     >
                       <td className="px-6 py-4 text-sm font-medium text-slate-900">{job.name || 'Untitled Job'}</td>
-                      <td className="px-6 py-4 text-sm text-slate-600 text-right">${(job.totalCost || 0).toFixed(0)}</td>
+                      <td className="px-6 py-4 text-sm text-slate-600 text-right">${job.calculatedTotalCost.toFixed(0)}</td>
                       <td className="px-6 py-4 text-sm font-semibold text-slate-900 text-right">
-                        ${(job.suggestedPrice || 0).toFixed(0)}
+                        ${(job.totalPrice || 0).toFixed(0)}
                       </td>
-                      <td className={`px-6 py-4 text-sm font-semibold text-right ${margin >= 0.3 ? 'text-green-600' : 'text-orange-600'}`}>
+                      <td className={`px-6 py-4 text-sm font-semibold text-right ${margin >= 0.3 ? 'text-green-600' : margin >= 0 ? 'text-orange-600' : 'text-red-600'}`}>
                         {(margin * 100).toFixed(0)}%
                       </td>
                       <td className="px-6 py-4 text-sm text-slate-600 text-right">
