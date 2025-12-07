@@ -2,15 +2,18 @@ import { ArrowLeft, Plus, Trash2, Edit2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import {
   getAllSystems,
-  getAllPricingVariables,
   addSystem,
   updateSystem,
   deleteSystem,
-  addPricingVariable,
-  updatePricingVariable,
-  deletePricingVariable,
+  getCosts,
+  saveCosts,
+  getDefaultCosts,
+  getAllLaborers,
+  addLaborer,
+  updateLaborer,
+  deleteLaborer,
 } from '../lib/db';
-import { ChipSystem, PricingVariable } from '../types';
+import { ChipSystem, ChipSize, Costs, Laborer } from '../types';
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -21,24 +24,38 @@ interface SettingsProps {
 }
 
 export default function Settings({ onBack }: SettingsProps) {
-  const [tab, setTab] = useState<'systems' | 'pricing'>('systems');
+  const [tab, setTab] = useState<'systems' | 'costs' | 'laborers'>('systems');
   const [systems, setSystems] = useState<ChipSystem[]>([]);
-  const [pricingVars, setPricingVars] = useState<PricingVariable[]>([]);
+  const [costs, setCosts] = useState<Costs>(getDefaultCosts());
+  const [laborers, setLaborers] = useState<Laborer[]>([]);
   const [loading, setLoading] = useState(true);
   const [showSystemForm, setShowSystemForm] = useState(false);
-  const [showPricingForm, setShowPricingForm] = useState(false);
+  const [showLaborerForm, setShowLaborerForm] = useState(false);
   const [editingSystem, setEditingSystem] = useState<ChipSystem | null>(null);
-  const [editingPricing, setEditingPricing] = useState<PricingVariable | null>(null);
+  const [editingLaborer, setEditingLaborer] = useState<Laborer | null>(null);
+  const [costsSaving, setCostsSaving] = useState(false);
 
   const [systemForm, setSystemForm] = useState({
     name: '',
-    chipPrice: '',
-    installPrice: '',
+    chipSize: '1/4' as ChipSize,
+    feetPerLb: '',
+    boxCost: '',
+    baseSpread: '',
+    topSpread: '',
   });
 
-  const [pricingForm, setPricingForm] = useState({
+  const [costsForm, setCostsForm] = useState({
+    baseCostPerGal: '',
+    topCostPerGal: '',
+    crackFillCost: '',
+    gasCost: '',
+    consumablesCost: '',
+  });
+
+  const [laborerForm, setLaborerForm] = useState({
     name: '',
-    value: '',
+    fullyLoadedRate: '',
+    isActive: true,
   });
 
   useEffect(() => {
@@ -48,9 +65,20 @@ export default function Settings({ onBack }: SettingsProps) {
   const loadData = async () => {
     setLoading(true);
     const allSystems = await getAllSystems();
-    const allPricing = await getAllPricingVariables();
+    const storedCosts = await getCosts();
+    const allLaborers = await getAllLaborers();
     setSystems(allSystems);
-    setPricingVars(allPricing);
+    setLaborers(allLaborers);
+    if (storedCosts) {
+      setCosts(storedCosts);
+      setCostsForm({
+        baseCostPerGal: storedCosts.baseCostPerGal.toString(),
+        topCostPerGal: storedCosts.topCostPerGal.toString(),
+        crackFillCost: storedCosts.crackFillCost.toString(),
+        gasCost: storedCosts.gasCost.toString(),
+        consumablesCost: storedCosts.consumablesCost.toString(),
+      });
+    }
     setLoading(false);
   };
 
@@ -62,8 +90,11 @@ export default function Settings({ onBack }: SettingsProps) {
       const system: ChipSystem = {
         id: editingSystem?.id || generateId(),
         name: systemForm.name,
-        chipPrice: parseFloat(systemForm.chipPrice) || 0,
-        installPrice: parseFloat(systemForm.installPrice) || 0,
+        chipSize: systemForm.chipSize,
+        feetPerLb: parseFloat(systemForm.feetPerLb) || 0,
+        boxCost: parseFloat(systemForm.boxCost) || 0,
+        baseSpread: parseFloat(systemForm.baseSpread) || 0,
+        topSpread: parseFloat(systemForm.topSpread) || 0,
         createdAt: editingSystem?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -77,37 +108,62 @@ export default function Settings({ onBack }: SettingsProps) {
       await loadData();
       setShowSystemForm(false);
       setEditingSystem(null);
-      setSystemForm({ name: '', chipPrice: '', installPrice: '' });
+      setSystemForm({ name: '', chipSize: '1/4', feetPerLb: '', boxCost: '', baseSpread: '', topSpread: '' });
     } catch (error) {
       console.error('Error saving system:', error);
     }
   };
 
-  const handleSavePricing = async (e: React.FormEvent) => {
+  const handleSaveCosts = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!pricingForm.name.trim()) return;
+    setCostsSaving(true);
 
     try {
-      const variable: PricingVariable = {
-        id: editingPricing?.id || generateId(),
-        name: pricingForm.name,
-        value: parseFloat(pricingForm.value) || 0,
-        createdAt: editingPricing?.createdAt || new Date().toISOString(),
+      const updatedCosts: Costs = {
+        ...costs,
+        baseCostPerGal: parseFloat(costsForm.baseCostPerGal) || 0,
+        topCostPerGal: parseFloat(costsForm.topCostPerGal) || 0,
+        crackFillCost: parseFloat(costsForm.crackFillCost) || 0,
+        gasCost: parseFloat(costsForm.gasCost) || 0,
+        consumablesCost: parseFloat(costsForm.consumablesCost) || 0,
         updatedAt: new Date().toISOString(),
       };
 
-      if (editingPricing) {
-        await updatePricingVariable(variable);
+      await saveCosts(updatedCosts);
+      setCosts(updatedCosts);
+    } catch (error) {
+      console.error('Error saving costs:', error);
+    } finally {
+      setCostsSaving(false);
+    }
+  };
+
+  const handleSaveLaborer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!laborerForm.name.trim()) return;
+
+    try {
+      const laborer: Laborer = {
+        id: editingLaborer?.id || generateId(),
+        name: laborerForm.name,
+        fullyLoadedRate: parseFloat(laborerForm.fullyLoadedRate) || 0,
+        isActive: laborerForm.isActive,
+        createdAt: editingLaborer?.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      if (editingLaborer) {
+        await updateLaborer(laborer);
       } else {
-        await addPricingVariable(variable);
+        await addLaborer(laborer);
       }
 
       await loadData();
-      setShowPricingForm(false);
-      setEditingPricing(null);
-      setPricingForm({ name: '', value: '' });
+      setShowLaborerForm(false);
+      setEditingLaborer(null);
+      setLaborerForm({ name: '', fullyLoadedRate: '', isActive: true });
     } catch (error) {
-      console.error('Error saving pricing variable:', error);
+      console.error('Error saving laborer:', error);
     }
   };
 
@@ -115,19 +171,29 @@ export default function Settings({ onBack }: SettingsProps) {
     setEditingSystem(system);
     setSystemForm({
       name: system.name,
-      chipPrice: system.chipPrice.toString(),
-      installPrice: system.installPrice.toString(),
+      chipSize: system.chipSize,
+      feetPerLb: system.feetPerLb.toString(),
+      boxCost: system.boxCost.toString(),
+      baseSpread: system.baseSpread.toString(),
+      topSpread: system.topSpread.toString(),
     });
     setShowSystemForm(true);
   };
 
-  const handleEditPricing = (variable: PricingVariable) => {
-    setEditingPricing(variable);
-    setPricingForm({
-      name: variable.name,
-      value: variable.value.toString(),
+  const handleEditLaborer = (laborer: Laborer) => {
+    setEditingLaborer(laborer);
+    setLaborerForm({
+      name: laborer.name,
+      fullyLoadedRate: laborer.fullyLoadedRate.toString(),
+      isActive: laborer.isActive,
     });
-    setShowPricingForm(true);
+    setShowLaborerForm(true);
+  };
+
+  const handleToggleLaborerActive = async (laborer: Laborer) => {
+    const updated = { ...laborer, isActive: !laborer.isActive, updatedAt: new Date().toISOString() };
+    await updateLaborer(updated);
+    await loadData();
   };
 
   if (loading) {
@@ -148,7 +214,7 @@ export default function Settings({ onBack }: SettingsProps) {
         <div className="border-b border-slate-200 flex">
           <button
             onClick={() => setTab('systems')}
-            className={`flex-1 px-6 py-4 font-semibold transition-colors ${
+            className={`flex-1 px-4 py-4 font-semibold transition-colors ${
               tab === 'systems'
                 ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600'
                 : 'text-slate-700 hover:bg-slate-50'
@@ -157,14 +223,24 @@ export default function Settings({ onBack }: SettingsProps) {
             Chip Systems
           </button>
           <button
-            onClick={() => setTab('pricing')}
-            className={`flex-1 px-6 py-4 font-semibold transition-colors ${
-              tab === 'pricing'
+            onClick={() => setTab('laborers')}
+            className={`flex-1 px-4 py-4 font-semibold transition-colors ${
+              tab === 'laborers'
                 ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600'
                 : 'text-slate-700 hover:bg-slate-50'
             }`}
           >
-            Pricing Variables
+            Laborers
+          </button>
+          <button
+            onClick={() => setTab('costs')}
+            className={`flex-1 px-4 py-4 font-semibold transition-colors ${
+              tab === 'costs'
+                ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600'
+                : 'text-slate-700 hover:bg-slate-50'
+            }`}
+          >
+            Costs
           </button>
         </div>
 
@@ -176,7 +252,7 @@ export default function Settings({ onBack }: SettingsProps) {
                 <button
                   onClick={() => {
                     setEditingSystem(null);
-                    setSystemForm({ name: '', chipPrice: '', installPrice: '' });
+                    setSystemForm({ name: '', chipSize: '1/4', feetPerLb: '', boxCost: '', baseSpread: '', topSpread: '' });
                     setShowSystemForm(true);
                   }}
                   className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
@@ -192,7 +268,7 @@ export default function Settings({ onBack }: SettingsProps) {
                   <button
                     onClick={() => {
                       setEditingSystem(null);
-                      setSystemForm({ name: '', chipPrice: '', installPrice: '' });
+                      setSystemForm({ name: '', chipSize: '1/4', feetPerLb: '', boxCost: '', baseSpread: '', topSpread: '' });
                       setShowSystemForm(true);
                     }}
                     className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
@@ -211,7 +287,10 @@ export default function Settings({ onBack }: SettingsProps) {
                       <div>
                         <p className="font-semibold text-slate-900">{system.name}</p>
                         <p className="text-sm text-slate-600 mt-1">
-                          Chip: ${system.chipPrice} | Install: ${system.installPrice}
+                          {system.chipSize}" chip | {system.feetPerLb} ft/lb | ${system.boxCost}/box
+                        </p>
+                        <p className="text-sm text-slate-600">
+                          Base: {system.baseSpread} | Top: {system.topSpread}
                         </p>
                       </div>
                       <div className="flex gap-2">
@@ -242,36 +321,74 @@ export default function Settings({ onBack }: SettingsProps) {
                     {editingSystem ? 'Edit System' : 'New System'}
                   </h4>
                   <form onSubmit={handleSaveSystem} className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-900 mb-2">System Name</label>
-                      <input
-                        type="text"
-                        placeholder="e.g., Diamond, Silver"
-                        value={systemForm.name}
-                        onChange={(e) => setSystemForm({ ...systemForm, name: e.target.value })}
-                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                    </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-semibold text-slate-900 mb-2">Chip Price ($)</label>
+                        <label className="block text-sm font-semibold text-slate-900 mb-2">System Name</label>
                         <input
-                          type="number"
-                          step="0.01"
-                          placeholder="0.00"
-                          value={systemForm.chipPrice}
-                          onChange={(e) => setSystemForm({ ...systemForm, chipPrice: e.target.value })}
+                          type="text"
+                          placeholder="e.g., Diamond, Silver"
+                          value={systemForm.name}
+                          onChange={(e) => setSystemForm({ ...systemForm, name: e.target.value })}
                           className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-semibold text-slate-900 mb-2">Install Price ($)</label>
+                        <label className="block text-sm font-semibold text-slate-900 mb-2">Chip Size</label>
+                        <select
+                          value={systemForm.chipSize}
+                          onChange={(e) => setSystemForm({ ...systemForm, chipSize: e.target.value as ChipSize })}
+                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                        >
+                          <option value="1/4">1/4" chip</option>
+                          <option value="1/8">1/8" chip</option>
+                          <option value="1/16">1/16" chip</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-semibold text-slate-900 mb-2">Feet per lb</label>
                         <input
                           type="number"
                           step="0.01"
                           placeholder="0.00"
-                          value={systemForm.installPrice}
-                          onChange={(e) => setSystemForm({ ...systemForm, installPrice: e.target.value })}
+                          value={systemForm.feetPerLb}
+                          onChange={(e) => setSystemForm({ ...systemForm, feetPerLb: e.target.value })}
+                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-slate-900 mb-2">Box Cost ($)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={systemForm.boxCost}
+                          onChange={(e) => setSystemForm({ ...systemForm, boxCost: e.target.value })}
+                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-semibold text-slate-900 mb-2">Base Spread</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={systemForm.baseSpread}
+                          onChange={(e) => setSystemForm({ ...systemForm, baseSpread: e.target.value })}
+                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-slate-900 mb-2">Top Spread</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={systemForm.topSpread}
+                          onChange={(e) => setSystemForm({ ...systemForm, topSpread: e.target.value })}
                           className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                       </div>
@@ -300,59 +417,79 @@ export default function Settings({ onBack }: SettingsProps) {
             </div>
           )}
 
-          {tab === 'pricing' && (
+          {tab === 'laborers' && (
             <div>
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-semibold text-slate-900">Pricing Variables</h3>
+                <h3 className="text-lg font-semibold text-slate-900">Laborers</h3>
                 <button
                   onClick={() => {
-                    setEditingPricing(null);
-                    setPricingForm({ name: '', value: '' });
-                    setShowPricingForm(true);
+                    setEditingLaborer(null);
+                    setLaborerForm({ name: '', fullyLoadedRate: '', isActive: true });
+                    setShowLaborerForm(true);
                   }}
                   className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
                 >
                   <Plus size={18} />
-                  New Variable
+                  New Laborer
                 </button>
               </div>
 
-              {pricingVars.length === 0 ? (
+              {laborers.length === 0 ? (
                 <div className="text-center py-8">
-                  <p className="text-slate-600 mb-4">No pricing variables yet</p>
+                  <p className="text-slate-600 mb-4">No laborers created yet</p>
                   <button
                     onClick={() => {
-                      setEditingPricing(null);
-                      setPricingForm({ name: '', value: '' });
-                      setShowPricingForm(true);
+                      setEditingLaborer(null);
+                      setLaborerForm({ name: '', fullyLoadedRate: '', isActive: true });
+                      setShowLaborerForm(true);
                     }}
                     className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
                   >
                     <Plus size={18} />
-                    Create Variable
+                    Create Laborer
                   </button>
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {pricingVars.map((variable) => (
+                  {laborers.map((laborer) => (
                     <div
-                      key={variable.id}
-                      className="flex items-center justify-between p-4 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                      key={laborer.id}
+                      className={`flex items-center justify-between p-4 border rounded-lg transition-colors ${
+                        laborer.isActive
+                          ? 'border-slate-200 hover:bg-slate-50'
+                          : 'border-slate-200 bg-slate-100 opacity-60'
+                      }`}
                     >
-                      <div>
-                        <p className="font-semibold text-slate-900">{variable.name}</p>
-                        <p className="text-sm text-slate-600 mt-1">Value: {variable.value}</p>
+                      <div className="flex items-center gap-4">
+                        <button
+                          onClick={() => handleToggleLaborerActive(laborer)}
+                          className={`w-12 h-6 rounded-full transition-colors relative ${
+                            laborer.isActive ? 'bg-green-500' : 'bg-slate-300'
+                          }`}
+                        >
+                          <span
+                            className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
+                              laborer.isActive ? 'left-7' : 'left-1'
+                            }`}
+                          />
+                        </button>
+                        <div>
+                          <p className="font-semibold text-slate-900">{laborer.name}</p>
+                          <p className="text-sm text-slate-600 mt-1">
+                            ${laborer.fullyLoadedRate}/hr fully loaded
+                          </p>
+                        </div>
                       </div>
                       <div className="flex gap-2">
                         <button
-                          onClick={() => handleEditPricing(variable)}
+                          onClick={() => handleEditLaborer(laborer)}
                           className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                         >
                           <Edit2 size={18} />
                         </button>
                         <button
                           onClick={async () => {
-                            await deletePricingVariable(variable.id);
+                            await deleteLaborer(laborer.id);
                             await loadData();
                           }}
                           className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -365,32 +502,45 @@ export default function Settings({ onBack }: SettingsProps) {
                 </div>
               )}
 
-              {showPricingForm && (
+              {showLaborerForm && (
                 <div className="mt-6 p-6 bg-slate-50 border border-slate-200 rounded-lg">
                   <h4 className="font-semibold text-slate-900 mb-4">
-                    {editingPricing ? 'Edit Variable' : 'New Variable'}
+                    {editingLaborer ? 'Edit Laborer' : 'New Laborer'}
                   </h4>
-                  <form onSubmit={handleSavePricing} className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-900 mb-2">Variable Name</label>
-                      <input
-                        type="text"
-                        placeholder="e.g., Hourly Rate, Gas Cost"
-                        value={pricingForm.name}
-                        onChange={(e) => setPricingForm({ ...pricingForm, name: e.target.value })}
-                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
+                  <form onSubmit={handleSaveLaborer} className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-semibold text-slate-900 mb-2">Name</label>
+                        <input
+                          type="text"
+                          placeholder="e.g., John Smith"
+                          value={laborerForm.name}
+                          onChange={(e) => setLaborerForm({ ...laborerForm, name: e.target.value })}
+                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-slate-900 mb-2">Fully Loaded Rate ($/hr)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={laborerForm.fullyLoadedRate}
+                          onChange={(e) => setLaborerForm({ ...laborerForm, fullyLoadedRate: e.target.value })}
+                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-900 mb-2">Value</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        placeholder="0.00"
-                        value={pricingForm.value}
-                        onChange={(e) => setPricingForm({ ...pricingForm, value: e.target.value })}
-                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
+                    <div className="flex items-center gap-3">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={laborerForm.isActive}
+                          onChange={(e) => setLaborerForm({ ...laborerForm, isActive: e.target.checked })}
+                          className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                        />
+                        <span className="text-sm font-medium text-slate-900">Active</span>
+                      </label>
                     </div>
                     <div className="flex gap-3">
                       <button
@@ -402,8 +552,8 @@ export default function Settings({ onBack }: SettingsProps) {
                       <button
                         type="button"
                         onClick={() => {
-                          setShowPricingForm(false);
-                          setEditingPricing(null);
+                          setShowLaborerForm(false);
+                          setEditingLaborer(null);
                         }}
                         className="px-4 py-2 bg-slate-300 text-slate-900 rounded-lg font-semibold hover:bg-slate-400 transition-colors"
                       >
@@ -413,6 +563,87 @@ export default function Settings({ onBack }: SettingsProps) {
                   </form>
                 </div>
               )}
+            </div>
+          )}
+
+          {tab === 'costs' && (
+            <div>
+              <h3 className="text-lg font-semibold text-slate-900 mb-6">Cost Settings</h3>
+              <p className="text-sm text-slate-600 mb-6">
+                These costs are used for new job calculations. Existing jobs retain their original cost values.
+              </p>
+              <form onSubmit={handleSaveCosts} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-900 mb-2">Base Cost per Gallon ($)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={costsForm.baseCostPerGal}
+                      onChange={(e) => setCostsForm({ ...costsForm, baseCostPerGal: e.target.value })}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-900 mb-2">Top Cost per Gallon ($)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={costsForm.topCostPerGal}
+                      onChange={(e) => setCostsForm({ ...costsForm, topCostPerGal: e.target.value })}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-900 mb-2">Crack Fill Cost ($)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={costsForm.crackFillCost}
+                      onChange={(e) => setCostsForm({ ...costsForm, crackFillCost: e.target.value })}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-900 mb-2">Gas Cost ($)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={costsForm.gasCost}
+                      onChange={(e) => setCostsForm({ ...costsForm, gasCost: e.target.value })}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-900 mb-2">Consumables Cost ($)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={costsForm.consumablesCost}
+                      onChange={(e) => setCostsForm({ ...costsForm, consumablesCost: e.target.value })}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+                <div className="pt-4">
+                  <button
+                    type="submit"
+                    disabled={costsSaving}
+                    className="px-6 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  >
+                    {costsSaving ? 'Saving...' : 'Save Costs'}
+                  </button>
+                </div>
+              </form>
             </div>
           )}
         </div>

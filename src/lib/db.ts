@@ -1,14 +1,11 @@
-import { ChipSystem, PricingVariable, Job } from '../types';
+import { ChipSystem, PricingVariable, Job, Costs, Laborer } from '../types';
 
 const DB_NAME = 'JobEstimator';
-
-interface IndexedDBChipSystem extends ChipSystem {}
-interface IndexedDBPricingVariable extends PricingVariable {}
-interface IndexedDBJob extends Job {}
+const DB_VERSION = 3;
 
 export async function initDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1);
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
 
     request.onerror = () => reject(request.error);
     request.onsuccess = () => resolve(request.result);
@@ -24,6 +21,12 @@ export async function initDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains('jobs')) {
         db.createObjectStore('jobs', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('costs')) {
+        db.createObjectStore('costs', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('laborers')) {
+        db.createObjectStore('laborers', { keyPath: 'id' });
       }
     };
   });
@@ -182,6 +185,98 @@ export async function deletePricingVariable(id: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(['pricingVariables'], 'readwrite');
     const store = transaction.objectStore('pricingVariables');
+    const request = store.delete(id);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve();
+  });
+}
+
+// Costs - we store a single costs record with id 'current'
+export async function getCosts(): Promise<Costs | null> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['costs'], 'readonly');
+    const store = transaction.objectStore('costs');
+    const request = store.get('current');
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result || null);
+  });
+}
+
+export async function saveCosts(costs: Costs): Promise<void> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['costs'], 'readwrite');
+    const store = transaction.objectStore('costs');
+    const request = store.put({ ...costs, id: 'current' });
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve();
+  });
+}
+
+export function getDefaultCosts(): Costs {
+  return {
+    id: 'current',
+    baseCostPerGal: 0,
+    topCostPerGal: 0,
+    crackFillCost: 0,
+    gasCost: 0,
+    consumablesCost: 0,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+// Laborers
+export async function getAllLaborers(): Promise<Laborer[]> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['laborers'], 'readonly');
+    const store = transaction.objectStore('laborers');
+    const request = store.getAll();
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result || []);
+  });
+}
+
+export async function getActiveLaborers(): Promise<Laborer[]> {
+  const all = await getAllLaborers();
+  return all.filter((l) => l.isActive);
+}
+
+export async function addLaborer(laborer: Laborer): Promise<void> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['laborers'], 'readwrite');
+    const store = transaction.objectStore('laborers');
+    const request = store.add(laborer);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve();
+  });
+}
+
+export async function updateLaborer(laborer: Laborer): Promise<void> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['laborers'], 'readwrite');
+    const store = transaction.objectStore('laborers');
+    const request = store.put(laborer);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve();
+  });
+}
+
+export async function deleteLaborer(id: string): Promise<void> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['laborers'], 'readwrite');
+    const store = transaction.objectStore('laborers');
     const request = store.delete(id);
 
     request.onerror = () => reject(request.error);
