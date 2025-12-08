@@ -3,6 +3,7 @@ import { Plus, Trash2, Save } from 'lucide-react';
 import {
   getAllJobs,
   getAllChipBlends,
+  addChipBlend,
   getAllChipInventory,
   saveChipInventory,
   deleteChipInventory,
@@ -58,6 +59,7 @@ export default function Inventory() {
 
   const [newChipBlend, setNewChipBlend] = useState('');
   const [newChipPounds, setNewChipPounds] = useState('');
+  const [showBlendDropdown, setShowBlendDropdown] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -244,6 +246,16 @@ export default function Inventory() {
   const handleAddChipInventory = async () => {
     if (!newChipBlend || !newChipPounds) return;
 
+    // If blend doesn't exist in the list, add it
+    if (!chipBlends.some((b) => b.name.toLowerCase() === newChipBlend.toLowerCase())) {
+      const newBlend: ChipBlend = {
+        id: generateId(),
+        name: newChipBlend,
+      };
+      await addChipBlend(newBlend);
+      setChipBlends([...chipBlends, newBlend]);
+    }
+
     const inventory: ChipInventory = {
       id: generateId(),
       blend: newChipBlend,
@@ -255,6 +267,11 @@ export default function Inventory() {
     setChipInventory([...chipInventory, inventory]);
     setNewChipBlend('');
     setNewChipPounds('');
+  };
+
+  const handleBlendSelect = (blendName: string) => {
+    setNewChipBlend(blendName);
+    setShowBlendDropdown(false);
   };
 
   const handleUpdateChipInventory = async (id: string, pounds: number) => {
@@ -350,22 +367,44 @@ export default function Inventory() {
         </div>
 
         <div className="mt-4 flex gap-2 items-end">
-          <div>
+          <div className="relative">
             <label className="block text-xs text-slate-600 mb-1">Blend</label>
-            <select
+            <input
+              type="text"
               value={newChipBlend}
-              onChange={(e) => setNewChipBlend(e.target.value)}
-              className="px-3 py-2 border border-slate-300 rounded-lg text-sm"
-            >
-              <option value="">Select blend...</option>
-              {chipBlends
-                .filter((b) => !chipInventory.some((inv) => inv.blend === b.name))
-                .map((blend) => (
-                  <option key={blend.id} value={blend.name}>
-                    {blend.name}
-                  </option>
-                ))}
-            </select>
+              onChange={(e) => {
+                setNewChipBlend(e.target.value);
+                setShowBlendDropdown(true);
+              }}
+              onFocus={() => setShowBlendDropdown(true)}
+              onBlur={() => setTimeout(() => setShowBlendDropdown(false), 200)}
+              placeholder="Type or select..."
+              className="w-48 px-3 py-2 border border-slate-300 rounded-lg text-sm"
+            />
+            {showBlendDropdown && (
+              <div className="absolute z-10 w-full mt-1 bg-white border border-slate-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                {chipBlends
+                  .filter((b) =>
+                    !chipInventory.some((inv) => inv.blend === b.name) &&
+                    b.name.toLowerCase().includes(newChipBlend.toLowerCase())
+                  )
+                  .map((blend) => (
+                    <button
+                      key={blend.id}
+                      type="button"
+                      onClick={() => handleBlendSelect(blend.name)}
+                      className="w-full px-3 py-2 text-left hover:bg-slate-100 text-sm"
+                    >
+                      {blend.name}
+                    </button>
+                  ))}
+                {newChipBlend && !chipBlends.some((b) => b.name.toLowerCase() === newChipBlend.toLowerCase()) && (
+                  <div className="px-3 py-2 text-sm text-slate-500 border-t border-slate-200">
+                    Press Add to create "{newChipBlend}"
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           <div>
             <label className="block text-xs text-slate-600 mb-1">Pounds</label>
