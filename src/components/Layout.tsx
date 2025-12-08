@@ -1,10 +1,10 @@
-import { Menu, X, Wifi, WifiOff, Settings, Home, Plus, Package } from 'lucide-react';
+import { Menu, X, Wifi, WifiOff, Settings, Home, Plus, Package, CalendarDays } from 'lucide-react';
 
 interface LayoutProps {
   children: React.ReactNode;
   sidebarOpen: boolean;
   onSidebarToggle: () => void;
-  onNavigate: (page: 'dashboard' | 'new-job' | 'edit-job' | 'settings' | 'inventory') => void;
+  onNavigate: (page: 'dashboard' | 'new-job' | 'edit-job' | 'settings' | 'inventory' | 'calendar') => void;
   isOnline: boolean;
 }
 
@@ -51,6 +51,14 @@ export default function Layout({
             >
               <Package size={20} />
               <span>Inventory</span>
+            </button>
+
+            <button
+              onClick={() => onNavigate('calendar')}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+            >
+              <CalendarDays size={20} />
+              <span>Calendar</span>
             </button>
 
             <button

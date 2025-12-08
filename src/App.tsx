@@ -5,9 +5,10 @@ import Dashboard from './pages/Dashboard';
 import JobForm from './pages/JobForm';
 import Settings from './pages/Settings';
 import Inventory from './pages/Inventory';
+import Calendar from './pages/Calendar';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 
-type Page = 'dashboard' | 'new-job' | 'edit-job' | 'settings' | 'inventory';
+type Page = 'dashboard' | 'new-job' | 'edit-job' | 'settings' | 'inventory' | 'calendar';
 
 function App() {
   const [currentPage, setCurrentPage] = useState<Page>('dashboard');
@@ -47,6 +48,9 @@ function App() {
       )}
       {currentPage === 'inventory' && (
         <Inventory />
+      )}
+      {currentPage === 'calendar' && (
+        <Calendar onEditJob={(id) => handleNavigation('edit-job', id)} />
       )}
     </Layout>
   );
