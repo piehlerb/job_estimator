@@ -1,5 +1,9 @@
 export type ChipSize = '1/4' | '1/8' | '1/16';
 
+export type BaseColor = 'Grey' | 'Tan' | 'Clear';
+
+export type JobStatus = 'Won' | 'Lost' | 'Pending';
+
 export interface ChipSystem {
   id: string;
   name: string;
@@ -53,6 +57,10 @@ export interface Job {
   installDays: number;
   jobHours: number;
   totalPrice: number;
+  // Optional fields
+  chipBlend?: string;
+  baseColor?: BaseColor;
+  status: JobStatus;
   // Snapshot of costs at time of job creation (so old jobs don't change)
   costsSnapshot: Costs;
   // Snapshot of system at time of job creation
@@ -62,6 +70,29 @@ export interface Job {
   createdAt: string;
   updatedAt: string;
   synced: boolean;
+}
+
+// Inventory tracking
+export interface ChipInventory {
+  id: string;
+  blend: string;
+  pounds: number;
+  updatedAt: string;
+}
+
+export interface TopCoatInventory {
+  id: string;
+  topA: number; // gallons
+  topB: number; // gallons
+  updatedAt: string;
+}
+
+export interface BaseCoatInventory {
+  id: string;
+  baseA: number; // gallons
+  baseBGrey: number; // gallons
+  baseBTan: number; // gallons
+  updatedAt: string;
 }
 
 export interface JobCalculation {

@@ -4,9 +4,10 @@ import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import JobForm from './pages/JobForm';
 import Settings from './pages/Settings';
+import Inventory from './pages/Inventory';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 
-type Page = 'dashboard' | 'new-job' | 'edit-job' | 'settings';
+type Page = 'dashboard' | 'new-job' | 'edit-job' | 'settings' | 'inventory';
 
 function App() {
   const [currentPage, setCurrentPage] = useState<Page>('dashboard');
@@ -43,6 +44,9 @@ function App() {
       )}
       {currentPage === 'settings' && (
         <Settings onBack={handleBackToDashboard} />
+      )}
+      {currentPage === 'inventory' && (
+        <Inventory />
       )}
     </Layout>
   );

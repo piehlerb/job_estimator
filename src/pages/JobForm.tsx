@@ -8,8 +8,11 @@ import {
   getCosts,
   getDefaultCosts,
   getActiveLaborers,
+  getAllChipBlends,
+  addChipBlend,
+  ChipBlend,
 } from '../lib/db';
-import { ChipSystem, Costs, Job, JobCalculation, Laborer } from '../types';
+import { BaseColor, ChipSystem, Costs, Job, JobCalculation, JobStatus, Laborer } from '../types';
 import { calculateJobOutputs } from '../lib/calculations';
 
 function generateId(): string {
@@ -30,6 +33,9 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
   const [saving, setSaving] = useState(false);
   const [calculation, setCalculation] = useState<JobCalculation | null>(null);
   const [existingJob, setExistingJob] = useState<Job | null>(null);
+  const [chipBlends, setChipBlends] = useState<ChipBlend[]>([]);
+  const [chipBlendInput, setChipBlendInput] = useState('');
+  const [showBlendDropdown, setShowBlendDropdown] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -42,6 +48,9 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
     installDays: '1',
     jobHours: '10',
     totalPrice: '0',
+    chipBlend: '',
+    baseColor: '' as BaseColor | '',
+    status: 'Pending' as JobStatus,
   });
 
   useEffect(() => {
@@ -58,8 +67,10 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
       const allSystems = await getAllSystems();
       const storedCosts = await getCosts();
       const laborers = await getActiveLaborers();
+      const blends = await getAllChipBlends();
       setSystems(allSystems);
       setActiveLaborers(laborers);
+      setChipBlends(blends);
       if (storedCosts) {
         setCosts(storedCosts);
       }
@@ -79,7 +90,11 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
             installDays: job.installDays.toString(),
             jobHours: job.jobHours.toString(),
             totalPrice: job.totalPrice.toString(),
+            chipBlend: job.chipBlend || '',
+            baseColor: job.baseColor || '',
+            status: job.status || 'Pending',
           });
+          setChipBlendInput(job.chipBlend || '');
           // Set selected laborers from snapshot
           setSelectedLaborerIds(job.laborersSnapshot.map((l) => l.id));
         }
@@ -143,6 +158,18 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
     );
   };
 
+  const handleChipBlendSelect = (blendName: string) => {
+    setChipBlendInput(blendName);
+    setFormData({ ...formData, chipBlend: blendName });
+    setShowBlendDropdown(false);
+  };
+
+  const handleChipBlendInputChange = (value: string) => {
+    setChipBlendInput(value);
+    setFormData({ ...formData, chipBlend: value });
+    setShowBlendDropdown(true);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -163,6 +190,16 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
 
       const laborersToSave = getSelectedLaborers();
 
+      // If chip blend is entered and not in the list, add it
+      if (formData.chipBlend && !chipBlends.some((b) => b.name.toLowerCase() === formData.chipBlend.toLowerCase())) {
+        const newBlend: ChipBlend = {
+          id: generateId(),
+          name: formData.chipBlend,
+        };
+        await addChipBlend(newBlend);
+        setChipBlends([...chipBlends, newBlend]);
+      }
+
       const job: Job = {
         id: jobId || generateId(),
         name: formData.name,
@@ -175,6 +212,9 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
         installDays: parseFloat(formData.installDays) || 1,
         jobHours: parseFloat(formData.jobHours) || 10,
         totalPrice: parseFloat(formData.totalPrice) || 0,
+        chipBlend: formData.chipBlend || undefined,
+        baseColor: formData.baseColor || undefined,
+        status: formData.status,
         // Preserve costs and system snapshots for existing jobs, create new ones for new jobs
         // Laborers can be edited, so always save current selection
         costsSnapshot: existingJob ? existingJob.costsSnapshot : costs,
@@ -343,6 +383,77 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                 onChange={(e) => setFormData({ ...formData, jobHours: e.target.value })}
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
+            </div>
+
+            <div className="relative">
+              <label className="block text-sm font-semibold text-slate-900 mb-2">Chip Blend</label>
+              <input
+                type="text"
+                placeholder="Type or select a blend..."
+                value={chipBlendInput}
+                onChange={(e) => handleChipBlendInputChange(e.target.value)}
+                onFocus={() => setShowBlendDropdown(true)}
+                onBlur={() => setTimeout(() => setShowBlendDropdown(false), 200)}
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              {showBlendDropdown && chipBlends.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-slate-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                  {chipBlends
+                    .filter((b) => b.name.toLowerCase().includes(chipBlendInput.toLowerCase()))
+                    .map((blend) => (
+                      <button
+                        key={blend.id}
+                        type="button"
+                        onClick={() => handleChipBlendSelect(blend.name)}
+                        className="w-full px-4 py-2 text-left hover:bg-slate-100 text-sm"
+                      >
+                        {blend.name}
+                      </button>
+                    ))}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-slate-900 mb-2">Base Color</label>
+              <div className="flex gap-4">
+                {(['Grey', 'Tan', 'Clear'] as BaseColor[]).map((color) => (
+                  <label key={color} className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="baseColor"
+                      value={color}
+                      checked={formData.baseColor === color}
+                      onChange={(e) => setFormData({ ...formData, baseColor: e.target.value as BaseColor })}
+                      className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-slate-700">{color}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-slate-900 mb-2">Status</label>
+              <div className="flex gap-4">
+                {(['Pending', 'Won', 'Lost'] as JobStatus[]).map((status) => (
+                  <label key={status} className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="status"
+                      value={status}
+                      checked={formData.status === status}
+                      onChange={(e) => setFormData({ ...formData, status: e.target.value as JobStatus })}
+                      className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                    />
+                    <span className={`text-sm ${
+                      status === 'Won' ? 'text-green-700' :
+                      status === 'Lost' ? 'text-red-700' :
+                      'text-slate-700'
+                    }`}>{status}</span>
+                  </label>
+                ))}
+              </div>
             </div>
           </div>
 

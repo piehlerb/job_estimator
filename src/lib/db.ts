@@ -1,7 +1,7 @@
-import { ChipSystem, PricingVariable, Job, Costs, Laborer } from '../types';
+import { ChipSystem, PricingVariable, Job, Costs, Laborer, ChipInventory, TopCoatInventory, BaseCoatInventory } from '../types';
 
 const DB_NAME = 'JobEstimator';
-const DB_VERSION = 3;
+const DB_VERSION = 5;
 
 export async function initDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -27,6 +27,18 @@ export async function initDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains('laborers')) {
         db.createObjectStore('laborers', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('chipBlends')) {
+        db.createObjectStore('chipBlends', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('chipInventory')) {
+        db.createObjectStore('chipInventory', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('topCoatInventory')) {
+        db.createObjectStore('topCoatInventory', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('baseCoatInventory')) {
+        db.createObjectStore('baseCoatInventory', { keyPath: 'id' });
       }
     };
   });
@@ -278,6 +290,123 @@ export async function deleteLaborer(id: string): Promise<void> {
     const transaction = db.transaction(['laborers'], 'readwrite');
     const store = transaction.objectStore('laborers');
     const request = store.delete(id);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve();
+  });
+}
+
+// Chip Blends - simple list of blend names
+export interface ChipBlend {
+  id: string;
+  name: string;
+}
+
+export async function getAllChipBlends(): Promise<ChipBlend[]> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['chipBlends'], 'readonly');
+    const store = transaction.objectStore('chipBlends');
+    const request = store.getAll();
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result || []);
+  });
+}
+
+export async function addChipBlend(blend: ChipBlend): Promise<void> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['chipBlends'], 'readwrite');
+    const store = transaction.objectStore('chipBlends');
+    const request = store.add(blend);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve();
+  });
+}
+
+// Chip Inventory
+export async function getAllChipInventory(): Promise<ChipInventory[]> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['chipInventory'], 'readonly');
+    const store = transaction.objectStore('chipInventory');
+    const request = store.getAll();
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result || []);
+  });
+}
+
+export async function saveChipInventory(inventory: ChipInventory): Promise<void> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['chipInventory'], 'readwrite');
+    const store = transaction.objectStore('chipInventory');
+    const request = store.put(inventory);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve();
+  });
+}
+
+export async function deleteChipInventory(id: string): Promise<void> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['chipInventory'], 'readwrite');
+    const store = transaction.objectStore('chipInventory');
+    const request = store.delete(id);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve();
+  });
+}
+
+// Top Coat Inventory - single record
+export async function getTopCoatInventory(): Promise<TopCoatInventory | null> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['topCoatInventory'], 'readonly');
+    const store = transaction.objectStore('topCoatInventory');
+    const request = store.get('current');
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result || null);
+  });
+}
+
+export async function saveTopCoatInventory(inventory: TopCoatInventory): Promise<void> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['topCoatInventory'], 'readwrite');
+    const store = transaction.objectStore('topCoatInventory');
+    const request = store.put({ ...inventory, id: 'current' });
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve();
+  });
+}
+
+// Base Coat Inventory - single record
+export async function getBaseCoatInventory(): Promise<BaseCoatInventory | null> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['baseCoatInventory'], 'readonly');
+    const store = transaction.objectStore('baseCoatInventory');
+    const request = store.get('current');
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result || null);
+  });
+}
+
+export async function saveBaseCoatInventory(inventory: BaseCoatInventory): Promise<void> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['baseCoatInventory'], 'readwrite');
+    const store = transaction.objectStore('baseCoatInventory');
+    const request = store.put({ ...inventory, id: 'current' });
 
     request.onerror = () => reject(request.error);
     request.onsuccess = () => resolve();
