@@ -1,15 +1,21 @@
 import { Plus, TrendingUp, DollarSign, Zap, Trash2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { getAllJobs, deleteJob } from '../lib/db';
-import { Job } from '../types';
+import { Job, JobCalculation } from '../types';
+import { calculateJobOutputs } from '../lib/calculations';
 
 interface DashboardProps {
   onNewJob: () => void;
   onEditJob: (id: string) => void;
 }
 
+interface JobWithCalc {
+  job: Job;
+  calc: JobCalculation;
+}
+
 export default function Dashboard({ onNewJob, onEditJob }: DashboardProps) {
-  const [jobs, setJobs] = useState<Job[]>([]);
+  const [jobsWithCalc, setJobsWithCalc] = useState<JobWithCalc[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState<'date' | 'price' | 'margin'>('date');
 
@@ -21,7 +27,26 @@ export default function Dashboard({ onNewJob, onEditJob }: DashboardProps) {
     setLoading(true);
     try {
       const allJobs = await getAllJobs();
-      setJobs(allJobs);
+      // Calculate values for each job using their snapshots
+      const withCalc = allJobs.map((job) => {
+        const calc = calculateJobOutputs(
+          {
+            floorFootage: job.floorFootage,
+            verticalFootage: job.verticalFootage,
+            crackFillFactor: job.crackFillFactor,
+            travelDistance: job.travelDistance,
+            installDate: job.installDate,
+            installDays: job.installDays,
+            jobHours: job.jobHours,
+            totalPrice: job.totalPrice,
+          },
+          job.systemSnapshot,
+          job.costsSnapshot,
+          job.laborersSnapshot
+        );
+        return { job, calc };
+      });
+      setJobsWithCalc(withCalc);
     } catch (error) {
       console.error('Error loading jobs:', error);
     } finally {
@@ -41,22 +66,20 @@ export default function Dashboard({ onNewJob, onEditJob }: DashboardProps) {
     }
   };
 
-  const sortedJobs = [...jobs].sort((a, b) => {
+  const sortedJobs = [...jobsWithCalc].sort((a, b) => {
     switch (sortBy) {
       case 'price':
-        return (b.suggestedPrice || 0) - (a.suggestedPrice || 0);
+        return b.calc.suggestedTotal - a.calc.suggestedTotal;
       case 'margin':
-        const marginA = ((a.suggestedPrice || 0) - (a.totalCost || 0)) / (a.suggestedPrice || 1);
-        const marginB = ((b.suggestedPrice || 0) - (b.totalCost || 0)) / (b.suggestedPrice || 1);
-        return marginB - marginA;
+        return b.calc.suggestedMarginPct - a.calc.suggestedMarginPct;
       case 'date':
       default:
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        return new Date(b.job.createdAt).getTime() - new Date(a.job.createdAt).getTime();
     }
   });
 
-  const totalRevenue = jobs.reduce((sum, job) => sum + (job.suggestedPrice || 0), 0);
-  const totalCost = jobs.reduce((sum, job) => sum + (job.totalCost || 0), 0);
+  const totalRevenue = jobsWithCalc.reduce((sum, { calc }) => sum + calc.suggestedTotal, 0);
+  const totalCost = jobsWithCalc.reduce((sum, { calc }) => sum + calc.totalCosts, 0);
   const potentialProfit = totalRevenue - totalCost;
 
   return (
@@ -64,7 +87,7 @@ export default function Dashboard({ onNewJob, onEditJob }: DashboardProps) {
       <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-8">
         <div>
           <h2 className="text-3xl font-bold text-slate-900">Dashboard</h2>
-          <p className="text-slate-600 mt-1">{jobs.length} jobs tracked</p>
+          <p className="text-slate-600 mt-1">{jobsWithCalc.length} jobs tracked</p>
         </div>
         <button
           onClick={onNewJob}
@@ -163,8 +186,7 @@ export default function Dashboard({ onNewJob, onEditJob }: DashboardProps) {
                 </tr>
               </thead>
               <tbody>
-                {sortedJobs.map((job) => {
-                  const margin = ((job.suggestedPrice || 0) - (job.totalCost || 0)) / (job.suggestedPrice || 1);
+                {sortedJobs.map(({ job, calc }) => {
                   return (
                     <tr
                       key={job.id}
@@ -172,12 +194,12 @@ export default function Dashboard({ onNewJob, onEditJob }: DashboardProps) {
                       onClick={() => onEditJob(job.id)}
                     >
                       <td className="px-6 py-4 text-sm font-medium text-slate-900">{job.name || 'Untitled Job'}</td>
-                      <td className="px-6 py-4 text-sm text-slate-600 text-right">${(job.totalCost || 0).toFixed(0)}</td>
+                      <td className="px-6 py-4 text-sm text-slate-600 text-right">${calc.totalCosts.toFixed(0)}</td>
                       <td className="px-6 py-4 text-sm font-semibold text-slate-900 text-right">
-                        ${(job.suggestedPrice || 0).toFixed(0)}
+                        ${calc.suggestedTotal.toFixed(0)}
                       </td>
-                      <td className={`px-6 py-4 text-sm font-semibold text-right ${margin >= 0.3 ? 'text-green-600' : 'text-orange-600'}`}>
-                        {(margin * 100).toFixed(0)}%
+                      <td className={`px-6 py-4 text-sm font-semibold text-right ${calc.suggestedMarginPct >= 30 ? 'text-green-600' : 'text-orange-600'}`}>
+                        {calc.suggestedMarginPct.toFixed(0)}%
                       </td>
                       <td className="px-6 py-4 text-sm text-slate-600 text-right">
                         {new Date(job.createdAt).toLocaleDateString()}
