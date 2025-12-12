@@ -1,12 +1,4 @@
 import {
-  ChipSystem,
-  Costs,
-  Laborer,
-  Job,
-  ChipBlend,
-  ChipInventory,
-  TopCoatInventory,
-  BaseCoatInventory,
   ExportData,
   ExportMetadata,
   ImportPreview,
@@ -619,7 +611,6 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
   const importSystemIds = new Set(importData.systems.map(s => s.id));
   const importLaborerIds = new Set(importData.laborers.map(l => l.id));
   const importJobIds = new Set(importData.jobs.map(j => j.id));
-  const importChipBlendIds = new Set(importData.chipBlends.map(b => b.id));
   const importChipInventoryIds = new Set(importData.chipInventory.map(i => i.id));
 
   // Import systems
