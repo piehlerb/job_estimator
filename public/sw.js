@@ -1,8 +1,9 @@
 const CACHE_NAME = 'estimation-app-v1';
+const BASE_PATH = '/job_estimator';
 const urlsToCache = [
-  '/',
-  '/index.html',
-  '/manifest.json'
+  `${BASE_PATH}/`,
+  `${BASE_PATH}/index.html`,
+  `${BASE_PATH}/manifest.json`
 ];
 
 self.addEventListener('install', (event) => {

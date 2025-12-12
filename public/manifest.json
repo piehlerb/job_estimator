@@ -2,20 +2,21 @@
   "name": "Job Estimator",
   "short_name": "Est",
   "description": "Professional job estimation app with offline support",
-  "start_url": "/",
+  "start_url": "/job_estimator/",
+  "scope": "/job_estimator/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#1e293b",
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "/icon.svg",
+      "src": "/job_estimator/icon.svg",
       "sizes": "192x192",
       "type": "image/svg+xml",
       "purpose": "any"
     },
     {
-      "src": "/icon.svg",
+      "src": "/job_estimator/icon.svg",
       "sizes": "192x192",
       "type": "image/svg+xml",
       "purpose": "maskable"
