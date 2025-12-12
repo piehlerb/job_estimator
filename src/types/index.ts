@@ -123,3 +123,47 @@ export interface JobCalculation {
   suggestedMargin: number;
   suggestedMarginPct: number;
 }
+
+// Chip blend type (also defined in db.ts for backwards compatibility)
+export interface ChipBlend {
+  id: string;
+  name: string;
+}
+
+// Backup/Export types
+export const EXPORT_VERSION = 1;
+
+export interface ExportMetadata {
+  version: number;
+  exportedAt: string;
+  appName: string;
+}
+
+export interface ExportData {
+  metadata: ExportMetadata;
+  systems: ChipSystem[];
+  costs: Costs | null;
+  laborers: Laborer[];
+  jobs: Job[];
+  chipBlends: ChipBlend[];
+  chipInventory: ChipInventory[];
+  topCoatInventory: TopCoatInventory | null;
+  baseCoatInventory: BaseCoatInventory | null;
+}
+
+export type MergeAction = 'add' | 'update' | 'skip' | 'delete';
+
+export interface MergeLogEntry {
+  entityType: string;
+  entityName: string;
+  action: MergeAction;
+  reason: string;
+}
+
+export interface ImportPreview {
+  toAdd: { entityType: string; entityName: string; }[];
+  toUpdate: { entityType: string; entityName: string; localUpdatedAt: string; importUpdatedAt: string; }[];
+  toSkip: { entityType: string; entityName: string; reason: string; }[];
+  toDelete: { entityType: string; entityName: string; }[];
+  errors: string[];
+}

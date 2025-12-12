@@ -69,18 +69,20 @@ export default function Dashboard({ onNewJob, onEditJob }: DashboardProps) {
   const sortedJobs = [...jobsWithCalc].sort((a, b) => {
     switch (sortBy) {
       case 'price':
-        return b.calc.suggestedTotal - a.calc.suggestedTotal;
+        return b.job.totalPrice - a.job.totalPrice;
       case 'margin':
-        return b.calc.suggestedMarginPct - a.calc.suggestedMarginPct;
+        const marginA = a.job.totalPrice > 0 ? ((a.job.totalPrice - a.calc.totalCosts) / a.job.totalPrice) * 100 : 0;
+        const marginB = b.job.totalPrice > 0 ? ((b.job.totalPrice - b.calc.totalCosts) / b.job.totalPrice) * 100 : 0;
+        return marginB - marginA;
       case 'date':
       default:
         return new Date(b.job.createdAt).getTime() - new Date(a.job.createdAt).getTime();
     }
   });
 
-  const totalRevenue = jobsWithCalc.reduce((sum, { calc }) => sum + calc.suggestedTotal, 0);
+  const totalRevenue = jobsWithCalc.reduce((sum, { job }) => sum + job.totalPrice, 0);
   const totalCost = jobsWithCalc.reduce((sum, { calc }) => sum + calc.totalCosts, 0);
-  const potentialProfit = totalRevenue - totalCost;
+  const totalProfit = totalRevenue - totalCost;
 
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto">
@@ -126,13 +128,13 @@ export default function Dashboard({ onNewJob, onEditJob }: DashboardProps) {
         <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-slate-600 text-sm font-medium">Potential Profit</p>
-              <p className={`text-2xl font-bold mt-2 ${potentialProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                ${potentialProfit.toFixed(0)}
+              <p className="text-slate-600 text-sm font-medium">Total Profit</p>
+              <p className={`text-2xl font-bold mt-2 ${totalProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                ${totalProfit.toFixed(0)}
               </p>
             </div>
-            <div className={`p-3 rounded-lg ${potentialProfit >= 0 ? 'bg-green-100' : 'bg-red-100'}`}>
-              <TrendingUp size={24} className={potentialProfit >= 0 ? 'text-green-600' : 'text-red-600'} />
+            <div className={`p-3 rounded-lg ${totalProfit >= 0 ? 'bg-green-100' : 'bg-red-100'}`}>
+              <TrendingUp size={24} className={totalProfit >= 0 ? 'text-green-600' : 'text-red-600'} />
             </div>
           </div>
         </div>
@@ -179,7 +181,7 @@ export default function Dashboard({ onNewJob, onEditJob }: DashboardProps) {
                 <tr className="bg-slate-50 border-b border-slate-200">
                   <th className="px-6 py-3 text-left text-sm font-semibold text-slate-700">Job Name</th>
                   <th className="px-6 py-3 text-right text-sm font-semibold text-slate-700">Total Cost</th>
-                  <th className="px-6 py-3 text-right text-sm font-semibold text-slate-700">Suggested Price</th>
+                  <th className="px-6 py-3 text-right text-sm font-semibold text-slate-700">Total Price</th>
                   <th className="px-6 py-3 text-right text-sm font-semibold text-slate-700">Margin</th>
                   <th className="px-6 py-3 text-right text-sm font-semibold text-slate-700">Date</th>
                   <th className="px-6 py-3 text-right text-sm font-semibold text-slate-700">Action</th>
@@ -187,6 +189,7 @@ export default function Dashboard({ onNewJob, onEditJob }: DashboardProps) {
               </thead>
               <tbody>
                 {sortedJobs.map(({ job, calc }) => {
+                  const marginPct = job.totalPrice > 0 ? ((job.totalPrice - calc.totalCosts) / job.totalPrice) * 100 : 0;
                   return (
                     <tr
                       key={job.id}
@@ -196,10 +199,10 @@ export default function Dashboard({ onNewJob, onEditJob }: DashboardProps) {
                       <td className="px-6 py-4 text-sm font-medium text-slate-900">{job.name || 'Untitled Job'}</td>
                       <td className="px-6 py-4 text-sm text-slate-600 text-right">${calc.totalCosts.toFixed(0)}</td>
                       <td className="px-6 py-4 text-sm font-semibold text-slate-900 text-right">
-                        ${calc.suggestedTotal.toFixed(0)}
+                        ${job.totalPrice.toFixed(0)}
                       </td>
-                      <td className={`px-6 py-4 text-sm font-semibold text-right ${calc.suggestedMarginPct >= 30 ? 'text-green-600' : 'text-orange-600'}`}>
-                        {calc.suggestedMarginPct.toFixed(0)}%
+                      <td className={`px-6 py-4 text-sm font-semibold text-right ${marginPct >= 30 ? 'text-green-600' : 'text-orange-600'}`}>
+                        {marginPct.toFixed(0)}%
                       </td>
                       <td className="px-6 py-4 text-sm text-slate-600 text-right">
                         {new Date(job.createdAt).toLocaleDateString()}
