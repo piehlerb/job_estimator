@@ -5,10 +5,12 @@
 
 import { GoogleDriveAuth } from '../types';
 
-const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
-const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_API_KEY || '';
 const SCOPES = 'https://www.googleapis.com/auth/drive.file';
 const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
+
+// Credentials are now stored in IndexedDB via GoogleDriveSettings
+let GOOGLE_CLIENT_ID = '';
+let GOOGLE_API_KEY = '';
 
 // Google API client types
 declare global {
@@ -41,6 +43,21 @@ declare global {
 
 let gisInited = false;
 let tokenClient: any = null;
+
+/**
+ * Set Google API credentials (from user input in settings)
+ */
+export function setGoogleCredentials(clientId: string, apiKey: string): void {
+  GOOGLE_CLIENT_ID = clientId;
+  GOOGLE_API_KEY = apiKey;
+}
+
+/**
+ * Check if credentials are configured
+ */
+export function hasCredentials(): boolean {
+  return GOOGLE_CLIENT_ID !== '' && GOOGLE_API_KEY !== '';
+}
 
 /**
  * Load the Google API client library
@@ -119,7 +136,7 @@ function initializeGisClient(callback: (response: any) => void): void {
  */
 export async function initGoogleDrive(): Promise<void> {
   if (!GOOGLE_CLIENT_ID || !GOOGLE_API_KEY) {
-    throw new Error('Google API credentials not configured. Please set VITE_GOOGLE_CLIENT_ID and VITE_GOOGLE_API_KEY in your .env file');
+    throw new Error('Google API credentials not configured. Please enter your credentials in Settings → Google Drive.');
   }
 
   try {

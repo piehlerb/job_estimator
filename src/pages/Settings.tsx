@@ -35,6 +35,8 @@ import {
   setAuthToken,
   isAuthExpired,
   getUserEmail,
+  setGoogleCredentials,
+  hasCredentials,
 } from '../lib/googleDrive';
 
 function generateId(): string {
@@ -125,19 +127,26 @@ export default function Settings({ onBack }: SettingsProps) {
 
     if (settings) {
       setDriveSettings(settings);
+
+      // Set credentials if they exist in settings
+      if (settings.clientId && settings.apiKey) {
+        setGoogleCredentials(settings.clientId, settings.apiKey);
+      }
     }
 
-    // Initialize Google Drive API
-    try {
-      await initGoogleDrive();
-      setDriveInitialized(true);
+    // Initialize Google Drive API if credentials are configured
+    if (hasCredentials()) {
+      try {
+        await initGoogleDrive();
+        setDriveInitialized(true);
 
-      // Set auth token if available and not expired
-      if (auth && !isAuthExpired(auth)) {
-        setAuthToken(auth);
+        // Set auth token if available and not expired
+        if (auth && !isAuthExpired(auth)) {
+          setAuthToken(auth);
+        }
+      } catch (error) {
+        console.error('Failed to initialize Google Drive:', error);
       }
-    } catch (error) {
-      console.error('Failed to initialize Google Drive:', error);
     }
 
     setLoading(false);
@@ -305,7 +314,22 @@ export default function Settings({ onBack }: SettingsProps) {
   const handleSaveDriveSettings = async () => {
     try {
       await saveGoogleDriveSettings(driveSettings);
-      alert('Settings saved successfully');
+
+      // Update credentials if they changed
+      if (driveSettings.clientId && driveSettings.apiKey) {
+        setGoogleCredentials(driveSettings.clientId, driveSettings.apiKey);
+
+        // Try to initialize Drive API
+        try {
+          await initGoogleDrive();
+          setDriveInitialized(true);
+          alert('Settings saved successfully! You can now connect to Google Drive.');
+        } catch (error) {
+          alert('Settings saved but failed to initialize Google Drive. Please check your credentials.');
+        }
+      } else {
+        alert('Settings saved successfully');
+      }
     } catch (error) {
       console.error('Failed to save settings:', error);
       alert('Failed to save settings. Please try again.');
@@ -411,60 +435,63 @@ export default function Settings({ onBack }: SettingsProps) {
       </button>
 
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
-        <div className="border-b border-slate-200 flex">
-          <button
-            onClick={() => setTab('systems')}
-            className={`flex-1 px-4 py-4 font-semibold transition-colors ${
-              tab === 'systems'
-                ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600'
-                : 'text-slate-700 hover:bg-slate-50'
-            }`}
-          >
-            Chip Systems
-          </button>
-          <button
-            onClick={() => setTab('laborers')}
-            className={`flex-1 px-4 py-4 font-semibold transition-colors ${
-              tab === 'laborers'
-                ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600'
-                : 'text-slate-700 hover:bg-slate-50'
-            }`}
-          >
-            Laborers
-          </button>
-          <button
-            onClick={() => setTab('costs')}
-            className={`flex-1 px-4 py-4 font-semibold transition-colors ${
-              tab === 'costs'
-                ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600'
-                : 'text-slate-700 hover:bg-slate-50'
-            }`}
-          >
-            Costs
-          </button>
-          <button
-            onClick={() => setTab('backup')}
-            className={`flex-1 px-4 py-4 font-semibold transition-colors ${
-              tab === 'backup'
-                ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600'
-                : 'text-slate-700 hover:bg-slate-50'
-            }`}
-          >
-            Backup
-          </button>
-          <button
-            onClick={() => setTab('drive')}
-            className={`flex-1 px-4 py-4 font-semibold transition-colors ${
-              tab === 'drive'
-                ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600'
-                : 'text-slate-700 hover:bg-slate-50'
-            }`}
-          >
-            Google Drive
-          </button>
+        {/* Scrollable tabs on mobile, regular on desktop */}
+        <div className="border-b border-slate-200 overflow-x-auto">
+          <div className="flex min-w-max">
+            <button
+              onClick={() => setTab('systems')}
+              className={`flex-1 min-w-[100px] px-3 sm:px-4 py-3 sm:py-4 text-xs sm:text-sm font-semibold transition-colors whitespace-nowrap ${
+                tab === 'systems'
+                  ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600'
+                  : 'text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              Chip Systems
+            </button>
+            <button
+              onClick={() => setTab('laborers')}
+              className={`flex-1 min-w-[100px] px-3 sm:px-4 py-3 sm:py-4 text-xs sm:text-sm font-semibold transition-colors whitespace-nowrap ${
+                tab === 'laborers'
+                  ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600'
+                  : 'text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              Laborers
+            </button>
+            <button
+              onClick={() => setTab('costs')}
+              className={`flex-1 min-w-[80px] px-3 sm:px-4 py-3 sm:py-4 text-xs sm:text-sm font-semibold transition-colors whitespace-nowrap ${
+                tab === 'costs'
+                  ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600'
+                  : 'text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              Costs
+            </button>
+            <button
+              onClick={() => setTab('backup')}
+              className={`flex-1 min-w-[80px] px-3 sm:px-4 py-3 sm:py-4 text-xs sm:text-sm font-semibold transition-colors whitespace-nowrap ${
+                tab === 'backup'
+                  ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600'
+                  : 'text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              Backup
+            </button>
+            <button
+              onClick={() => setTab('drive')}
+              className={`flex-1 min-w-[100px] px-3 sm:px-4 py-3 sm:py-4 text-xs sm:text-sm font-semibold transition-colors whitespace-nowrap ${
+                tab === 'drive'
+                  ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600'
+                  : 'text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              Google Drive
+            </button>
+          </div>
         </div>
 
-        <div className="p-6">
+        <div className="p-4 sm:p-6">
           {tab === 'systems' && (
             <div>
               <div className="flex items-center justify-between mb-6">
@@ -1179,15 +1206,58 @@ export default function Settings({ onBack }: SettingsProps) {
                 </div>
               </div>
 
+              {/* API Credentials Configuration */}
+              <div className="mb-6 p-4 border border-slate-200 rounded-lg bg-slate-50">
+                <h4 className="font-semibold text-slate-900 mb-3">API Credentials</h4>
+                <p className="text-sm text-slate-600 mb-4">
+                  Enter your Google Cloud API credentials. See setup instructions below for how to obtain these.
+                </p>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-900 mb-2">
+                      Client ID
+                    </label>
+                    <input
+                      type="text"
+                      value={driveSettings.clientId || ''}
+                      onChange={(e) =>
+                        setDriveSettings({ ...driveSettings, clientId: e.target.value })
+                      }
+                      placeholder="123456789-abcdefg.apps.googleusercontent.com"
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-900 mb-2">
+                      API Key
+                    </label>
+                    <input
+                      type="password"
+                      value={driveSettings.apiKey || ''}
+                      onChange={(e) =>
+                        setDriveSettings({ ...driveSettings, apiKey: e.target.value })
+                      }
+                      placeholder="AIzaSy..."
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
+                    />
+                    <p className="mt-1 text-xs text-slate-500">
+                      Your API credentials are stored securely in your browser's local database
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               {/* Configuration Warning */}
-              {!driveInitialized && (
+              {!driveInitialized && (!driveSettings.clientId || !driveSettings.apiKey) && (
                 <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
                   <div className="flex items-start gap-2">
                     <AlertTriangle className="text-yellow-600 flex-shrink-0 mt-0.5" size={18} />
                     <div className="text-sm">
-                      <p className="font-semibold text-yellow-800 mb-1">Google Drive not configured</p>
+                      <p className="font-semibold text-yellow-800 mb-1">API credentials required</p>
                       <p className="text-yellow-700">
-                        Please set up your Google API credentials in the .env file. See the setup documentation for instructions.
+                        Please enter your Google API credentials above and save settings to enable Google Drive integration.
                       </p>
                     </div>
                   </div>
@@ -1196,8 +1266,10 @@ export default function Settings({ onBack }: SettingsProps) {
 
               {/* Settings */}
               <div className="space-y-4">
+                <h4 className="font-semibold text-slate-900">Drive Settings</h4>
+
                 <div>
-                  <label className="block text-sm font-semibold text-slate-900 mb-2">
+                  <label className="block text-sm font-medium text-slate-900 mb-2">
                     Root Folder Name
                   </label>
                   <input
@@ -1239,16 +1311,22 @@ export default function Settings({ onBack }: SettingsProps) {
 
               {/* Setup Instructions */}
               <div className="mt-8 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <h4 className="font-semibold text-blue-900 mb-2">Setup Instructions</h4>
+                <h4 className="font-semibold text-blue-900 mb-2">How to Get API Credentials</h4>
                 <ol className="text-sm text-blue-800 space-y-2 list-decimal list-inside">
-                  <li>Go to <a href="https://console.cloud.google.com" target="_blank" rel="noopener noreferrer" className="underline">Google Cloud Console</a></li>
+                  <li>Go to <a href="https://console.cloud.google.com" target="_blank" rel="noopener noreferrer" className="underline font-medium">Google Cloud Console</a></li>
                   <li>Create a new project or select an existing one</li>
-                  <li>Enable the Google Drive API</li>
-                  <li>Create OAuth 2.0 credentials (Web application type)</li>
-                  <li>Add your app's URL to authorized redirect URIs</li>
-                  <li>Copy the Client ID and API Key to your .env file</li>
-                  <li>Reload the app and click "Connect to Google Drive"</li>
+                  <li>Enable the <strong>Google Drive API</strong></li>
+                  <li>Go to "APIs & Services" → "Credentials"</li>
+                  <li>Create <strong>OAuth 2.0 Client ID</strong> (Web application type)</li>
+                  <li>Add your app's URL to authorized JavaScript origins and redirect URIs</li>
+                  <li>Copy the <strong>Client ID</strong> and paste it above</li>
+                  <li>Create an <strong>API Key</strong> from the same Credentials page</li>
+                  <li>Copy the <strong>API Key</strong> and paste it above</li>
+                  <li>Click "Save Settings" then "Connect to Google Drive"</li>
                 </ol>
+                <p className="text-xs text-blue-700 mt-3">
+                  💡 For detailed instructions, see GOOGLE_DRIVE_SETUP.md in the repository
+                </p>
               </div>
             </div>
           )}

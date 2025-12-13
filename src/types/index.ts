@@ -161,6 +161,9 @@ export interface GoogleDriveSettings {
   rootFolderName: string; // e.g., "Jobs"
   rootFolderId?: string; // Created in Google Drive
   autoUpload: boolean;
+  // API Configuration (stored securely in IndexedDB)
+  clientId?: string;
+  apiKey?: string;
   createdAt: string;
   updatedAt: string;
 }
