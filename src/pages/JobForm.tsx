@@ -1,4 +1,4 @@
-import { ArrowLeft, Save } from 'lucide-react';
+import { ArrowLeft, Save, Camera } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import {
   getAllSystems,
@@ -12,8 +12,12 @@ import {
   addChipBlend,
   ChipBlend,
 } from '../lib/db';
-import { BaseColor, ChipSystem, Costs, Job, JobCalculation, JobStatus, Laborer } from '../types';
+import { BaseColor, ChipSystem, Costs, Job, JobCalculation, JobStatus, Laborer, JobPhoto } from '../types';
 import { calculateJobOutputs } from '../lib/calculations';
+import PhotoCapture from '../components/PhotoCapture';
+import PhotoGallery from '../components/PhotoGallery';
+import { uploadPendingPhotos, isDriveAvailable } from '../lib/photoUploadManager';
+import { isOnline } from '../lib/photoStorage';
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -36,6 +40,11 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
   const [chipBlends, setChipBlends] = useState<ChipBlend[]>([]);
   const [chipBlendInput, setChipBlendInput] = useState('');
   const [showBlendDropdown, setShowBlendDropdown] = useState(false);
+
+  // Photo state
+  const [photos, setPhotos] = useState<JobPhoto[]>([]);
+  const [uploadingPhotos, setUploadingPhotos] = useState(false);
+  const [driveAvailable, setDriveAvailable] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -97,8 +106,14 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
           setChipBlendInput(job.chipBlend || '');
           // Set selected laborers from snapshot
           setSelectedLaborerIds(job.laborersSnapshot.map((l) => l.id));
+          // Load photos
+          setPhotos(job.photos || []);
         }
       }
+
+      // Check Drive availability
+      const available = await isDriveAvailable();
+      setDriveAvailable(available);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -170,6 +185,49 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
     setShowBlendDropdown(true);
   };
 
+  // Photo handlers
+  const handlePhotoCapture = (photo: JobPhoto) => {
+    setPhotos([...photos, photo]);
+  };
+
+  const handleDeletePhoto = (photoId: string) => {
+    if (confirm('Are you sure you want to delete this photo?')) {
+      setPhotos(photos.filter((p) => p.id !== photoId));
+    }
+  };
+
+  const handleRetryUpload = async (photoId: string) => {
+    const photo = photos.find((p) => p.id === photoId);
+    if (!photo || !existingJob) return;
+
+    photo.syncStatus = 'pending';
+    setPhotos([...photos]);
+
+    // Trigger upload
+    await uploadPhotos({ ...existingJob, photos });
+  };
+
+  const uploadPhotos = async (job: Job) => {
+    if (!isOnline() || !driveAvailable) {
+      console.log('Offline or Drive not available, photos will be uploaded later');
+      return;
+    }
+
+    setUploadingPhotos(true);
+    try {
+      await uploadPendingPhotos(job);
+      // Reload job to get updated photos
+      const updatedJob = await getJob(job.id);
+      if (updatedJob) {
+        setPhotos(updatedJob.photos || []);
+      }
+    } catch (error) {
+      console.error('Error uploading photos:', error);
+    } finally {
+      setUploadingPhotos(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -215,6 +273,9 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
         chipBlend: formData.chipBlend || undefined,
         baseColor: formData.baseColor || undefined,
         status: formData.status,
+        // Photos and Google Drive
+        googleDriveFolderId: existingJob?.googleDriveFolderId,
+        photos: photos.length > 0 ? photos : undefined,
         // Preserve costs and system snapshots for existing jobs, create new ones for new jobs
         // Laborers can be edited, so always save current selection
         costsSnapshot: existingJob ? existingJob.costsSnapshot : costs,
@@ -229,6 +290,11 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
         await updateJob(job);
       } else {
         await addJob(job);
+      }
+
+      // Upload photos if online and drive available
+      if (photos.length > 0 && isOnline() && driveAvailable) {
+        await uploadPhotos(job);
       }
 
       onBack();
@@ -648,14 +714,60 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
             </div>
           )}
 
+          {/* Photos Section */}
+          <div className="border-t border-slate-200 pt-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Camera size={20} className="text-slate-700" />
+              <h3 className="text-base sm:text-lg font-semibold text-slate-900">Job Photos</h3>
+              {uploadingPhotos && (
+                <span className="text-sm text-blue-600">Uploading...</span>
+              )}
+            </div>
+
+            {!driveAvailable && (
+              <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <p className="text-sm text-yellow-800">
+                  <strong>Google Drive not connected.</strong> Photos will be saved locally. Connect Google Drive in Settings to enable cloud backup.
+                </p>
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <PhotoCapture
+                onPhotoCapture={handlePhotoCapture}
+                disabled={saving || uploadingPhotos}
+              />
+
+              {photos.length > 0 && (
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-sm text-slate-600">
+                      {photos.length} photo{photos.length !== 1 ? 's' : ''}
+                      {' '}({photos.filter(p => p.syncStatus === 'uploaded').length} uploaded)
+                    </p>
+                    {!isOnline() && (
+                      <span className="text-xs text-orange-600">Offline - photos will upload when online</span>
+                    )}
+                  </div>
+                  <PhotoGallery
+                    photos={photos}
+                    folderId={existingJob?.googleDriveFolderId}
+                    onDeletePhoto={handleDeletePhoto}
+                    onRetryUpload={handleRetryUpload}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+
           <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || uploadingPhotos}
               className="flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 active:bg-blue-800 transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed text-sm sm:text-base"
             >
               <Save size={18} className="sm:w-5 sm:h-5" />
-              {saving ? 'Saving...' : jobId ? 'Update Job' : 'Create Job'}
+              {saving ? 'Saving...' : uploadingPhotos ? 'Uploading photos...' : jobId ? 'Update Job' : 'Create Job'}
             </button>
             <button
               type="button"

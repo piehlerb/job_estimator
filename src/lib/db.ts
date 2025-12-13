@@ -1,7 +1,7 @@
-import { ChipSystem, PricingVariable, Job, Costs, Laborer, ChipInventory, TopCoatInventory, BaseCoatInventory } from '../types';
+import { ChipSystem, PricingVariable, Job, Costs, Laborer, ChipInventory, TopCoatInventory, BaseCoatInventory, GoogleDriveAuth, GoogleDriveSettings } from '../types';
 
 const DB_NAME = 'JobEstimator';
-const DB_VERSION = 5;
+const DB_VERSION = 6;
 
 export async function initDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -39,6 +39,12 @@ export async function initDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains('baseCoatInventory')) {
         db.createObjectStore('baseCoatInventory', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('googleDriveAuth')) {
+        db.createObjectStore('googleDriveAuth', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('googleDriveSettings')) {
+        db.createObjectStore('googleDriveSettings', { keyPath: 'id' });
       }
     };
   });
@@ -411,4 +417,76 @@ export async function saveBaseCoatInventory(inventory: BaseCoatInventory): Promi
     request.onerror = () => reject(request.error);
     request.onsuccess = () => resolve();
   });
+}
+
+// Google Drive Auth
+export async function getGoogleDriveAuth(): Promise<GoogleDriveAuth | null> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['googleDriveAuth'], 'readonly');
+    const store = transaction.objectStore('googleDriveAuth');
+    const request = store.get('current');
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result || null);
+  });
+}
+
+export async function saveGoogleDriveAuth(auth: GoogleDriveAuth): Promise<void> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['googleDriveAuth'], 'readwrite');
+    const store = transaction.objectStore('googleDriveAuth');
+    const request = store.put({ ...auth, id: 'current' });
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve();
+  });
+}
+
+export async function deleteGoogleDriveAuth(): Promise<void> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['googleDriveAuth'], 'readwrite');
+    const store = transaction.objectStore('googleDriveAuth');
+    const request = store.delete('current');
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve();
+  });
+}
+
+// Google Drive Settings
+export async function getGoogleDriveSettings(): Promise<GoogleDriveSettings | null> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['googleDriveSettings'], 'readonly');
+    const store = transaction.objectStore('googleDriveSettings');
+    const request = store.get('current');
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result || null);
+  });
+}
+
+export async function saveGoogleDriveSettings(settings: GoogleDriveSettings): Promise<void> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['googleDriveSettings'], 'readwrite');
+    const store = transaction.objectStore('googleDriveSettings');
+    const request = store.put({ ...settings, id: 'current' });
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve();
+  });
+}
+
+export function getDefaultGoogleDriveSettings(): GoogleDriveSettings {
+  return {
+    id: 'current',
+    rootFolderName: 'Jobs',
+    autoUpload: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
 }

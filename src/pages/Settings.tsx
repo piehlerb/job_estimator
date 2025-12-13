@@ -1,4 +1,4 @@
-import { ArrowLeft, Plus, Trash2, Edit2, Download, Upload, AlertTriangle, CheckCircle, XCircle, SkipForward } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Edit2, Download, Upload, AlertTriangle, CheckCircle, XCircle, SkipForward, Cloud, CloudOff } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import {
   getAllSystems,
@@ -12,6 +12,12 @@ import {
   addLaborer,
   updateLaborer,
   deleteLaborer,
+  getGoogleDriveAuth,
+  saveGoogleDriveAuth,
+  deleteGoogleDriveAuth,
+  getGoogleDriveSettings,
+  saveGoogleDriveSettings,
+  getDefaultGoogleDriveSettings,
 } from '../lib/db';
 import {
   exportAllData,
@@ -21,7 +27,15 @@ import {
   executeImport,
   parseImportFile,
 } from '../lib/backup';
-import { ChipSystem, ChipSize, Costs, Laborer, ExportData, ImportPreview, MergeLogEntry } from '../types';
+import { ChipSystem, ChipSize, Costs, Laborer, ExportData, ImportPreview, MergeLogEntry, GoogleDriveAuth, GoogleDriveSettings } from '../types';
+import {
+  initGoogleDrive,
+  requestGoogleAuth,
+  revokeGoogleAuth,
+  setAuthToken,
+  isAuthExpired,
+  getUserEmail,
+} from '../lib/googleDrive';
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -32,7 +46,7 @@ interface SettingsProps {
 }
 
 export default function Settings({ onBack }: SettingsProps) {
-  const [tab, setTab] = useState<'systems' | 'costs' | 'laborers' | 'backup'>('systems');
+  const [tab, setTab] = useState<'systems' | 'costs' | 'laborers' | 'backup' | 'drive'>('systems');
   const [systems, setSystems] = useState<ChipSystem[]>([]);
   const [costs, setCosts] = useState<Costs>(getDefaultCosts());
   const [laborers, setLaborers] = useState<Laborer[]>([]);
@@ -52,6 +66,12 @@ export default function Settings({ onBack }: SettingsProps) {
   const [importing, setImporting] = useState(false);
   const [mergeLog, setMergeLog] = useState<MergeLogEntry[] | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Google Drive state
+  const [driveAuth, setDriveAuth] = useState<GoogleDriveAuth | null>(null);
+  const [driveSettings, setDriveSettings] = useState<GoogleDriveSettings>(getDefaultGoogleDriveSettings());
+  const [driveAuthenticating, setDriveAuthenticating] = useState(false);
+  const [driveInitialized, setDriveInitialized] = useState(false);
 
   const [systemForm, setSystemForm] = useState({
     name: '',
@@ -85,8 +105,13 @@ export default function Settings({ onBack }: SettingsProps) {
     const allSystems = await getAllSystems();
     const storedCosts = await getCosts();
     const allLaborers = await getAllLaborers();
+    const auth = await getGoogleDriveAuth();
+    const settings = await getGoogleDriveSettings();
+
     setSystems(allSystems);
     setLaborers(allLaborers);
+    setDriveAuth(auth);
+
     if (storedCosts) {
       setCosts(storedCosts);
       setCostsForm({
@@ -97,6 +122,24 @@ export default function Settings({ onBack }: SettingsProps) {
         consumablesCost: storedCosts.consumablesCost.toString(),
       });
     }
+
+    if (settings) {
+      setDriveSettings(settings);
+    }
+
+    // Initialize Google Drive API
+    try {
+      await initGoogleDrive();
+      setDriveInitialized(true);
+
+      // Set auth token if available and not expired
+      if (auth && !isAuthExpired(auth)) {
+        setAuthToken(auth);
+      }
+    } catch (error) {
+      console.error('Failed to initialize Google Drive:', error);
+    }
+
     setLoading(false);
   };
 
@@ -212,6 +255,61 @@ export default function Settings({ onBack }: SettingsProps) {
     const updated = { ...laborer, isActive: !laborer.isActive, updatedAt: new Date().toISOString() };
     await updateLaborer(updated);
     await loadData();
+  };
+
+  // Google Drive handlers
+  const handleConnectDrive = async () => {
+    setDriveAuthenticating(true);
+    try {
+      if (!driveInitialized) {
+        await initGoogleDrive();
+        setDriveInitialized(true);
+      }
+
+      const auth = await requestGoogleAuth();
+
+      // Get user email
+      const email = await getUserEmail();
+      auth.userEmail = email;
+
+      await saveGoogleDriveAuth(auth);
+      setDriveAuth(auth);
+
+      alert('Successfully connected to Google Drive!');
+    } catch (error) {
+      console.error('Failed to connect to Google Drive:', error);
+      alert('Failed to connect to Google Drive. Please check your configuration and try again.');
+    } finally {
+      setDriveAuthenticating(false);
+    }
+  };
+
+  const handleDisconnectDrive = async () => {
+    if (!confirm('Are you sure you want to disconnect Google Drive? Photos already uploaded will remain in Drive, but new photos will not be uploaded.')) {
+      return;
+    }
+
+    try {
+      if (driveAuth) {
+        await revokeGoogleAuth(driveAuth);
+      }
+      await deleteGoogleDriveAuth();
+      setDriveAuth(null);
+      alert('Successfully disconnected from Google Drive');
+    } catch (error) {
+      console.error('Failed to disconnect from Google Drive:', error);
+      alert('Failed to disconnect. Please try again.');
+    }
+  };
+
+  const handleSaveDriveSettings = async () => {
+    try {
+      await saveGoogleDriveSettings(driveSettings);
+      alert('Settings saved successfully');
+    } catch (error) {
+      console.error('Failed to save settings:', error);
+      alert('Failed to save settings. Please try again.');
+    }
   };
 
   // Backup handlers
@@ -353,6 +451,16 @@ export default function Settings({ onBack }: SettingsProps) {
             }`}
           >
             Backup
+          </button>
+          <button
+            onClick={() => setTab('drive')}
+            className={`flex-1 px-4 py-4 font-semibold transition-colors ${
+              tab === 'drive'
+                ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600'
+                : 'text-slate-700 hover:bg-slate-50'
+            }`}
+          >
+            Google Drive
           </button>
         </div>
 
@@ -1015,6 +1123,132 @@ export default function Settings({ onBack }: SettingsProps) {
                     </button>
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {tab === 'drive' && (
+            <div>
+              <h3 className="text-lg font-semibold text-slate-900 mb-4">Google Drive Integration</h3>
+              <p className="text-sm text-slate-600 mb-6">
+                Connect your Google Drive account to automatically backup job photos to the cloud.
+              </p>
+
+              {/* Connection Status */}
+              <div className="mb-6 p-4 border border-slate-200 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      {driveAuth && !isAuthExpired(driveAuth) ? (
+                        <>
+                          <Cloud className="text-green-600" size={20} />
+                          <span className="font-semibold text-green-600">Connected</span>
+                        </>
+                      ) : (
+                        <>
+                          <CloudOff className="text-slate-400" size={20} />
+                          <span className="font-semibold text-slate-600">Not Connected</span>
+                        </>
+                      )}
+                    </div>
+                    {driveAuth && driveAuth.userEmail && (
+                      <p className="text-sm text-slate-600">Account: {driveAuth.userEmail}</p>
+                    )}
+                    {driveAuth && isAuthExpired(driveAuth) && (
+                      <p className="text-sm text-orange-600">Token expired - please reconnect</p>
+                    )}
+                  </div>
+                  <div>
+                    {driveAuth && !isAuthExpired(driveAuth) ? (
+                      <button
+                        onClick={handleDisconnectDrive}
+                        className="px-4 py-2 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors"
+                      >
+                        Disconnect
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleConnectDrive}
+                        disabled={driveAuthenticating || !driveInitialized}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed"
+                      >
+                        {driveAuthenticating ? 'Connecting...' : 'Connect to Google Drive'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Configuration Warning */}
+              {!driveInitialized && (
+                <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="text-yellow-600 flex-shrink-0 mt-0.5" size={18} />
+                    <div className="text-sm">
+                      <p className="font-semibold text-yellow-800 mb-1">Google Drive not configured</p>
+                      <p className="text-yellow-700">
+                        Please set up your Google API credentials in the .env file. See the setup documentation for instructions.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Settings */}
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-900 mb-2">
+                    Root Folder Name
+                  </label>
+                  <input
+                    type="text"
+                    value={driveSettings.rootFolderName}
+                    onChange={(e) =>
+                      setDriveSettings({ ...driveSettings, rootFolderName: e.target.value })
+                    }
+                    placeholder="Jobs"
+                    className="w-full max-w-md px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <p className="mt-1 text-xs text-slate-500">
+                    Job folders will be created inside this folder in your Google Drive
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id="autoUpload"
+                    checked={driveSettings.autoUpload}
+                    onChange={(e) =>
+                      setDriveSettings({ ...driveSettings, autoUpload: e.target.checked })
+                    }
+                    className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                  />
+                  <label htmlFor="autoUpload" className="text-sm font-medium text-slate-900">
+                    Automatically upload photos when online
+                  </label>
+                </div>
+
+                <button
+                  onClick={handleSaveDriveSettings}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
+                >
+                  Save Settings
+                </button>
+              </div>
+
+              {/* Setup Instructions */}
+              <div className="mt-8 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <h4 className="font-semibold text-blue-900 mb-2">Setup Instructions</h4>
+                <ol className="text-sm text-blue-800 space-y-2 list-decimal list-inside">
+                  <li>Go to <a href="https://console.cloud.google.com" target="_blank" rel="noopener noreferrer" className="underline">Google Cloud Console</a></li>
+                  <li>Create a new project or select an existing one</li>
+                  <li>Enable the Google Drive API</li>
+                  <li>Create OAuth 2.0 credentials (Web application type)</li>
+                  <li>Add your app's URL to authorized redirect URIs</li>
+                  <li>Copy the Client ID and API Key to your .env file</li>
+                  <li>Reload the app and click "Connect to Google Drive"</li>
+                </ol>
               </div>
             </div>
           )}

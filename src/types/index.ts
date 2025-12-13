@@ -45,6 +45,18 @@ export interface PricingVariable {
   updatedAt: string;
 }
 
+export interface JobPhoto {
+  id: string;
+  category: 'Before' | 'During' | 'After';
+  localUri?: string; // Base64 or Blob URL for offline storage
+  driveFileId?: string;
+  fileName: string;
+  uploadedAt?: string;
+  syncStatus: 'pending' | 'uploading' | 'uploaded' | 'failed';
+  capturedAt: string;
+  errorMessage?: string; // For failed uploads
+}
+
 export interface Job {
   id: string;
   name: string;
@@ -61,6 +73,9 @@ export interface Job {
   chipBlend?: string;
   baseColor?: BaseColor;
   status: JobStatus;
+  // Google Drive integration
+  googleDriveFolderId?: string;
+  photos?: JobPhoto[];
   // Snapshot of costs at time of job creation (so old jobs don't change)
   costsSnapshot: Costs;
   // Snapshot of system at time of job creation
@@ -128,6 +143,26 @@ export interface JobCalculation {
 export interface ChipBlend {
   id: string;
   name: string;
+}
+
+// Google Drive integration types
+export interface GoogleDriveAuth {
+  id: string;
+  accessToken: string;
+  refreshToken?: string;
+  expiresAt: number; // Timestamp
+  userEmail?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GoogleDriveSettings {
+  id: string;
+  rootFolderName: string; // e.g., "Jobs"
+  rootFolderId?: string; // Created in Google Drive
+  autoUpload: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // Backup/Export types
