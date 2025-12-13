@@ -254,38 +254,38 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
   const selectedLaborers = getSelectedLaborers();
 
   return (
-    <div className="p-6 md:p-8 max-w-6xl mx-auto">
+    <div className="p-3 sm:p-4 md:p-6 lg:p-8 max-w-6xl mx-auto">
       <button
         onClick={onBack}
-        className="flex items-center gap-2 text-slate-600 hover:text-slate-900 mb-6 transition-colors"
+        className="flex items-center gap-2 text-slate-600 hover:text-slate-900 mb-4 sm:mb-6 transition-colors"
       >
-        <ArrowLeft size={20} />
-        <span className="font-medium">Back</span>
+        <ArrowLeft size={18} className="sm:w-5 sm:h-5" />
+        <span className="font-medium text-sm sm:text-base">Back</span>
       </button>
 
-      <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-8">
-        <h2 className="text-2xl font-bold text-slate-900 mb-6">{jobId ? 'Edit Job' : 'Create New Job'}</h2>
+      <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4 sm:p-6 md:p-8">
+        <h2 className="text-xl sm:text-2xl font-bold text-slate-900 mb-4 sm:mb-6">{jobId ? 'Edit Job' : 'Create New Job'}</h2>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
           {/* Job Inputs */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div>
-              <label className="block text-sm font-semibold text-slate-900 mb-2">Job Name *</label>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+            <div className="md:col-span-2 lg:col-span-1">
+              <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Job Name *</label>
               <input
                 type="text"
                 placeholder="e.g., Smith Residence - Kitchen"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-900 mb-2">Chip System *</label>
+              <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Chip System *</label>
               <select
                 value={formData.system}
                 onChange={(e) => setFormData({ ...formData, system: e.target.value })}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
               >
                 <option value="">Select a system...</option>
                 {systems.map((sys) => (
@@ -297,96 +297,96 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-900 mb-2">Total Price ($)</label>
+              <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Total Price ($)</label>
               <input
                 type="number"
                 step="0.01"
                 placeholder="0.00"
                 value={formData.totalPrice}
                 onChange={(e) => setFormData({ ...formData, totalPrice: e.target.value })}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-900 mb-2">Floor Sq Footage</label>
+              <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Floor Sq Footage</label>
               <input
                 type="number"
                 placeholder="0"
                 value={formData.floorFootage}
                 onChange={(e) => setFormData({ ...formData, floorFootage: e.target.value })}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-900 mb-2">Vertical Sq Footage</label>
+              <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Vertical Sq Footage</label>
               <input
                 type="number"
                 placeholder="0"
                 value={formData.verticalFootage}
                 onChange={(e) => setFormData({ ...formData, verticalFootage: e.target.value })}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-900 mb-2">Crack Fill Factor</label>
+              <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Crack Fill Factor</label>
               <input
                 type="number"
                 step="0.1"
                 placeholder="1"
                 value={formData.crackFillFactor}
                 onChange={(e) => setFormData({ ...formData, crackFillFactor: e.target.value })}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-900 mb-2">Travel Distance (miles)</label>
+              <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Travel Distance (miles)</label>
               <input
                 type="number"
                 placeholder="0"
                 value={formData.travelDistance}
                 onChange={(e) => setFormData({ ...formData, travelDistance: e.target.value })}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-900 mb-2">Install Date</label>
+              <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Install Date</label>
               <input
                 type="date"
                 value={formData.installDate}
                 onChange={(e) => setFormData({ ...formData, installDate: e.target.value })}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-900 mb-2">Install Days</label>
+              <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Install Days</label>
               <input
                 type="number"
                 placeholder="1"
                 value={formData.installDays}
                 onChange={(e) => setFormData({ ...formData, installDays: e.target.value })}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-900 mb-2">Job Hours</label>
+              <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Job Hours</label>
               <input
                 type="number"
                 placeholder="10"
                 value={formData.jobHours}
                 onChange={(e) => setFormData({ ...formData, jobHours: e.target.value })}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
 
             <div className="relative">
-              <label className="block text-sm font-semibold text-slate-900 mb-2">Chip Blend</label>
+              <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Chip Blend</label>
               <input
                 type="text"
                 placeholder="Type or select a blend..."
@@ -394,7 +394,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                 onChange={(e) => handleChipBlendInputChange(e.target.value)}
                 onFocus={() => setShowBlendDropdown(true)}
                 onBlur={() => setTimeout(() => setShowBlendDropdown(false), 200)}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
               {showBlendDropdown && chipBlends.length > 0 && (
                 <div className="absolute z-10 w-full mt-1 bg-white border border-slate-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
@@ -405,7 +405,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                         key={blend.id}
                         type="button"
                         onClick={() => handleChipBlendSelect(blend.name)}
-                        className="w-full px-4 py-2 text-left hover:bg-slate-100 text-sm"
+                        className="w-full px-3 sm:px-4 py-2 text-left hover:bg-slate-100 text-xs sm:text-sm"
                       >
                         {blend.name}
                       </button>
@@ -415,8 +415,8 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-900 mb-2">Base Color</label>
-              <div className="flex gap-4">
+              <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Base Color</label>
+              <div className="flex flex-wrap gap-3 sm:gap-4">
                 {(['Grey', 'Tan', 'Clear'] as BaseColor[]).map((color) => (
                   <label key={color} className="flex items-center gap-2 cursor-pointer">
                     <input
@@ -427,15 +427,15 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                       onChange={(e) => setFormData({ ...formData, baseColor: e.target.value as BaseColor })}
                       className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
                     />
-                    <span className="text-sm text-slate-700">{color}</span>
+                    <span className="text-xs sm:text-sm text-slate-700">{color}</span>
                   </label>
                 ))}
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-900 mb-2">Status</label>
-              <div className="flex gap-4">
+              <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Status</label>
+              <div className="flex flex-wrap gap-3 sm:gap-4">
                 {(['Pending', 'Won', 'Lost'] as JobStatus[]).map((status) => (
                   <label key={status} className="flex items-center gap-2 cursor-pointer">
                     <input
@@ -446,7 +446,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                       onChange={(e) => setFormData({ ...formData, status: e.target.value as JobStatus })}
                       className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
                     />
-                    <span className={`text-sm ${
+                    <span className={`text-xs sm:text-sm ${
                       status === 'Won' ? 'text-green-700' :
                       status === 'Lost' ? 'text-red-700' :
                       'text-slate-700'
@@ -458,8 +458,8 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
           </div>
 
           {/* Laborer Selection */}
-          <div className="border border-slate-200 rounded-lg p-4">
-            <label className="block text-sm font-semibold text-slate-900 mb-3">
+          <div className="border border-slate-200 rounded-lg p-3 sm:p-4">
+            <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-2 sm:mb-3">
               Assign Laborers
             </label>
             {(() => {
@@ -471,7 +471,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                 : activeLaborers;
 
               if (availableLaborers.length === 0) {
-                return <p className="text-slate-500 text-sm">No active laborers. Add laborers in Settings.</p>;
+                return <p className="text-slate-500 text-xs sm:text-sm">No active laborers. Add laborers in Settings.</p>;
               }
 
               return (
@@ -484,7 +484,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                         key={laborer.id}
                         type="button"
                         onClick={() => handleLaborerToggle(laborer.id)}
-                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        className={`px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
                           isSelected
                             ? 'bg-blue-600 text-white'
                             : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
@@ -499,7 +499,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
               );
             })()}
             {selectedLaborers.length > 0 && (
-              <p className="text-sm text-slate-600 mt-2">
+              <p className="text-xs sm:text-sm text-slate-600 mt-2">
                 Total labor rate: ${selectedLaborers.reduce((sum, l) => sum + l.fullyLoadedRate, 0).toFixed(2)}/hr
               </p>
             )}
@@ -507,98 +507,98 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
 
           {/* Calculation Results */}
           {calculation && (
-            <div className="bg-slate-50 rounded-lg p-6 border border-slate-200">
-              <h3 className="font-semibold text-slate-900 mb-4">Calculated Outputs</h3>
+            <div className="bg-slate-50 rounded-lg p-3 sm:p-4 md:p-6 border border-slate-200">
+              <h3 className="text-base sm:text-lg font-semibold text-slate-900 mb-3 sm:mb-4">Calculated Outputs</h3>
 
               {/* Material Costs */}
-              <div className="mb-6">
-                <h4 className="text-sm font-semibold text-slate-700 mb-3 uppercase tracking-wide">Material Costs</h4>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="bg-white p-3 rounded border border-slate-200">
+              <div className="mb-4 sm:mb-6">
+                <h4 className="text-xs sm:text-sm font-semibold text-slate-700 mb-2 sm:mb-3 uppercase tracking-wide">Material Costs</h4>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 md:gap-4">
+                  <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
                     <p className="text-xs text-slate-500">Chip Needed</p>
-                    <p className="text-lg font-semibold">{calculation.chipNeeded} boxes</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold">{calculation.chipNeeded} boxes</p>
                   </div>
-                  <div className="bg-white p-3 rounded border border-slate-200">
+                  <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
                     <p className="text-xs text-slate-500">Chip Cost</p>
-                    <p className="text-lg font-semibold">{formatCurrency(calculation.chipCost)}</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold">{formatCurrency(calculation.chipCost)}</p>
                   </div>
-                  <div className="bg-white p-3 rounded border border-slate-200">
+                  <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
                     <p className="text-xs text-slate-500">Base Gallons</p>
-                    <p className="text-lg font-semibold">{calculation.baseGallons.toFixed(2)}</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold">{calculation.baseGallons.toFixed(2)}</p>
                   </div>
-                  <div className="bg-white p-3 rounded border border-slate-200">
+                  <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
                     <p className="text-xs text-slate-500">Base Cost</p>
-                    <p className="text-lg font-semibold">{formatCurrency(calculation.baseCost)}</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold">{formatCurrency(calculation.baseCost)}</p>
                   </div>
-                  <div className="bg-white p-3 rounded border border-slate-200">
+                  <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
                     <p className="text-xs text-slate-500">Top Gallons</p>
-                    <p className="text-lg font-semibold">{calculation.topGallons.toFixed(2)}</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold">{calculation.topGallons.toFixed(2)}</p>
                   </div>
-                  <div className="bg-white p-3 rounded border border-slate-200">
+                  <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
                     <p className="text-xs text-slate-500">Top Cost</p>
-                    <p className="text-lg font-semibold">{formatCurrency(calculation.topCost)}</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold">{formatCurrency(calculation.topCost)}</p>
                   </div>
-                  <div className="bg-white p-3 rounded border border-slate-200">
+                  <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
                     <p className="text-xs text-slate-500">Crack Fill Gallons</p>
-                    <p className="text-lg font-semibold">{calculation.crackFillGallons.toFixed(2)}</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold">{calculation.crackFillGallons.toFixed(2)}</p>
                   </div>
-                  <div className="bg-white p-3 rounded border border-slate-200">
+                  <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
                     <p className="text-xs text-slate-500">Crack Fill Cost</p>
-                    <p className="text-lg font-semibold">{formatCurrency(calculation.crackFillCost)}</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold">{formatCurrency(calculation.crackFillCost)}</p>
                   </div>
                 </div>
               </div>
 
               {/* Operating Costs */}
-              <div className="mb-6">
-                <h4 className="text-sm font-semibold text-slate-700 mb-3 uppercase tracking-wide">Operating Costs</h4>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="bg-white p-3 rounded border border-slate-200">
+              <div className="mb-4 sm:mb-6">
+                <h4 className="text-xs sm:text-sm font-semibold text-slate-700 mb-2 sm:mb-3 uppercase tracking-wide">Operating Costs</h4>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 md:gap-4">
+                  <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
                     <p className="text-xs text-slate-500">Gas Generator</p>
-                    <p className="text-lg font-semibold">{formatCurrency(calculation.gasGeneratorCost)}</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold">{formatCurrency(calculation.gasGeneratorCost)}</p>
                   </div>
-                  <div className="bg-white p-3 rounded border border-slate-200">
+                  <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
                     <p className="text-xs text-slate-500">Gas Heater</p>
-                    <p className="text-lg font-semibold">{formatCurrency(calculation.gasHeaterCost)}</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold">{formatCurrency(calculation.gasHeaterCost)}</p>
                   </div>
-                  <div className="bg-white p-3 rounded border border-slate-200">
+                  <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
                     <p className="text-xs text-slate-500">Gas Travel</p>
-                    <p className="text-lg font-semibold">{formatCurrency(calculation.gasTravelCost)}</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold">{formatCurrency(calculation.gasTravelCost)}</p>
                   </div>
-                  <div className="bg-white p-3 rounded border border-slate-200">
+                  <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
                     <p className="text-xs text-slate-500">Labor ({selectedLaborers.length} workers)</p>
-                    <p className="text-lg font-semibold">{formatCurrency(calculation.laborCost)}</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold">{formatCurrency(calculation.laborCost)}</p>
                   </div>
-                  <div className="bg-white p-3 rounded border border-slate-200">
+                  <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
                     <p className="text-xs text-slate-500">Consumables</p>
-                    <p className="text-lg font-semibold">{formatCurrency(calculation.consumablesCost)}</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold">{formatCurrency(calculation.consumablesCost)}</p>
                   </div>
-                  <div className="bg-white p-3 rounded border border-slate-200">
+                  <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
                     <p className="text-xs text-slate-500">Royalty (5%)</p>
-                    <p className="text-lg font-semibold">{formatCurrency(calculation.royaltyCost)}</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold">{formatCurrency(calculation.royaltyCost)}</p>
                   </div>
                 </div>
               </div>
 
               {/* Totals */}
-              <div className="mb-6">
-                <h4 className="text-sm font-semibold text-slate-700 mb-3 uppercase tracking-wide">Job Totals</h4>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="bg-white p-3 rounded border border-slate-200">
+              <div className="mb-4 sm:mb-6">
+                <h4 className="text-xs sm:text-sm font-semibold text-slate-700 mb-2 sm:mb-3 uppercase tracking-wide">Job Totals</h4>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 md:gap-4">
+                  <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
                     <p className="text-xs text-slate-500">Price per Sqft</p>
-                    <p className="text-lg font-semibold">{formatCurrency(calculation.pricePerSqft)}</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold">{formatCurrency(calculation.pricePerSqft)}</p>
                   </div>
-                  <div className="bg-white p-3 rounded border border-slate-200">
+                  <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
                     <p className="text-xs text-slate-500">Total Costs</p>
-                    <p className="text-lg font-semibold">{formatCurrency(calculation.totalCosts)}</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold">{formatCurrency(calculation.totalCosts)}</p>
                   </div>
-                  <div className="bg-white p-3 rounded border border-slate-200">
+                  <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
                     <p className="text-xs text-slate-500">Cost per Sqft</p>
-                    <p className="text-lg font-semibold">{formatCurrency(calculation.totalCostsPerSqft)}</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold">{formatCurrency(calculation.totalCostsPerSqft)}</p>
                   </div>
-                  <div className={`bg-white p-3 rounded border ${calculation.jobMargin >= 0 ? 'border-green-300' : 'border-red-300'}`}>
+                  <div className={`bg-white p-2 sm:p-3 rounded border ${calculation.jobMargin >= 0 ? 'border-green-300' : 'border-red-300'}`}>
                     <p className="text-xs text-slate-500">Job Margin</p>
-                    <p className={`text-lg font-semibold ${calculation.jobMargin >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    <p className={`text-sm sm:text-base md:text-lg font-semibold ${calculation.jobMargin >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                       {formatCurrency(calculation.jobMargin)}
                     </p>
                   </div>
@@ -606,62 +606,62 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
               </div>
 
               {/* Suggested Pricing */}
-              <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-                <h4 className="text-sm font-semibold text-blue-800 mb-3 uppercase tracking-wide">Suggested Pricing</h4>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+              <div className="bg-blue-50 rounded-lg p-3 sm:p-4 border border-blue-200">
+                <h4 className="text-xs sm:text-sm font-semibold text-blue-800 mb-2 sm:mb-3 uppercase tracking-wide">Suggested Pricing</h4>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 md:gap-4 mb-3 sm:mb-4">
                   <div>
                     <p className="text-xs text-blue-600">Discount</p>
-                    <p className="text-lg font-semibold text-blue-900">{formatCurrency(calculation.suggestedDiscount)}</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold text-blue-900">{formatCurrency(calculation.suggestedDiscount)}</p>
                   </div>
                   <div>
                     <p className="text-xs text-blue-600">Crack Price</p>
-                    <p className="text-lg font-semibold text-blue-900">{formatCurrency(calculation.suggestedCrackPrice)}</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold text-blue-900">{formatCurrency(calculation.suggestedCrackPrice)}</p>
                   </div>
                   <div>
                     <p className="text-xs text-blue-600">Floor $/sqft</p>
-                    <p className="text-lg font-semibold text-blue-900">{formatCurrency(calculation.suggestedFloorPricePerSqft)}</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold text-blue-900">{formatCurrency(calculation.suggestedFloorPricePerSqft)}</p>
                   </div>
                   <div>
                     <p className="text-xs text-blue-600">Floor Price</p>
-                    <p className="text-lg font-semibold text-blue-900">{formatCurrency(calculation.suggestedFloorPrice)}</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold text-blue-900">{formatCurrency(calculation.suggestedFloorPrice)}</p>
                   </div>
                   <div>
                     <p className="text-xs text-blue-600">Vertical Price</p>
-                    <p className="text-lg font-semibold text-blue-900">{formatCurrency(calculation.suggestedVerticalPrice)}</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold text-blue-900">{formatCurrency(calculation.suggestedVerticalPrice)}</p>
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-4 pt-4 border-t border-blue-200">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 pt-3 sm:pt-4 border-t border-blue-200">
                   <div>
-                    <p className="text-sm text-blue-600">Suggested Total</p>
-                    <p className="text-2xl font-bold text-blue-900">{formatCurrency(calculation.suggestedTotal)}</p>
+                    <p className="text-xs sm:text-sm text-blue-600">Suggested Total</p>
+                    <p className="text-xl sm:text-2xl font-bold text-blue-900">{formatCurrency(calculation.suggestedTotal)}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-blue-600">Suggested Margin</p>
-                    <p className="text-2xl font-bold text-green-600">{formatCurrency(calculation.suggestedMargin)}</p>
+                    <p className="text-xs sm:text-sm text-blue-600">Suggested Margin</p>
+                    <p className="text-xl sm:text-2xl font-bold text-green-600">{formatCurrency(calculation.suggestedMargin)}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-blue-600">Margin %</p>
-                    <p className="text-2xl font-bold text-green-600">{calculation.suggestedMarginPct.toFixed(1)}%</p>
+                    <p className="text-xs sm:text-sm text-blue-600">Margin %</p>
+                    <p className="text-xl sm:text-2xl font-bold text-green-600">{calculation.suggestedMarginPct.toFixed(1)}%</p>
                   </div>
                 </div>
               </div>
             </div>
           )}
 
-          <div className="flex gap-3">
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
             <button
               type="submit"
               disabled={saving}
-              className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 active:bg-blue-800 transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed"
+              className="flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 active:bg-blue-800 transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed text-sm sm:text-base"
             >
-              <Save size={20} />
+              <Save size={18} className="sm:w-5 sm:h-5" />
               {saving ? 'Saving...' : jobId ? 'Update Job' : 'Create Job'}
             </button>
             <button
               type="button"
               onClick={onBack}
               disabled={saving}
-              className="px-6 py-3 bg-slate-200 text-slate-900 rounded-lg font-semibold hover:bg-slate-300 active:bg-slate-400 transition-colors disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
+              className="px-4 sm:px-6 py-2.5 sm:py-3 bg-slate-200 text-slate-900 rounded-lg font-semibold hover:bg-slate-300 active:bg-slate-400 transition-colors disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed text-sm sm:text-base"
             >
               Cancel
             </button>

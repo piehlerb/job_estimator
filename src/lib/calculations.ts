@@ -115,9 +115,9 @@ export function calculateJobOutputs(
   // Suggested crack price: crackFillCost * 3
   const suggestedCrackPrice = crackFillCost * 3;
 
-  // Suggested floor price per sqft: min of ((totalCosts - suggestedDiscount - suggestedCrackPrice + 2000) / floorFootage) and 8
+  // Suggested floor price per sqft: min of ((totalCosts - suggestedDiscount - suggestedCrackPrice + 2000) / floorFootage) and 8, with minimum of 6
   const suggestedFloorPricePerSqft = floorFootage > 0
-    ? Math.min((totalCosts - suggestedDiscount - suggestedCrackPrice + 2000) / floorFootage, 8)
+    ? Math.max(6, Math.min((totalCosts - suggestedDiscount - suggestedCrackPrice + 2000) / floorFootage, 8))
     : 0;
 
   // Suggested floor price
