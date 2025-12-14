@@ -54,9 +54,10 @@ export function setGoogleCredentials(clientId: string, apiKey: string): void {
 
 /**
  * Check if credentials are configured
+ * Note: Only Client ID is required for OAuth. API Key is optional.
  */
 export function hasCredentials(): boolean {
-  return GOOGLE_CLIENT_ID !== '' && GOOGLE_API_KEY !== '';
+  return GOOGLE_CLIENT_ID !== '';
 }
 
 /**
@@ -109,10 +110,16 @@ async function initializeGapiClient(): Promise<void> {
     throw new Error('Google API not loaded');
   }
 
-  await window.gapi.client.init({
-    apiKey: GOOGLE_API_KEY,
+  const config: any = {
     discoveryDocs: [DISCOVERY_DOC],
-  });
+  };
+
+  // API Key is optional - only include if provided
+  if (GOOGLE_API_KEY) {
+    config.apiKey = GOOGLE_API_KEY;
+  }
+
+  await window.gapi.client.init(config);
 }
 
 /**
@@ -135,8 +142,8 @@ function initializeGisClient(callback: (response: any) => void): void {
  * Initialize both Google API and Identity Services
  */
 export async function initGoogleDrive(): Promise<void> {
-  if (!GOOGLE_CLIENT_ID || !GOOGLE_API_KEY) {
-    throw new Error('Google API credentials not configured. Please enter your credentials in Settings → Google Drive.');
+  if (!GOOGLE_CLIENT_ID) {
+    throw new Error('Google Client ID not configured. Please enter your Client ID in Settings → Google Drive.');
   }
 
   try {

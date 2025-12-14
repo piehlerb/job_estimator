@@ -315,9 +315,9 @@ export default function Settings({ onBack }: SettingsProps) {
     try {
       await saveGoogleDriveSettings(driveSettings);
 
-      // Update credentials if they changed
-      if (driveSettings.clientId && driveSettings.apiKey) {
-        setGoogleCredentials(driveSettings.clientId, driveSettings.apiKey);
+      // Update credentials if Client ID is provided
+      if (driveSettings.clientId) {
+        setGoogleCredentials(driveSettings.clientId, driveSettings.apiKey || '');
 
         // Try to initialize Drive API
         try {
@@ -325,7 +325,7 @@ export default function Settings({ onBack }: SettingsProps) {
           setDriveInitialized(true);
           alert('Settings saved successfully! You can now connect to Google Drive.');
         } catch (error) {
-          alert('Settings saved but failed to initialize Google Drive. Please check your credentials.');
+          alert('Settings saved but failed to initialize Google Drive. Please check your Client ID.');
         }
       } else {
         alert('Settings saved successfully');
@@ -1210,13 +1210,13 @@ export default function Settings({ onBack }: SettingsProps) {
               <div className="mb-6 p-4 border border-slate-200 rounded-lg bg-slate-50">
                 <h4 className="font-semibold text-slate-900 mb-3">API Credentials</h4>
                 <p className="text-sm text-slate-600 mb-4">
-                  Enter your Google Cloud API credentials. See setup instructions below for how to obtain these.
+                  Enter your Google Cloud OAuth Client ID. See setup instructions below for how to obtain it.
                 </p>
 
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-slate-900 mb-2">
-                      Client ID
+                      Client ID <span className="text-red-600">*</span>
                     </label>
                     <input
                       type="text"
@@ -1227,11 +1227,14 @@ export default function Settings({ onBack }: SettingsProps) {
                       placeholder="123456789-abcdefg.apps.googleusercontent.com"
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
                     />
+                    <p className="mt-1 text-xs text-slate-500">
+                      Required: OAuth 2.0 Client ID from Google Cloud Console
+                    </p>
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-slate-900 mb-2">
-                      API Key
+                      API Key <span className="text-slate-400 text-xs">(Optional)</span>
                     </label>
                     <input
                       type="password"
@@ -1239,25 +1242,25 @@ export default function Settings({ onBack }: SettingsProps) {
                       onChange={(e) =>
                         setDriveSettings({ ...driveSettings, apiKey: e.target.value })
                       }
-                      placeholder="AIzaSy..."
+                      placeholder="AIzaSy... (optional)"
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
                     />
                     <p className="mt-1 text-xs text-slate-500">
-                      Your API credentials are stored securely in your browser's local database
+                      Optional: Can improve performance but not required for OAuth. Your credentials are stored securely in your browser's local database.
                     </p>
                   </div>
                 </div>
               </div>
 
               {/* Configuration Warning */}
-              {!driveInitialized && (!driveSettings.clientId || !driveSettings.apiKey) && (
+              {!driveInitialized && !driveSettings.clientId && (
                 <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
                   <div className="flex items-start gap-2">
                     <AlertTriangle className="text-yellow-600 flex-shrink-0 mt-0.5" size={18} />
                     <div className="text-sm">
-                      <p className="font-semibold text-yellow-800 mb-1">API credentials required</p>
+                      <p className="font-semibold text-yellow-800 mb-1">Client ID required</p>
                       <p className="text-yellow-700">
-                        Please enter your Google API credentials above and save settings to enable Google Drive integration.
+                        Please enter your Google OAuth Client ID above and save settings to enable Google Drive integration.
                       </p>
                     </div>
                   </div>
@@ -1311,21 +1314,20 @@ export default function Settings({ onBack }: SettingsProps) {
 
               {/* Setup Instructions */}
               <div className="mt-8 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <h4 className="font-semibold text-blue-900 mb-2">How to Get API Credentials</h4>
+                <h4 className="font-semibold text-blue-900 mb-2">How to Get Your Client ID</h4>
                 <ol className="text-sm text-blue-800 space-y-2 list-decimal list-inside">
                   <li>Go to <a href="https://console.cloud.google.com" target="_blank" rel="noopener noreferrer" className="underline font-medium">Google Cloud Console</a></li>
                   <li>Create a new project or select an existing one</li>
                   <li>Enable the <strong>Google Drive API</strong></li>
                   <li>Go to "APIs & Services" → "Credentials"</li>
-                  <li>Create <strong>OAuth 2.0 Client ID</strong> (Web application type)</li>
+                  <li>Click "Create Credentials" → <strong>OAuth 2.0 Client ID</strong></li>
+                  <li>Choose "Web application" as the application type</li>
                   <li>Add your app's URL to authorized JavaScript origins and redirect URIs</li>
                   <li>Copy the <strong>Client ID</strong> and paste it above</li>
-                  <li>Create an <strong>API Key</strong> from the same Credentials page</li>
-                  <li>Copy the <strong>API Key</strong> and paste it above</li>
                   <li>Click "Save Settings" then "Connect to Google Drive"</li>
                 </ol>
                 <p className="text-xs text-blue-700 mt-3">
-                  💡 For detailed instructions, see GOOGLE_DRIVE_SETUP.md in the repository
+                  💡 The API Key is optional and not required for photo uploads. For detailed instructions, see GOOGLE_DRIVE_SETUP.md in the repository.
                 </p>
               </div>
             </div>
