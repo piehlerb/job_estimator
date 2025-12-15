@@ -65,7 +65,7 @@ export function base64ToBlob(base64: string): Blob {
 }
 
 /**
- * Generate a unique filename with timestamp
+ * Generate a unique filename with timestamp and random suffix
  */
 export function generatePhotoFileName(
   category: 'Before' | 'During' | 'After',
@@ -76,7 +76,9 @@ export function generatePhotoFileName(
     .replace(/[-:]/g, '')
     .replace(/\..+/, '')
     .replace('T', '_');
-  return `${category.toLowerCase()}_${timestamp}.${extension}`;
+  // Add random suffix to ensure uniqueness when processing multiple files quickly
+  const randomSuffix = Math.random().toString(36).substring(2, 6);
+  return `${category.toLowerCase()}_${timestamp}_${randomSuffix}.${extension}`;
 }
 
 /**

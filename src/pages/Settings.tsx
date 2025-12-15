@@ -1196,10 +1196,10 @@ export default function Settings({ onBack }: SettingsProps) {
                     ) : (
                       <button
                         onClick={handleConnectDrive}
-                        disabled={driveAuthenticating || !driveInitialized}
+                        disabled={driveAuthenticating || !hasCredentials()}
                         className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed"
                       >
-                        {driveAuthenticating ? 'Connecting...' : 'Connect to Google Drive'}
+                        {driveAuthenticating ? 'Connecting...' : driveAuth && isAuthExpired(driveAuth) ? 'Reconnect to Google Drive' : 'Connect to Google Drive'}
                       </button>
                     )}
                   </div>

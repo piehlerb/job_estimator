@@ -11,14 +11,12 @@ import {
   setAuthToken,
   isAuthExpired,
   isAuthExpiringSoon,
-  refreshAuthToken,
 } from './googleDrive';
 import {
   getGoogleDriveAuth,
   getGoogleDriveSettings,
   getDefaultGoogleDriveSettings,
   updateJob,
-  saveGoogleDriveAuth,
 } from './db';
 import { base64ToBlob } from './photoStorage';
 
@@ -47,15 +45,9 @@ export async function uploadPhotoToJob(
       };
     }
 
-    // Automatically refresh if token is expiring soon
+    // Warn if token is expiring soon
     if (isAuthExpiringSoon(auth)) {
-      try {
-        auth = await refreshAuthToken();
-        await saveGoogleDriveAuth(auth);
-      } catch (error) {
-        console.error('Failed to refresh token:', error);
-        // Continue with existing token - might still work
-      }
+      console.warn('Google Drive token will expire soon. Consider reconnecting in Settings.');
     }
 
     // Set auth token
@@ -140,24 +132,11 @@ export async function uploadPendingPhotos(job: Job): Promise<void> {
  */
 export async function isDriveAvailable(): Promise<boolean> {
   try {
-    let auth = await getGoogleDriveAuth();
+    const auth = await getGoogleDriveAuth();
     if (!auth) return false;
 
-    // If expired, it's not available
-    if (isAuthExpired(auth)) return false;
-
-    // If expiring soon, try to refresh
-    if (isAuthExpiringSoon(auth)) {
-      try {
-        auth = await refreshAuthToken();
-        await saveGoogleDriveAuth(auth);
-      } catch {
-        // If refresh fails, still consider it available if not expired yet
-        return !isAuthExpired(auth);
-      }
-    }
-
-    return true;
+    // Check if token is still valid
+    return !isAuthExpired(auth);
   } catch {
     return false;
   }

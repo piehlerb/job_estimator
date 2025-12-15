@@ -234,12 +234,13 @@ export function isAuthExpiringSoon(auth: GoogleDriveAuth): boolean {
 }
 
 /**
- * Refresh the auth token silently
- * This will attempt to get a new token without user interaction
+ * Refresh the auth token
+ * Note: Google OAuth token client requires user interaction for security.
+ * This will show a minimal consent screen to get a new token.
  */
 export async function refreshAuthToken(): Promise<GoogleDriveAuth> {
   try {
-    // Request new token silently (no user prompt)
+    // Google OAuth requires user interaction - use minimal prompt
     return await requestGoogleAuth(false);
   } catch (error) {
     console.error('Error refreshing auth token:', error);
