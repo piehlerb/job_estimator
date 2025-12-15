@@ -10,12 +10,15 @@ import {
   uploadFileToDrive,
   setAuthToken,
   isAuthExpired,
+  isAuthExpiringSoon,
+  refreshAuthToken,
 } from './googleDrive';
 import {
   getGoogleDriveAuth,
   getGoogleDriveSettings,
   getDefaultGoogleDriveSettings,
   updateJob,
+  saveGoogleDriveAuth,
 } from './db';
 import { base64ToBlob } from './photoStorage';
 
@@ -28,12 +31,31 @@ export async function uploadPhotoToJob(
 ): Promise<{ success: boolean; driveFileId?: string; error?: string }> {
   try {
     // Check if we have auth
-    const auth = await getGoogleDriveAuth();
-    if (!auth || isAuthExpired(auth)) {
+    let auth = await getGoogleDriveAuth();
+    if (!auth) {
       return {
         success: false,
-        error: 'Google Drive not connected or token expired',
+        error: 'Google Drive not connected',
       };
+    }
+
+    // Check if token is expired or expiring soon
+    if (isAuthExpired(auth)) {
+      return {
+        success: false,
+        error: 'Authentication expired. Please reconnect Google Drive in Settings.',
+      };
+    }
+
+    // Automatically refresh if token is expiring soon
+    if (isAuthExpiringSoon(auth)) {
+      try {
+        auth = await refreshAuthToken();
+        await saveGoogleDriveAuth(auth);
+      } catch (error) {
+        console.error('Failed to refresh token:', error);
+        // Continue with existing token - might still work
+      }
     }
 
     // Set auth token
@@ -118,8 +140,24 @@ export async function uploadPendingPhotos(job: Job): Promise<void> {
  */
 export async function isDriveAvailable(): Promise<boolean> {
   try {
-    const auth = await getGoogleDriveAuth();
-    return auth !== null && !isAuthExpired(auth);
+    let auth = await getGoogleDriveAuth();
+    if (!auth) return false;
+
+    // If expired, it's not available
+    if (isAuthExpired(auth)) return false;
+
+    // If expiring soon, try to refresh
+    if (isAuthExpiringSoon(auth)) {
+      try {
+        auth = await refreshAuthToken();
+        await saveGoogleDriveAuth(auth);
+      } catch {
+        // If refresh fails, still consider it available if not expired yet
+        return !isAuthExpired(auth);
+      }
+    }
+
+    return true;
   } catch {
     return false;
   }

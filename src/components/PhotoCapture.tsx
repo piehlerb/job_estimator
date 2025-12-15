@@ -8,7 +8,7 @@ import { useState } from 'react';
 import { JobPhoto } from '../types';
 import {
   captureFromCamera,
-  selectFromFiles,
+  selectMultipleFiles,
   compressImage,
   blobToBase64,
   generatePhotoFileName,
@@ -30,29 +30,44 @@ export default function PhotoCapture({ onPhotoCapture, disabled }: PhotoCaptureP
 
     setCapturing(true);
     try {
-      // Get file from camera or file system
-      const file = source === 'camera' ? await captureFromCamera() : await selectFromFiles();
+      // Get file(s) from camera or file system
+      let files: File[];
+      if (source === 'camera') {
+        const file = await captureFromCamera();
+        files = file ? [file] : [];
+      } else {
+        // For file uploads, allow multiple selection
+        files = await selectMultipleFiles();
+      }
 
-      if (!file) {
+      if (files.length === 0) {
         setCapturing(false);
         return;
       }
 
-      // Compress the image
-      const compressedBlob = await compressImage(file);
+      // Process each file
+      for (const file of files) {
+        try {
+          // Compress the image
+          const compressedBlob = await compressImage(file);
 
-      // Convert to base64 for local storage
-      const base64 = await blobToBase64(compressedBlob);
+          // Convert to base64 for local storage
+          const base64 = await blobToBase64(compressedBlob);
 
-      // Generate filename
-      const extension = getFileExtension(file.name, file.type);
-      const fileName = generatePhotoFileName(category, extension);
+          // Generate filename
+          const extension = getFileExtension(file.name, file.type);
+          const fileName = generatePhotoFileName(category, extension);
 
-      // Create photo object
-      const photo = createJobPhoto(category, fileName, base64);
+          // Create photo object
+          const photo = createJobPhoto(category, fileName, base64);
 
-      // Return to parent
-      onPhotoCapture(photo);
+          // Return to parent
+          onPhotoCapture(photo);
+        } catch (error) {
+          console.error('Error processing file:', file.name, error);
+          // Continue processing other files even if one fails
+        }
+      }
     } catch (error) {
       console.error('Error capturing photo:', error);
       alert('Failed to capture photo. Please try again.');
@@ -106,12 +121,12 @@ export default function PhotoCapture({ onPhotoCapture, disabled }: PhotoCaptureP
           className="flex items-center justify-center gap-2 px-4 py-3 bg-slate-600 text-white rounded-lg font-medium hover:bg-slate-700 active:bg-slate-800 transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed text-sm sm:text-base"
         >
           <Upload size={18} className="sm:w-5 sm:h-5" />
-          {capturing ? 'Uploading...' : 'Upload Photo'}
+          {capturing ? 'Uploading...' : 'Upload Photos'}
         </button>
       </div>
 
       <p className="text-xs text-slate-500">
-        Photos will be compressed to max 2MB and uploaded to Google Drive when online.
+        Select multiple photos at once when uploading. Photos will be compressed to max 2MB and uploaded to Google Drive when online.
       </p>
     </div>
   );

@@ -134,6 +134,8 @@ function initializeGisClient(callback: (response: any) => void): void {
     client_id: GOOGLE_CLIENT_ID,
     scope: SCOPES,
     callback: callback,
+    // Request longer-lived access tokens
+    prompt: '', // Empty prompt for better UX - only show consent on first use
   });
   gisInited = true;
 }
@@ -166,8 +168,9 @@ export async function initGoogleDrive(): Promise<void> {
 
 /**
  * Request OAuth token from user
+ * @param forceConsent - Force the consent screen to appear
  */
-export async function requestGoogleAuth(): Promise<GoogleDriveAuth> {
+export async function requestGoogleAuth(forceConsent: boolean = false): Promise<GoogleDriveAuth> {
   return new Promise((resolve, reject) => {
     if (!gisInited) {
       initializeGisClient((response: any) => {
@@ -176,10 +179,13 @@ export async function requestGoogleAuth(): Promise<GoogleDriveAuth> {
           return;
         }
 
+        // Google OAuth tokens expire in 1 hour (3600 seconds)
+        // We'll set expiration slightly earlier to allow for refresh buffer
+        const expiresIn = response.expires_in || 3600;
         const auth: GoogleDriveAuth = {
           id: 'current',
           accessToken: response.access_token,
-          expiresAt: Date.now() + (response.expires_in * 1000),
+          expiresAt: Date.now() + (expiresIn * 1000) - 60000, // Subtract 1 minute buffer
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
@@ -192,8 +198,9 @@ export async function requestGoogleAuth(): Promise<GoogleDriveAuth> {
     }
 
     // Request access token
+    // Use empty prompt for silent renewal, or 'consent' to force re-authorization
     if (tokenClient) {
-      tokenClient.requestAccessToken({ prompt: 'consent' });
+      tokenClient.requestAccessToken({ prompt: forceConsent ? 'consent' : '' });
     } else {
       reject(new Error('Token client not initialized'));
     }
@@ -216,6 +223,28 @@ export function setAuthToken(auth: GoogleDriveAuth): void {
  */
 export function isAuthExpired(auth: GoogleDriveAuth): boolean {
   return Date.now() >= auth.expiresAt;
+}
+
+/**
+ * Check if auth token is close to expiring (within 5 minutes)
+ */
+export function isAuthExpiringSoon(auth: GoogleDriveAuth): boolean {
+  const fiveMinutes = 5 * 60 * 1000;
+  return Date.now() >= (auth.expiresAt - fiveMinutes);
+}
+
+/**
+ * Refresh the auth token silently
+ * This will attempt to get a new token without user interaction
+ */
+export async function refreshAuthToken(): Promise<GoogleDriveAuth> {
+  try {
+    // Request new token silently (no user prompt)
+    return await requestGoogleAuth(false);
+  } catch (error) {
+    console.error('Error refreshing auth token:', error);
+    throw new Error('Failed to refresh authentication. Please sign in again.');
+  }
 }
 
 /**

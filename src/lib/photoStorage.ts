@@ -173,6 +173,32 @@ export async function selectFromFiles(): Promise<File | null> {
 }
 
 /**
+ * Select multiple photos from file system
+ */
+export async function selectMultipleFiles(): Promise<File[]> {
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.multiple = true; // Allow multiple file selection
+
+    input.onchange = (e) => {
+      const target = e.target as HTMLInputElement;
+      const files = target.files;
+      if (files && files.length > 0) {
+        resolve(Array.from(files));
+      } else {
+        resolve([]);
+      }
+    };
+
+    input.oncancel = () => resolve([]);
+
+    input.click();
+  });
+}
+
+/**
  * Create thumbnail from image file
  */
 export async function createThumbnail(file: Blob, maxSize: number = 200): Promise<string> {
