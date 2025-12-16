@@ -1,10 +1,10 @@
-import { Menu, X, Wifi, WifiOff, Settings, Home, Plus, Package, CalendarDays } from 'lucide-react';
+import { Menu, X, Wifi, WifiOff, Cog, Users, DollarSign, Database, Cloud, Home, Plus, Package, CalendarDays } from 'lucide-react';
 
 interface LayoutProps {
   children: React.ReactNode;
   sidebarOpen: boolean;
   onSidebarToggle: () => void;
-  onNavigate: (page: 'dashboard' | 'new-job' | 'edit-job' | 'settings' | 'inventory' | 'calendar') => void;
+  onNavigate: (page: 'dashboard' | 'new-job' | 'edit-job' | 'chip-systems' | 'laborers' | 'costs' | 'backup' | 'google-drive' | 'inventory' | 'calendar') => void;
   isOnline: boolean;
 }
 
@@ -70,11 +70,43 @@ export default function Layout({
             </button>
 
             <button
-              onClick={() => onNavigate('settings')}
-              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition-colors text-sm md:text-base"
+              onClick={() => onNavigate('chip-systems')}
+              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors text-sm md:text-base"
             >
-              <Settings size={18} className="md:w-5 md:h-5" />
-              <span>Settings</span>
+              <Cog size={18} className="md:w-5 md:h-5" />
+              <span>Chip Systems</span>
+            </button>
+
+            <button
+              onClick={() => onNavigate('laborers')}
+              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors text-sm md:text-base"
+            >
+              <Users size={18} className="md:w-5 md:h-5" />
+              <span>Laborers</span>
+            </button>
+
+            <button
+              onClick={() => onNavigate('costs')}
+              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors text-sm md:text-base"
+            >
+              <DollarSign size={18} className="md:w-5 md:h-5" />
+              <span>Costs</span>
+            </button>
+
+            <button
+              onClick={() => onNavigate('backup')}
+              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors text-sm md:text-base"
+            >
+              <Database size={18} className="md:w-5 md:h-5" />
+              <span>Backup</span>
+            </button>
+
+            <button
+              onClick={() => onNavigate('google-drive')}
+              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors text-sm md:text-base"
+            >
+              <Cloud size={18} className="md:w-5 md:h-5" />
+              <span>Google Drive</span>
             </button>
           </nav>
 

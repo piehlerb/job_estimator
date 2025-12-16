@@ -2,12 +2,16 @@ import { useState } from 'react';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import JobForm from './pages/JobForm';
-import Settings from './pages/Settings';
+import ChipSystems from './pages/ChipSystems';
+import Laborers from './pages/Laborers';
+import Costs from './pages/Costs';
+import Backup from './pages/Backup';
+import GoogleDrive from './pages/GoogleDrive';
 import Inventory from './pages/Inventory';
 import Calendar from './pages/Calendar';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 
-type Page = 'dashboard' | 'new-job' | 'edit-job' | 'settings' | 'inventory' | 'calendar';
+type Page = 'dashboard' | 'new-job' | 'edit-job' | 'chip-systems' | 'laborers' | 'costs' | 'backup' | 'google-drive' | 'inventory' | 'calendar';
 
 function App() {
   const [currentPage, setCurrentPage] = useState<Page>('dashboard');
@@ -42,8 +46,20 @@ function App() {
       {currentPage === 'edit-job' && editingJobId && (
         <JobForm jobId={editingJobId} onBack={handleBackToDashboard} />
       )}
-      {currentPage === 'settings' && (
-        <Settings onBack={handleBackToDashboard} />
+      {currentPage === 'chip-systems' && (
+        <ChipSystems />
+      )}
+      {currentPage === 'laborers' && (
+        <Laborers />
+      )}
+      {currentPage === 'costs' && (
+        <Costs />
+      )}
+      {currentPage === 'backup' && (
+        <Backup />
+      )}
+      {currentPage === 'google-drive' && (
+        <GoogleDrive />
       )}
       {currentPage === 'inventory' && (
         <Inventory />
