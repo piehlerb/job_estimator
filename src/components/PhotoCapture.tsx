@@ -22,7 +22,7 @@ interface PhotoCaptureProps {
 }
 
 export default function PhotoCapture({ onPhotoCapture, disabled }: PhotoCaptureProps) {
-  const [category, setCategory] = useState<'Before' | 'During' | 'After'>('Before');
+  const [category, setCategory] = useState<'Estimate' | 'Before' | 'During' | 'After'>('Estimate');
   const [capturing, setCapturing] = useState(false);
 
   const handleCapture = async (source: 'camera' | 'file') => {
@@ -84,7 +84,7 @@ export default function PhotoCapture({ onPhotoCapture, disabled }: PhotoCaptureP
           Photo Category
         </label>
         <div className="flex flex-wrap gap-2">
-          {(['Before', 'During', 'After'] as const).map((cat) => (
+          {(['Estimate', 'Before', 'During', 'After'] as const).map((cat) => (
             <button
               key={cat}
               type="button"

@@ -68,7 +68,7 @@ export function base64ToBlob(base64: string): Blob {
  * Generate a unique filename with timestamp and random suffix
  */
 export function generatePhotoFileName(
-  category: 'Before' | 'During' | 'After',
+  category: 'Estimate' | 'Before' | 'During' | 'After',
   extension: string = 'jpg'
 ): string {
   const timestamp = new Date()
@@ -110,7 +110,7 @@ export function getFileExtension(filename: string, mimeType?: string): string {
  * Create a new JobPhoto object
  */
 export function createJobPhoto(
-  category: 'Before' | 'During' | 'After',
+  category: 'Estimate' | 'Before' | 'During' | 'After',
   fileName: string,
   localUri?: string
 ): JobPhoto {

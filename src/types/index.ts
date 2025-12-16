@@ -47,7 +47,7 @@ export interface PricingVariable {
 
 export interface JobPhoto {
   id: string;
-  category: 'Before' | 'During' | 'After';
+  category: 'Estimate' | 'Before' | 'During' | 'After';
   localUri?: string; // Base64 or Blob URL for offline storage
   driveFileId?: string;
   fileName: string;

@@ -87,16 +87,16 @@ export function calculateJobOutputs(
   // Cyclo1 needed: floorFootage / cyclo1Spread
   const cyclo1Needed = cyclo1Spread > 0 ? floorFootage / cyclo1Spread : 0;
 
-  // Cyclo1 cost: cyclo1Needed * cyclo1CostPerGal
-  const cyclo1Cost = cyclo1Needed * cyclo1CostPerGal;
+  // Cyclo1 cost: cyclo1Needed * cyclo1CostPerGal (only calculate if cyclo1 is needed)
+  const cyclo1Cost = cyclo1Needed > 0 ? cyclo1Needed * cyclo1CostPerGal : 0;
 
   // Tint needed: calculate based on which coats include tint
   // Formula: (topGallons * 128 * 0.1) if includeTopcoatTint + (baseGallons * 128 * 0.1) if includeBasecoatTint
   const tintNeeded = (includeTopcoatTint ? topGallons * 128 * 0.1 : 0)
     + (includeBasecoatTint ? baseGallons * 128 * 0.1 : 0);
 
-  // Tint cost: tintNeeded / 32 * tintCostPerQuart
-  const tintCost = (tintNeeded / 32) * tintCostPerQuart;
+  // Tint cost: tintNeeded / 32 * tintCostPerQuart (only calculate if tint is needed)
+  const tintCost = tintNeeded > 0 ? (tintNeeded / 32) * tintCostPerQuart : 0;
 
   // Gas generator cost: gasCost * jobHours * 1.2
   const gasGeneratorCost = gasCost * jobHours * 1.2;

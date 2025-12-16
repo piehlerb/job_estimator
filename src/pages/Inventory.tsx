@@ -346,7 +346,10 @@ export default function Inventory() {
               </tr>
             </thead>
             <tbody>
-              {chipInventory.map((inv) => {
+              {chipInventory
+                .slice()
+                .sort((a, b) => a.blend.localeCompare(b.blend))
+                .map((inv) => {
                 const commitment = chipCommitments.find((c) => c.blend === inv.blend);
                 const committed = commitment?.committed || 0;
                 const potential = commitment?.potential || 0;

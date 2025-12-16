@@ -51,6 +51,8 @@ export default function PhotoGallery({
 
   const getCategoryColor = (category: JobPhoto['category']) => {
     switch (category) {
+      case 'Estimate':
+        return 'bg-purple-100 text-purple-800';
       case 'Before':
         return 'bg-blue-100 text-blue-800';
       case 'During':
