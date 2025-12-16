@@ -1,7 +1,7 @@
 import { ChipSystem, PricingVariable, Job, Costs, Laborer, ChipInventory, TopCoatInventory, BaseCoatInventory, MiscInventory, GoogleDriveAuth, GoogleDriveSettings } from '../types';
 
 const DB_NAME = 'JobEstimator';
-const DB_VERSION = 7;
+const DB_VERSION = 8; // Incremented for metadata store
 
 export async function initDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -49,11 +49,19 @@ export async function initDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains('googleDriveSettings')) {
         db.createObjectStore('googleDriveSettings', { keyPath: 'id' });
       }
+      if (!db.objectStoreNames.contains('metadata')) {
+        db.createObjectStore('metadata', { keyPath: 'id' });
+      }
     };
   });
 }
 
 async function getDB(): Promise<IDBDatabase> {
+  return initDB();
+}
+
+// Export openDB for sync module
+export async function openDB(): Promise<IDBDatabase> {
   return initDB();
 }
 

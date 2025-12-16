@@ -1,11 +1,16 @@
-import { Menu, X, Wifi, WifiOff, Cog, Users, DollarSign, Database, Cloud, Home, Plus, Package, CalendarDays } from 'lucide-react';
+import { Menu, X, Wifi, WifiOff, Cog, Users, DollarSign, Database, Cloud, Home, Plus, Package, CalendarDays, LogOut, User, RefreshCw } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { signOut } from '../lib/auth';
 
 interface LayoutProps {
   children: React.ReactNode;
   sidebarOpen: boolean;
   onSidebarToggle: () => void;
-  onNavigate: (page: 'dashboard' | 'new-job' | 'edit-job' | 'chip-systems' | 'laborers' | 'costs' | 'backup' | 'google-drive' | 'inventory' | 'calendar') => void;
+  onNavigate: (page: 'dashboard' | 'new-job' | 'edit-job' | 'chip-systems' | 'laborers' | 'costs' | 'backup' | 'google-drive' | 'inventory' | 'calendar' | 'supabase-test') => void;
   isOnline: boolean;
+  isSyncing?: boolean;
+  lastSyncTime?: Date | null;
+  onManualSync?: () => void;
 }
 
 export default function Layout({
@@ -14,7 +19,36 @@ export default function Layout({
   onSidebarToggle,
   onNavigate,
   isOnline,
+  isSyncing = false,
+  lastSyncTime,
+  onManualSync,
 }: LayoutProps) {
+  const { user } = useAuth();
+
+  const handleLogout = async () => {
+    if (confirm('Are you sure you want to log out?')) {
+      await signOut();
+      window.location.reload(); // Reload to show login screen
+    }
+  };
+
+  const formatLastSyncTime = () => {
+    if (!lastSyncTime) return 'Never';
+
+    const now = new Date();
+    const diff = now.getTime() - lastSyncTime.getTime();
+    const minutes = Math.floor(diff / 60000);
+
+    if (minutes < 1) return 'Just now';
+    if (minutes === 1) return '1 min ago';
+    if (minutes < 60) return `${minutes} mins ago`;
+
+    const hours = Math.floor(minutes / 60);
+    if (hours === 1) return '1 hour ago';
+    if (hours < 24) return `${hours} hours ago`;
+
+    return lastSyncTime.toLocaleDateString();
+  };
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
       {/* Backdrop overlay for mobile */}
@@ -108,9 +142,46 @@ export default function Layout({
               <Cloud size={18} className="md:w-5 md:h-5" />
               <span>Google Drive</span>
             </button>
+
+            <button
+              onClick={() => onNavigate('supabase-test')}
+              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-yellow-300 hover:bg-slate-800 hover:text-yellow-200 transition-colors text-sm md:text-base border border-yellow-500/30"
+            >
+              <Database size={18} className="md:w-5 md:h-5" />
+              <span>Supabase Test</span>
+            </button>
           </nav>
 
-          <div className="p-2 md:p-4 border-t border-slate-800">
+          <div className="p-2 md:p-4 border-t border-slate-800 space-y-2">
+            {/* Sync Status (if authenticated) */}
+            {user && lastSyncTime && (
+              <div className="px-3 py-2 md:px-4 rounded-lg bg-slate-800/50">
+                <div className="flex items-center gap-2 mb-1">
+                  <RefreshCw size={14} className={`text-slate-400 ${isSyncing ? 'animate-spin' : ''}`} />
+                  <span className="text-xs text-slate-400">Last sync</span>
+                </div>
+                <p className="text-xs text-slate-300 pl-5">{formatLastSyncTime()}</p>
+              </div>
+            )}
+
+            {/* User Info (if authenticated) */}
+            {user && (
+              <div className="px-3 py-2 md:px-4 rounded-lg bg-slate-800/50">
+                <div className="flex items-center gap-2 mb-2">
+                  <User size={14} className="text-slate-400" />
+                  <span className="text-xs text-slate-400 truncate">{user.email}</span>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
+                >
+                  <LogOut size={14} />
+                  <span>Log Out</span>
+                </button>
+              </div>
+            )}
+
+            {/* Online/Offline Status */}
             <div className="flex items-center gap-2 px-3 py-2 md:px-4 rounded-lg bg-slate-800">
               {isOnline ? (
                 <>
@@ -141,6 +212,27 @@ export default function Layout({
             <div className="flex-1 hidden md:block" />
 
             <div className="flex items-center gap-2 md:gap-3">
+              {/* Sync Status (only show when authenticated) */}
+              {user && (
+                <div className="flex items-center gap-2">
+                  {isSyncing ? (
+                    <div className="flex items-center gap-1.5 md:gap-2 px-2 py-1 md:px-3 bg-blue-50 text-blue-700 rounded-full text-xs md:text-sm font-medium">
+                      <RefreshCw size={14} className="md:w-4 md:h-4 animate-spin" />
+                      <span className="hidden sm:inline">Syncing...</span>
+                    </div>
+                  ) : onManualSync && isOnline ? (
+                    <button
+                      onClick={onManualSync}
+                      className="flex items-center gap-1.5 md:gap-2 px-2 py-1 md:px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full text-xs md:text-sm font-medium transition-colors"
+                      title={`Last sync: ${formatLastSyncTime()}`}
+                    >
+                      <RefreshCw size={14} className="md:w-4 md:h-4" />
+                      <span className="hidden sm:inline">Sync</span>
+                    </button>
+                  ) : null}
+                </div>
+              )}
+
               {!isOnline && (
                 <div className="flex items-center gap-1.5 md:gap-2 px-2 py-1 md:px-3 bg-orange-50 text-orange-700 rounded-full text-xs md:text-sm font-medium">
                   <WifiOff size={14} className="md:w-4 md:h-4" />

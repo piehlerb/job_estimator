@@ -2,7 +2,18 @@
   "permissions": {
     "allow": [
       "Bash(git add:*)",
-      "Bash(git commit -m \"$(cat <<''EOF''\nConfigure GitHub Pages deployment\n\n- Add base path configuration for GitHub Pages in vite.config.ts\n- Add deploy scripts to package.json with gh-pages dependency\n- Create GitHub Actions workflow for automatic deployment on push to main\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")"
+      "Bash(git commit -m \"$(cat <<''EOF''\nConfigure GitHub Pages deployment\n\n- Add base path configuration for GitHub Pages in vite.config.ts\n- Add deploy scripts to package.json with gh-pages dependency\n- Create GitHub Actions workflow for automatic deployment on push to main\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git commit:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run typecheck:*)",
+      "Bash(npm run build:*)",
+      "Bash(git push:*)",
+      "Bash(git checkout:*)",
+      "Bash(git restore:*)",
+      "Bash(git pull:*)",
+      "Bash(git rm:*)",
+      "Bash(echo \"# Supabase Configuration\n# Copy this file to .env.local and fill in your actual values\n\n# Get these from: https://supabase.com/dashboard/project/_/settings/api\nVITE_SUPABASE_URL=https://your-project-id.supabase.co\nVITE_SUPABASE_ANON_KEY=your-anon-key-here\")",
+      "Bash(npm run dev:*)"
     ],
     "deny": [],
     "ask": []

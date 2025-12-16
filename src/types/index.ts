@@ -222,3 +222,35 @@ export interface ImportPreview {
   toDelete: { entityType: string; entityName: string; }[];
   errors: string[];
 }
+
+// Sync types
+export type SyncStatus = 'idle' | 'syncing' | 'success' | 'error';
+export type SyncDirection = 'push' | 'pull' | 'both';
+
+export interface SyncResult {
+  success: boolean;
+  recordsPushed: number;
+  recordsPulled: number;
+  conflicts: number;
+  errors: string[];
+  timestamp: string;
+}
+
+export interface SyncState {
+  status: SyncStatus;
+  lastSync: string | null;
+  lastSyncResult: SyncResult | null;
+  isSyncing: boolean;
+  error: string | null;
+}
+
+export interface SyncQueueItem {
+  id: string;
+  operation: 'create' | 'update' | 'delete';
+  table: string;
+  recordId: string;
+  data: any;
+  timestamp: string;
+  retries: number;
+  error?: string;
+}
