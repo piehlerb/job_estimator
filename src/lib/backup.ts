@@ -118,11 +118,12 @@ function validateChipSystem(system: unknown): string[] {
 
   if (!isValidString(s.id)) errors.push('System missing valid id');
   if (!isValidString(s.name)) errors.push('System missing valid name');
-  if (!['1/4', '1/8', '1/16'].includes(s.chipSize as string)) errors.push('System has invalid chipSize');
   if (!isValidNumber(s.feetPerLb)) errors.push('System missing valid feetPerLb');
   if (!isValidNumber(s.boxCost)) errors.push('System missing valid boxCost');
   if (!isValidNumber(s.baseSpread)) errors.push('System missing valid baseSpread');
   if (!isValidNumber(s.topSpread)) errors.push('System missing valid topSpread');
+  // cyclo1Spread is optional for backwards compatibility
+  if (s.cyclo1Spread !== undefined && !isValidNumber(s.cyclo1Spread)) errors.push('System has invalid cyclo1Spread');
   if (!isValidISODate(s.createdAt)) errors.push('System missing valid createdAt');
   if (!isValidISODate(s.updatedAt)) errors.push('System missing valid updatedAt');
 
@@ -142,6 +143,9 @@ function validateCosts(costs: unknown): string[] {
   if (!isValidNumber(c.crackFillCost)) errors.push('Costs missing valid crackFillCost');
   if (!isValidNumber(c.gasCost)) errors.push('Costs missing valid gasCost');
   if (!isValidNumber(c.consumablesCost)) errors.push('Costs missing valid consumablesCost');
+  // cyclo1CostPerGal and tintCostPerQuart are optional for backwards compatibility
+  if (c.cyclo1CostPerGal !== undefined && !isValidNumber(c.cyclo1CostPerGal)) errors.push('Costs has invalid cyclo1CostPerGal');
+  if (c.tintCostPerQuart !== undefined && !isValidNumber(c.tintCostPerQuart)) errors.push('Costs has invalid tintCostPerQuart');
   if (!isValidISODate(c.createdAt)) errors.push('Costs missing valid createdAt');
   if (!isValidISODate(c.updatedAt)) errors.push('Costs missing valid updatedAt');
 

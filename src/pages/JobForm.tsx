@@ -1,4 +1,4 @@
-import { ArrowLeft, Save, Camera } from 'lucide-react';
+import { ArrowLeft, Save, Camera, RefreshCw } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import {
   getAllSystems,
@@ -18,6 +18,8 @@ import PhotoCapture from '../components/PhotoCapture';
 import PhotoGallery from '../components/PhotoGallery';
 import { uploadPendingPhotos, isDriveAvailable } from '../lib/photoUploadManager';
 import { isOnline } from '../lib/photoStorage';
+import { initGoogleDrive, requestGoogleAuth, setGoogleCredentials } from '../lib/googleDrive';
+import { getGoogleDriveSettings, saveGoogleDriveAuth } from '../lib/db';
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -45,6 +47,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
   const [photos, setPhotos] = useState<JobPhoto[]>([]);
   const [uploadingPhotos, setUploadingPhotos] = useState(false);
   const [driveAvailable, setDriveAvailable] = useState(false);
+  const [reconnectingDrive, setReconnectingDrive] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -60,6 +63,8 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
     chipBlend: '',
     baseColor: '' as BaseColor | '',
     status: 'Pending' as JobStatus,
+    includeBasecoatTint: false,
+    includeTopcoatTint: false,
   });
 
   useEffect(() => {
@@ -102,6 +107,8 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
             chipBlend: job.chipBlend || '',
             baseColor: job.baseColor || '',
             status: job.status || 'Pending',
+            includeBasecoatTint: job.includeBasecoatTint || false,
+            includeTopcoatTint: job.includeTopcoatTint || false,
           });
           setChipBlendInput(job.chipBlend || '');
           // Set selected laborers from snapshot
@@ -159,6 +166,8 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
       installDays: parseFloat(formData.installDays) || 1,
       jobHours: parseFloat(formData.jobHours) || 10,
       totalPrice: parseFloat(formData.totalPrice) || 0,
+      includeBasecoatTint: formData.includeBasecoatTint,
+      includeTopcoatTint: formData.includeTopcoatTint,
     };
 
     const calc = calculateJobOutputs(inputs, systemToUse, costsToUse, laborersToUse);
@@ -228,6 +237,45 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
     }
   };
 
+  const handleReconnectDrive = async () => {
+    if (!isOnline()) {
+      alert('You must be online to reconnect to Google Drive.');
+      return;
+    }
+
+    setReconnectingDrive(true);
+    try {
+      // Load settings to get credentials
+      const settings = await getGoogleDriveSettings();
+      if (!settings?.clientId) {
+        alert('Google Drive is not configured. Please set up Google Drive in Settings first.');
+        setReconnectingDrive(false);
+        return;
+      }
+
+      // Set credentials
+      setGoogleCredentials(settings.clientId, settings.apiKey || '');
+
+      // Initialize and request auth
+      await initGoogleDrive();
+      const auth = await requestGoogleAuth(false);
+      await saveGoogleDriveAuth(auth);
+
+      // Update drive availability
+      const available = await isDriveAvailable();
+      setDriveAvailable(available);
+
+      if (available) {
+        alert('Successfully reconnected to Google Drive!');
+      }
+    } catch (error) {
+      console.error('Error reconnecting to Google Drive:', error);
+      alert('Failed to reconnect to Google Drive. Please try again or check Settings.');
+    } finally {
+      setReconnectingDrive(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -273,6 +321,8 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
         chipBlend: formData.chipBlend || undefined,
         baseColor: formData.baseColor || undefined,
         status: formData.status,
+        includeBasecoatTint: formData.includeBasecoatTint,
+        includeTopcoatTint: formData.includeTopcoatTint,
         // Photos and Google Drive
         googleDriveFolderId: existingJob?.googleDriveFolderId,
         photos: photos.length > 0 ? photos : undefined,
@@ -356,7 +406,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                 <option value="">Select a system...</option>
                 {systems.map((sys) => (
                   <option key={sys.id} value={sys.id}>
-                    {sys.name} ({sys.chipSize}")
+                    {sys.name}
                   </option>
                 ))}
               </select>
@@ -521,6 +571,58 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                 ))}
               </div>
             </div>
+
+            <div>
+              <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Include Basecoat Tint</label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="includeBasecoatTint"
+                    checked={!formData.includeBasecoatTint}
+                    onChange={() => setFormData({ ...formData, includeBasecoatTint: false })}
+                    className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                  />
+                  <span className="text-xs sm:text-sm text-slate-700">No</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="includeBasecoatTint"
+                    checked={formData.includeBasecoatTint}
+                    onChange={() => setFormData({ ...formData, includeBasecoatTint: true })}
+                    className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                  />
+                  <span className="text-xs sm:text-sm text-slate-700">Yes</span>
+                </label>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Include Topcoat Tint</label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="includeTopcoatTint"
+                    checked={!formData.includeTopcoatTint}
+                    onChange={() => setFormData({ ...formData, includeTopcoatTint: false })}
+                    className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                  />
+                  <span className="text-xs sm:text-sm text-slate-700">No</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="includeTopcoatTint"
+                    checked={formData.includeTopcoatTint}
+                    onChange={() => setFormData({ ...formData, includeTopcoatTint: true })}
+                    className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                  />
+                  <span className="text-xs sm:text-sm text-slate-700">Yes</span>
+                </label>
+              </div>
+            </div>
           </div>
 
           {/* Laborer Selection */}
@@ -612,6 +714,22 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                     <p className="text-xs text-slate-500">Crack Fill Cost</p>
                     <p className="text-sm sm:text-base md:text-lg font-semibold">{formatCurrency(calculation.crackFillCost)}</p>
                   </div>
+                  <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
+                    <p className="text-xs text-slate-500">Cyclo1 Needed</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold">{calculation.cyclo1Needed.toFixed(2)} gal</p>
+                  </div>
+                  <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
+                    <p className="text-xs text-slate-500">Cyclo1 Cost</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold">{formatCurrency(calculation.cyclo1Cost)}</p>
+                  </div>
+                  <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
+                    <p className="text-xs text-slate-500">Tint Needed</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold">{calculation.tintNeeded.toFixed(2)} oz</p>
+                  </div>
+                  <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
+                    <p className="text-xs text-slate-500">Tint Cost</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold">{formatCurrency(calculation.tintCost)}</p>
+                  </div>
                 </div>
               </div>
 
@@ -666,6 +784,12 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                     <p className="text-xs text-slate-500">Job Margin</p>
                     <p className={`text-sm sm:text-base md:text-lg font-semibold ${calculation.jobMargin >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                       {formatCurrency(calculation.jobMargin)}
+                    </p>
+                  </div>
+                  <div className={`bg-white p-2 sm:p-3 rounded border ${calculation.marginPerDay >= 0 ? 'border-green-300' : 'border-red-300'}`}>
+                    <p className="text-xs text-slate-500">Margin per Day</p>
+                    <p className={`text-sm sm:text-base md:text-lg font-semibold ${calculation.marginPerDay >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {formatCurrency(calculation.marginPerDay)}
                     </p>
                   </div>
                 </div>
@@ -726,9 +850,20 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
 
             {!driveAvailable && (
               <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <p className="text-sm text-yellow-800">
-                  <strong>Google Drive not connected.</strong> Photos will be saved locally. Connect Google Drive in Settings to enable cloud backup.
-                </p>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <p className="text-sm text-yellow-800">
+                    <strong>Google Drive not connected.</strong> Photos will be saved locally.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleReconnectDrive}
+                    disabled={reconnectingDrive || !isOnline()}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-yellow-600 text-white text-sm rounded-lg hover:bg-yellow-700 disabled:bg-yellow-400 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <RefreshCw size={14} className={reconnectingDrive ? 'animate-spin' : ''} />
+                    {reconnectingDrive ? 'Connecting...' : 'Reconnect'}
+                  </button>
+                </div>
               </div>
             )}
 

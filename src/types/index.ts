@@ -1,5 +1,3 @@
-export type ChipSize = '1/4' | '1/8' | '1/16';
-
 export type BaseColor = 'Grey' | 'Tan' | 'Clear';
 
 export type JobStatus = 'Won' | 'Lost' | 'Pending';
@@ -7,11 +5,11 @@ export type JobStatus = 'Won' | 'Lost' | 'Pending';
 export interface ChipSystem {
   id: string;
   name: string;
-  chipSize: ChipSize;
   feetPerLb: number;
   boxCost: number;
   baseSpread: number;
   topSpread: number;
+  cyclo1Spread: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -24,6 +22,8 @@ export interface Costs {
   crackFillCost: number;
   gasCost: number;
   consumablesCost: number;
+  cyclo1CostPerGal: number;
+  tintCostPerQuart: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -73,6 +73,9 @@ export interface Job {
   chipBlend?: string;
   baseColor?: BaseColor;
   status: JobStatus;
+  // Tint options
+  includeBasecoatTint?: boolean;
+  includeTopcoatTint?: boolean;
   // Google Drive integration
   googleDriveFolderId?: string;
   photos?: JobPhoto[];
@@ -120,6 +123,10 @@ export interface JobCalculation {
   topCost: number;
   crackFillGallons: number;
   crackFillCost: number;
+  cyclo1Needed: number;
+  cyclo1Cost: number;
+  tintNeeded: number;
+  tintCost: number;
   gasGeneratorCost: number;
   gasHeaterCost: number;
   gasTravelCost: number;
@@ -129,6 +136,7 @@ export interface JobCalculation {
   totalCosts: number;
   totalCostsPerSqft: number;
   jobMargin: number;
+  marginPerDay: number;
   suggestedDiscount: number;
   suggestedCrackPrice: number;
   suggestedFloorPricePerSqft: number;

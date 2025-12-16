@@ -39,6 +39,8 @@ export default function Dashboard({ onNewJob, onEditJob }: DashboardProps) {
             installDays: job.installDays,
             jobHours: job.jobHours,
             totalPrice: job.totalPrice,
+            includeBasecoatTint: job.includeBasecoatTint || false,
+            includeTopcoatTint: job.includeTopcoatTint || false,
           },
           job.systemSnapshot,
           job.costsSnapshot,

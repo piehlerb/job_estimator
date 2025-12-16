@@ -243,6 +243,8 @@ export function getDefaultCosts(): Costs {
     crackFillCost: 0,
     gasCost: 0,
     consumablesCost: 0,
+    cyclo1CostPerGal: 0,
+    tintCostPerQuart: 0,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };

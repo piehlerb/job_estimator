@@ -9,6 +9,8 @@ interface JobInputs {
   installDays: number;
   jobHours: number;
   totalPrice: number;
+  includeBasecoatTint: boolean;
+  includeTopcoatTint: boolean;
 }
 
 export function calculateJobOutputs(
@@ -26,6 +28,8 @@ export function calculateJobOutputs(
     installDays,
     jobHours,
     totalPrice,
+    includeBasecoatTint,
+    includeTopcoatTint,
   } = inputs;
 
   const {
@@ -33,6 +37,7 @@ export function calculateJobOutputs(
     boxCost,
     baseSpread,
     topSpread,
+    cyclo1Spread,
   } = system;
 
   const {
@@ -41,6 +46,8 @@ export function calculateJobOutputs(
     crackFillCost: crackFillCostPerGal,
     gasCost,
     consumablesCost,
+    cyclo1CostPerGal,
+    tintCostPerQuart,
   } = costs;
 
   // Price per sqft
@@ -77,13 +84,27 @@ export function calculateJobOutputs(
   // Crack fill cost
   const crackFillCost = crackFillGallons * crackFillCostPerGal;
 
-  // Gas generator cost: gasCost * 10
-  const gasGeneratorCost = gasCost * 10;
+  // Cyclo1 needed: floorFootage / cyclo1Spread
+  const cyclo1Needed = cyclo1Spread > 0 ? floorFootage / cyclo1Spread : 0;
 
-  // Gas heater cost: if install month is 11, 12, 1, 2, 3 then (gasCost + 1) * 8, else 0
+  // Cyclo1 cost: cyclo1Needed * cyclo1CostPerGal
+  const cyclo1Cost = cyclo1Needed * cyclo1CostPerGal;
+
+  // Tint needed: calculate based on which coats include tint
+  // Formula: (topGallons * 128 * 0.1) if includeTopcoatTint + (baseGallons * 128 * 0.1) if includeBasecoatTint
+  const tintNeeded = (includeTopcoatTint ? topGallons * 128 * 0.1 : 0)
+    + (includeBasecoatTint ? baseGallons * 128 * 0.1 : 0);
+
+  // Tint cost: tintNeeded / 32 * tintCostPerQuart
+  const tintCost = (tintNeeded / 32) * tintCostPerQuart;
+
+  // Gas generator cost: gasCost * jobHours * 1.2
+  const gasGeneratorCost = gasCost * jobHours * 1.2;
+
+  // Gas heater cost: if install month is 11, 12, 1, 2, 3 then (gasCost + 1) * jobHours, else 0
   const installMonth = installDate ? new Date(installDate).getMonth() + 1 : 0;
   const isWinterMonth = [11, 12, 1, 2, 3].includes(installMonth);
-  const gasHeaterCost = isWinterMonth ? (gasCost + 1) * 8 : 0;
+  const gasHeaterCost = isWinterMonth ? (gasCost + 1) * jobHours : 0;
 
   // Gas travel cost:
   // Initial estimate trip: travelDistance * 2 * gasCost / 20
@@ -100,13 +121,16 @@ export function calculateJobOutputs(
 
   // Total costs
   const totalCosts = chipCost + baseCost + topCost + consumablesCost + crackFillCost
-    + gasHeaterCost + gasTravelCost + gasGeneratorCost + royaltyCost + laborCost;
+    + cyclo1Cost + tintCost + gasHeaterCost + gasTravelCost + gasGeneratorCost + royaltyCost + laborCost;
 
   // Total costs per sqft
   const totalCostsPerSqft = floorFootage > 0 ? totalCosts / floorFootage : 0;
 
   // Job margin
   const jobMargin = totalPrice - totalCosts;
+
+  // Margin per day: (totalPrice - totalCosts) / installDays
+  const marginPerDay = installDays > 0 ? jobMargin / installDays : 0;
 
   // Suggested discount: floorFootage * -1, max 500 for floor footage
   const cappedFloor = Math.min(floorFootage, 500);
@@ -145,6 +169,10 @@ export function calculateJobOutputs(
     topCost,
     crackFillGallons,
     crackFillCost,
+    cyclo1Needed,
+    cyclo1Cost,
+    tintNeeded,
+    tintCost,
     gasGeneratorCost,
     gasHeaterCost,
     gasTravelCost,
@@ -154,6 +182,7 @@ export function calculateJobOutputs(
     totalCosts,
     totalCostsPerSqft,
     jobMargin,
+    marginPerDay,
     suggestedDiscount,
     suggestedCrackPrice,
     suggestedFloorPricePerSqft,

@@ -27,7 +27,7 @@ import {
   executeImport,
   parseImportFile,
 } from '../lib/backup';
-import { ChipSystem, ChipSize, Costs, Laborer, ExportData, ImportPreview, MergeLogEntry, GoogleDriveAuth, GoogleDriveSettings } from '../types';
+import { ChipSystem, Costs, Laborer, ExportData, ImportPreview, MergeLogEntry, GoogleDriveAuth, GoogleDriveSettings } from '../types';
 import {
   initGoogleDrive,
   requestGoogleAuth,
@@ -77,11 +77,11 @@ export default function Settings({ onBack }: SettingsProps) {
 
   const [systemForm, setSystemForm] = useState({
     name: '',
-    chipSize: '1/4' as ChipSize,
     feetPerLb: '',
     boxCost: '',
     baseSpread: '',
     topSpread: '',
+    cyclo1Spread: '',
   });
 
   const [costsForm, setCostsForm] = useState({
@@ -90,6 +90,8 @@ export default function Settings({ onBack }: SettingsProps) {
     crackFillCost: '',
     gasCost: '',
     consumablesCost: '',
+    cyclo1CostPerGal: '',
+    tintCostPerQuart: '',
   });
 
   const [laborerForm, setLaborerForm] = useState({
@@ -122,6 +124,8 @@ export default function Settings({ onBack }: SettingsProps) {
         crackFillCost: storedCosts.crackFillCost.toString(),
         gasCost: storedCosts.gasCost.toString(),
         consumablesCost: storedCosts.consumablesCost.toString(),
+        cyclo1CostPerGal: (storedCosts.cyclo1CostPerGal || 0).toString(),
+        tintCostPerQuart: (storedCosts.tintCostPerQuart || 0).toString(),
       });
     }
 
@@ -160,11 +164,11 @@ export default function Settings({ onBack }: SettingsProps) {
       const system: ChipSystem = {
         id: editingSystem?.id || generateId(),
         name: systemForm.name,
-        chipSize: systemForm.chipSize,
         feetPerLb: parseFloat(systemForm.feetPerLb) || 0,
         boxCost: parseFloat(systemForm.boxCost) || 0,
         baseSpread: parseFloat(systemForm.baseSpread) || 0,
         topSpread: parseFloat(systemForm.topSpread) || 0,
+        cyclo1Spread: parseFloat(systemForm.cyclo1Spread) || 0,
         createdAt: editingSystem?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -178,7 +182,7 @@ export default function Settings({ onBack }: SettingsProps) {
       await loadData();
       setShowSystemForm(false);
       setEditingSystem(null);
-      setSystemForm({ name: '', chipSize: '1/4', feetPerLb: '', boxCost: '', baseSpread: '', topSpread: '' });
+      setSystemForm({ name: '', feetPerLb: '', boxCost: '', baseSpread: '', topSpread: '', cyclo1Spread: '' });
     } catch (error) {
       console.error('Error saving system:', error);
     }
@@ -196,6 +200,8 @@ export default function Settings({ onBack }: SettingsProps) {
         crackFillCost: parseFloat(costsForm.crackFillCost) || 0,
         gasCost: parseFloat(costsForm.gasCost) || 0,
         consumablesCost: parseFloat(costsForm.consumablesCost) || 0,
+        cyclo1CostPerGal: parseFloat(costsForm.cyclo1CostPerGal) || 0,
+        tintCostPerQuart: parseFloat(costsForm.tintCostPerQuart) || 0,
         updatedAt: new Date().toISOString(),
       };
 
@@ -241,11 +247,11 @@ export default function Settings({ onBack }: SettingsProps) {
     setEditingSystem(system);
     setSystemForm({
       name: system.name,
-      chipSize: system.chipSize,
       feetPerLb: system.feetPerLb.toString(),
       boxCost: system.boxCost.toString(),
       baseSpread: system.baseSpread.toString(),
       topSpread: system.topSpread.toString(),
+      cyclo1Spread: (system.cyclo1Spread || 0).toString(),
     });
     setShowSystemForm(true);
   };
@@ -499,7 +505,7 @@ export default function Settings({ onBack }: SettingsProps) {
                 <button
                   onClick={() => {
                     setEditingSystem(null);
-                    setSystemForm({ name: '', chipSize: '1/4', feetPerLb: '', boxCost: '', baseSpread: '', topSpread: '' });
+                    setSystemForm({ name: '', feetPerLb: '', boxCost: '', baseSpread: '', topSpread: '', cyclo1Spread: '' });
                     setShowSystemForm(true);
                   }}
                   className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
@@ -515,7 +521,7 @@ export default function Settings({ onBack }: SettingsProps) {
                   <button
                     onClick={() => {
                       setEditingSystem(null);
-                      setSystemForm({ name: '', chipSize: '1/4', feetPerLb: '', boxCost: '', baseSpread: '', topSpread: '' });
+                      setSystemForm({ name: '', feetPerLb: '', boxCost: '', baseSpread: '', topSpread: '', cyclo1Spread: '' });
                       setShowSystemForm(true);
                     }}
                     className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
@@ -534,10 +540,10 @@ export default function Settings({ onBack }: SettingsProps) {
                       <div>
                         <p className="font-semibold text-slate-900">{system.name}</p>
                         <p className="text-sm text-slate-600 mt-1">
-                          {system.chipSize}" chip | {system.feetPerLb} ft/lb | ${system.boxCost}/box
+                          {system.feetPerLb} ft/lb | ${system.boxCost}/box
                         </p>
                         <p className="text-sm text-slate-600">
-                          Base: {system.baseSpread} | Top: {system.topSpread}
+                          Base: {system.baseSpread} | Top: {system.topSpread} | Cyclo1: {system.cyclo1Spread || 0}
                         </p>
                       </div>
                       <div className="flex gap-2">
@@ -580,20 +586,6 @@ export default function Settings({ onBack }: SettingsProps) {
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-semibold text-slate-900 mb-2">Chip Size</label>
-                        <select
-                          value={systemForm.chipSize}
-                          onChange={(e) => setSystemForm({ ...systemForm, chipSize: e.target.value as ChipSize })}
-                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-                        >
-                          <option value="1/4">1/4" chip</option>
-                          <option value="1/8">1/8" chip</option>
-                          <option value="1/16">1/16" chip</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
                         <label className="block text-sm font-semibold text-slate-900 mb-2">Feet per lb</label>
                         <input
                           type="number"
@@ -604,6 +596,8 @@ export default function Settings({ onBack }: SettingsProps) {
                           className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                       </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-semibold text-slate-900 mb-2">Box Cost ($)</label>
                         <input
@@ -615,8 +609,6 @@ export default function Settings({ onBack }: SettingsProps) {
                           className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                       </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-semibold text-slate-900 mb-2">Base Spread</label>
                         <input
@@ -628,6 +620,8 @@ export default function Settings({ onBack }: SettingsProps) {
                           className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                       </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-semibold text-slate-900 mb-2">Top Spread</label>
                         <input
@@ -636,6 +630,17 @@ export default function Settings({ onBack }: SettingsProps) {
                           placeholder="0.00"
                           value={systemForm.topSpread}
                           onChange={(e) => setSystemForm({ ...systemForm, topSpread: e.target.value })}
+                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-slate-900 mb-2">Cyclo1 Spread</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={systemForm.cyclo1Spread}
+                          onChange={(e) => setSystemForm({ ...systemForm, cyclo1Spread: e.target.value })}
                           className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                       </div>
@@ -877,6 +882,30 @@ export default function Settings({ onBack }: SettingsProps) {
                       placeholder="0.00"
                       value={costsForm.consumablesCost}
                       onChange={(e) => setCostsForm({ ...costsForm, consumablesCost: e.target.value })}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-900 mb-2">Cyclo1 Cost per Gallon ($)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={costsForm.cyclo1CostPerGal}
+                      onChange={(e) => setCostsForm({ ...costsForm, cyclo1CostPerGal: e.target.value })}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-900 mb-2">Tint Cost per Quart ($)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={costsForm.tintCostPerQuart}
+                      onChange={(e) => setCostsForm({ ...costsForm, tintCostPerQuart: e.target.value })}
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   </div>
