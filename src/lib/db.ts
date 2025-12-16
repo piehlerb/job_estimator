@@ -1,7 +1,7 @@
-import { ChipSystem, PricingVariable, Job, Costs, Laborer, ChipInventory, TopCoatInventory, BaseCoatInventory, GoogleDriveAuth, GoogleDriveSettings } from '../types';
+import { ChipSystem, PricingVariable, Job, Costs, Laborer, ChipInventory, TopCoatInventory, BaseCoatInventory, MiscInventory, GoogleDriveAuth, GoogleDriveSettings } from '../types';
 
 const DB_NAME = 'JobEstimator';
-const DB_VERSION = 6;
+const DB_VERSION = 7;
 
 export async function initDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -39,6 +39,9 @@ export async function initDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains('baseCoatInventory')) {
         db.createObjectStore('baseCoatInventory', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('miscInventory')) {
+        db.createObjectStore('miscInventory', { keyPath: 'id' });
       }
       if (!db.objectStoreNames.contains('googleDriveAuth')) {
         db.createObjectStore('googleDriveAuth', { keyPath: 'id' });
@@ -414,6 +417,31 @@ export async function saveBaseCoatInventory(inventory: BaseCoatInventory): Promi
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(['baseCoatInventory'], 'readwrite');
     const store = transaction.objectStore('baseCoatInventory');
+    const request = store.put({ ...inventory, id: 'current' });
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve();
+  });
+}
+
+// Misc Inventory
+export async function getMiscInventory(): Promise<MiscInventory | null> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['miscInventory'], 'readonly');
+    const store = transaction.objectStore('miscInventory');
+    const request = store.get('current');
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result || null);
+  });
+}
+
+export async function saveMiscInventory(inventory: MiscInventory): Promise<void> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['miscInventory'], 'readwrite');
+    const store = transaction.objectStore('miscInventory');
     const request = store.put({ ...inventory, id: 'current' });
 
     request.onerror = () => reject(request.error);

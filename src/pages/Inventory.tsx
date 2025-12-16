@@ -10,10 +10,12 @@ import {
   getTopCoatInventory,
   saveTopCoatInventory,
   getBaseCoatInventory,
+  getMiscInventory,
+  saveMiscInventory,
   saveBaseCoatInventory,
   ChipBlend,
 } from '../lib/db';
-import { Job, ChipInventory, TopCoatInventory, BaseCoatInventory } from '../types';
+import { Job, ChipInventory, TopCoatInventory, BaseCoatInventory, MiscInventory } from '../types';
 import { calculateJobOutputs } from '../lib/calculations';
 
 function generateId(): string {
@@ -48,6 +50,13 @@ export default function Inventory() {
     baseBTan: 0,
     updatedAt: new Date().toISOString(),
   });
+  const [miscInventory, setMiscInventory] = useState<MiscInventory>({
+    id: 'current',
+    crackRepair: 0,
+    silicaSand: 0,
+    shot: 0,
+    updatedAt: new Date().toISOString(),
+  });
 
   // Commitments calculated from jobs
   const [chipCommitments, setChipCommitments] = useState<ChipCommitment[]>([]);
@@ -68,11 +77,12 @@ export default function Inventory() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [blends, chips, topCoat, baseCoat, jobs] = await Promise.all([
+      const [blends, chips, topCoat, baseCoat, misc, jobs] = await Promise.all([
         getAllChipBlends(),
         getAllChipInventory(),
         getTopCoatInventory(),
         getBaseCoatInventory(),
+        getMiscInventory(),
         getAllJobs(),
       ]);
 
@@ -80,6 +90,7 @@ export default function Inventory() {
       setChipInventory(chips);
       if (topCoat) setTopCoatInventory(topCoat);
       if (baseCoat) setBaseCoatInventory(baseCoat);
+      if (misc) setMiscInventory(misc);
 
       // Calculate commitments from jobs that are today or in the future
       calculateCommitments(jobs);
@@ -300,6 +311,10 @@ export default function Inventory() {
 
   const handleSaveBaseCoat = async () => {
     await saveBaseCoatInventory(baseCoatInventory);
+  };
+
+  const handleSaveMisc = async () => {
+    await saveMiscInventory(miscInventory);
   };
 
   const getAvailable = (onHand: number, committed: number) => onHand - committed;
@@ -598,6 +613,78 @@ export default function Inventory() {
                 <td className="py-3 px-2 text-right text-slate-500">{baseBTanCommitment.potential.toFixed(2)}</td>
                 <td className={`py-3 px-2 text-right ${getAvailablePotential(baseCoatInventory.baseBTan, baseBTanCommitment.potential) < 0 ? 'text-red-400' : 'text-slate-500'}`}>
                   {getAvailablePotential(baseCoatInventory.baseBTan, baseBTanCommitment.potential).toFixed(2)}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Miscellaneous Inventory */}
+      <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6 mt-6">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold text-slate-900">Miscellaneous Inventory</h2>
+          <button
+            onClick={handleSaveMisc}
+            className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
+          >
+            <Save size={16} />
+            Save
+          </button>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-200">
+                <th className="text-left py-3 px-2 font-semibold">Product</th>
+                <th className="text-right py-3 px-2 font-semibold">On Hand</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="border-b border-slate-100">
+                <td className="py-3 px-2 font-medium">Crack Repair</td>
+                <td className="py-3 px-2 text-right">
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={miscInventory.crackRepair}
+                    onChange={(e) =>
+                      setMiscInventory({ ...miscInventory, crackRepair: parseFloat(e.target.value) || 0 })
+                    }
+                    className="w-24 px-2 py-1 border border-slate-300 rounded text-right"
+                  />
+                  <span className="ml-2 text-slate-500">gal</span>
+                </td>
+              </tr>
+              <tr className="border-b border-slate-100">
+                <td className="py-3 px-2 font-medium">Silica Sand</td>
+                <td className="py-3 px-2 text-right">
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={miscInventory.silicaSand}
+                    onChange={(e) =>
+                      setMiscInventory({ ...miscInventory, silicaSand: parseFloat(e.target.value) || 0 })
+                    }
+                    className="w-24 px-2 py-1 border border-slate-300 rounded text-right"
+                  />
+                  <span className="ml-2 text-slate-500">buckets</span>
+                </td>
+              </tr>
+              <tr className="border-b border-slate-100">
+                <td className="py-3 px-2 font-medium">Shot</td>
+                <td className="py-3 px-2 text-right">
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={miscInventory.shot}
+                    onChange={(e) =>
+                      setMiscInventory({ ...miscInventory, shot: parseFloat(e.target.value) || 0 })
+                    }
+                    className="w-24 px-2 py-1 border border-slate-300 rounded text-right"
+                  />
+                  <span className="ml-2 text-slate-500">buckets</span>
                 </td>
               </tr>
             </tbody>

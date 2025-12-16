@@ -14,6 +14,7 @@ import {
   getAllChipInventory,
   getTopCoatInventory,
   getBaseCoatInventory,
+  getMiscInventory,
   addSystem,
   updateSystem,
   deleteSystem,
@@ -29,6 +30,7 @@ import {
   deleteChipInventory,
   saveTopCoatInventory,
   saveBaseCoatInventory,
+  saveMiscInventory,
 } from './db';
 
 // Export all data from the database
@@ -42,6 +44,7 @@ export async function exportAllData(): Promise<ExportData> {
     chipInventory,
     topCoatInventory,
     baseCoatInventory,
+    miscInventory,
   ] = await Promise.all([
     getAllSystems(),
     getCosts(),
@@ -51,6 +54,7 @@ export async function exportAllData(): Promise<ExportData> {
     getAllChipInventory(),
     getTopCoatInventory(),
     getBaseCoatInventory(),
+    getMiscInventory(),
   ]);
 
   const metadata: ExportMetadata = {
@@ -69,6 +73,7 @@ export async function exportAllData(): Promise<ExportData> {
     chipInventory,
     topCoatInventory,
     baseCoatInventory,
+    miscInventory,
   };
 }
 
@@ -258,6 +263,22 @@ function validateBaseCoatInventory(inventory: unknown): string[] {
   return errors;
 }
 
+function validateMiscInventory(inventory: unknown): string[] {
+  const errors: string[] = [];
+  if (!inventory || typeof inventory !== 'object') {
+    return ['Invalid misc inventory object'];
+  }
+  const i = inventory as Record<string, unknown>;
+
+  if (!isValidString(i.id)) errors.push('MiscInventory missing valid id');
+  if (!isValidNumber(i.crackRepair)) errors.push('MiscInventory missing valid crackRepair');
+  if (!isValidNumber(i.silicaSand)) errors.push('MiscInventory missing valid silicaSand');
+  if (!isValidNumber(i.shot)) errors.push('MiscInventory missing valid shot');
+  if (!isValidISODate(i.updatedAt)) errors.push('MiscInventory missing valid updatedAt');
+
+  return errors;
+}
+
 // Validate entire import data structure
 export function validateImportData(data: unknown): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
@@ -336,6 +357,11 @@ export function validateImportData(data: unknown): { valid: boolean; errors: str
     errs.forEach(e => errors.push(`BaseCoatInventory: ${e}`));
   }
 
+  if (d.miscInventory !== null && d.miscInventory !== undefined) {
+    const errs = validateMiscInventory(d.miscInventory);
+    errs.forEach(e => errors.push(`MiscInventory: ${e}`));
+  }
+
   return { valid: errors.length === 0, errors };
 }
 
@@ -364,6 +390,7 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
     localChipInventory,
     localTopCoatInventory,
     localBaseCoatInventory,
+    localMiscInventory,
   ] = await Promise.all([
     getAllSystems(),
     getCosts(),
@@ -373,6 +400,7 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
     getAllChipInventory(),
     getTopCoatInventory(),
     getBaseCoatInventory(),
+    getMiscInventory(),
   ]);
 
   // Create lookup maps
@@ -547,6 +575,26 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
     }
   }
 
+  // Compare misc inventory (singleton)
+  if (importData.miscInventory) {
+    if (!localMiscInventory) {
+      preview.toAdd.push({ entityType: 'MiscInventory', entityName: 'Miscellaneous Inventory' });
+    } else if (isNewer(importData.miscInventory.updatedAt, localMiscInventory.updatedAt)) {
+      preview.toUpdate.push({
+        entityType: 'MiscInventory',
+        entityName: 'Miscellaneous Inventory',
+        localUpdatedAt: localMiscInventory.updatedAt,
+        importUpdatedAt: importData.miscInventory.updatedAt,
+      });
+    } else {
+      preview.toSkip.push({
+        entityType: 'MiscInventory',
+        entityName: 'Miscellaneous Inventory',
+        reason: 'Local version is same or newer',
+      });
+    }
+  }
+
   // Find orphans to delete (if option enabled)
   if (deleteOrphans) {
     for (const local of localSystems) {
@@ -593,6 +641,7 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
     localChipInventory,
     localTopCoatInventory,
     localBaseCoatInventory,
+    localMiscInventory,
   ] = await Promise.all([
     getAllSystems(),
     getCosts(),
@@ -602,6 +651,7 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
     getAllChipInventory(),
     getTopCoatInventory(),
     getBaseCoatInventory(),
+    getMiscInventory(),
   ]);
 
   // Create lookup maps
@@ -720,6 +770,19 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
       log.push({ entityType: 'BaseCoatInventory', entityName: 'Base Coat Inventory', action: 'update', reason: 'Import is newer' });
     } else {
       log.push({ entityType: 'BaseCoatInventory', entityName: 'Base Coat Inventory', action: 'skip', reason: 'Local is same or newer' });
+    }
+  }
+
+  // Import misc inventory
+  if (importData.miscInventory) {
+    if (!localMiscInventory) {
+      await saveMiscInventory(importData.miscInventory);
+      log.push({ entityType: 'MiscInventory', entityName: 'Miscellaneous Inventory', action: 'add', reason: 'New record' });
+    } else if (isNewer(importData.miscInventory.updatedAt, localMiscInventory.updatedAt)) {
+      await saveMiscInventory(importData.miscInventory);
+      log.push({ entityType: 'MiscInventory', entityName: 'Miscellaneous Inventory', action: 'update', reason: 'Import is newer' });
+    } else {
+      log.push({ entityType: 'MiscInventory', entityName: 'Miscellaneous Inventory', action: 'skip', reason: 'Local is same or newer' });
     }
   }
 

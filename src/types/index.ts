@@ -113,6 +113,14 @@ export interface BaseCoatInventory {
   updatedAt: string;
 }
 
+export interface MiscInventory {
+  id: string;
+  crackRepair: number; // gallons
+  silicaSand: number; // buckets
+  shot: number; // buckets
+  updatedAt: string;
+}
+
 export interface JobCalculation {
   pricePerSqft: number;
   chipNeeded: number;
@@ -195,6 +203,7 @@ export interface ExportData {
   chipInventory: ChipInventory[];
   topCoatInventory: TopCoatInventory | null;
   baseCoatInventory: BaseCoatInventory | null;
+  miscInventory: MiscInventory | null;
 }
 
 export type MergeAction = 'add' | 'update' | 'skip' | 'delete';
