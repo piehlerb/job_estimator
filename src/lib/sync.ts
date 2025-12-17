@@ -16,13 +16,13 @@ import {
 import type { SyncResult } from '../types';
 import {
   openDB,
-  getAllSystems,
-  getAllPricingVariables,
+  getAllSystemsForSync,
+  getAllPricingVariablesForSync,
   getCosts,
-  getAllLaborers,
-  getAllChipBlends,
-  getAllJobs,
-  getAllChipInventory,
+  getAllLaborersForSync,
+  getAllChipBlendsForSync,
+  getAllJobsForSync,
+  getAllChipInventoryForSync,
   getTopCoatInventory,
   getBaseCoatInventory,
   getMiscInventory,
@@ -92,17 +92,18 @@ export async function pushToSupabase(): Promise<{
     }
 
     // Define tables to sync in order (respecting dependencies)
+    // Use ForSync versions to include deleted records
     const tablesToSync = [
-      { store: 'systems', getter: getAllSystems },
-      { store: 'pricingVariables', getter: getAllPricingVariables },
+      { store: 'systems', getter: getAllSystemsForSync },
+      { store: 'pricingVariables', getter: getAllPricingVariablesForSync },
       { store: 'costs', getter: async () => [await getCosts()].filter(Boolean) },
-      { store: 'laborers', getter: getAllLaborers },
-      { store: 'chipBlends', getter: getAllChipBlends },
-      { store: 'chipInventory', getter: getAllChipInventory },
+      { store: 'laborers', getter: getAllLaborersForSync },
+      { store: 'chipBlends', getter: getAllChipBlendsForSync },
+      { store: 'chipInventory', getter: getAllChipInventoryForSync },
       { store: 'topCoatInventory', getter: async () => [await getTopCoatInventory()].filter(Boolean) },
       { store: 'baseCoatInventory', getter: async () => [await getBaseCoatInventory()].filter(Boolean) },
       { store: 'miscInventory', getter: async () => [await getMiscInventory()].filter(Boolean) },
-      { store: 'jobs', getter: getAllJobs },
+      { store: 'jobs', getter: getAllJobsForSync },
     ];
 
     for (const { store, getter } of tablesToSync) {
@@ -121,6 +122,8 @@ export async function pushToSupabase(): Promise<{
             ...cleanRecord,
             user_id: user.id,
             synced_at: new Date().toISOString(),
+            // Preserve deleted flag if present
+            deleted: record.deleted || false,
           };
         });
 

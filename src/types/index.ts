@@ -12,6 +12,7 @@ export interface ChipSystem {
   cyclo1Spread: number;
   createdAt: string;
   updatedAt: string;
+  deleted?: boolean;
 }
 
 // Static costs that rarely change - stored separately so jobs use snapshot values
@@ -35,6 +36,7 @@ export interface Laborer {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  deleted?: boolean;
 }
 
 export interface PricingVariable {
@@ -43,6 +45,7 @@ export interface PricingVariable {
   value: number;
   createdAt: string;
   updatedAt: string;
+  deleted?: boolean;
 }
 
 export interface JobPhoto {
@@ -88,6 +91,7 @@ export interface Job {
   createdAt: string;
   updatedAt: string;
   synced: boolean;
+  deleted?: boolean;
 }
 
 // Inventory tracking
@@ -96,6 +100,7 @@ export interface ChipInventory {
   blend: string;
   pounds: number;
   updatedAt: string;
+  deleted?: boolean;
 }
 
 export interface TopCoatInventory {
@@ -159,6 +164,7 @@ export interface JobCalculation {
 export interface ChipBlend {
   id: string;
   name: string;
+  deleted?: boolean;
 }
 
 // Google Drive integration types
