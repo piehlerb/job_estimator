@@ -85,14 +85,28 @@ export async function getSession(): Promise<Session | null> {
  * Get the current authenticated user
  */
 export async function getCurrentUser(): Promise<User | null> {
-  const { data, error } = await supabase.auth.getUser();
+  try {
+    // First check if we have a valid session
+    const { data: sessionData } = await supabase.auth.getSession();
 
-  if (error) {
-    console.error('Get user error:', error);
+    if (!sessionData.session) {
+      // No session means not authenticated
+      return null;
+    }
+
+    // If we have a session, get the user
+    const { data, error } = await supabase.auth.getUser();
+
+    if (error) {
+      console.error('Get user error:', error);
+      return null;
+    }
+
+    return data.user;
+  } catch (error) {
+    console.error('Error in getCurrentUser:', error);
     return null;
   }
-
-  return data.user;
 }
 
 /**
