@@ -23,11 +23,20 @@ async function triggerBackgroundSync(): Promise<void> {
   try {
     // Dynamic import to avoid circular dependency
     const { syncWithSupabase } = await import('./sync');
+    const { getCurrentUser } = await import('./auth');
+
+    // Only sync if user is authenticated
+    const user = await getCurrentUser();
+    if (!user) {
+      return; // Silently skip if not authenticated
+    }
+
     // Run sync in background without blocking
     syncWithSupabase().catch(error => {
       console.warn('Background sync failed:', error);
     });
   } catch (error) {
+    // Silently fail - don't disrupt user operations
     console.warn('Failed to trigger background sync:', error);
   }
 }
