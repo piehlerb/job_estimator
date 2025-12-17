@@ -220,36 +220,49 @@ export async function pullFromSupabase(): Promise<{
           return objectToCamelCase(rest);
         });
 
-        // Store records in IndexedDB
-        const tx = db.transaction(storeName, 'readwrite');
-        const store = tx.objectStore(storeName);
-
+        // Store records in IndexedDB using proper Promise wrappers for native IndexedDB
         for (const record of recordsToStore) {
           try {
-            // Check if record exists locally
-            const existing = await store.get(record.id);
+            const result = await new Promise<{ wasConflict: boolean }>((resolve, reject) => {
+              const tx = db.transaction(storeName, 'readwrite');
+              const store = tx.objectStore(storeName);
+              const getRequest = store.get(record.id);
 
-            if (existing) {
-              // Conflict resolution: last-write-wins
-              const { winner, source } = resolveConflict(existing, record);
+              getRequest.onerror = () => reject(getRequest.error);
+              getRequest.onsuccess = () => {
+                const existing = getRequest.result;
 
-              if (source === 'remote') {
-                await store.put(winner);
-                conflicts++;
-              }
-              // If local wins, don't overwrite
-            } else {
-              // New record from remote
-              await store.put(record);
+                if (existing) {
+                  // Conflict resolution: last-write-wins
+                  const { winner, source } = resolveConflict(existing, record);
+
+                  if (source === 'remote') {
+                    const putRequest = store.put(winner);
+                    putRequest.onerror = () => reject(putRequest.error);
+                    putRequest.onsuccess = () => resolve({ wasConflict: true });
+                  } else {
+                    // If local wins, don't overwrite
+                    resolve({ wasConflict: false });
+                  }
+                } else {
+                  // New record from remote
+                  const putRequest = store.put(record);
+                  putRequest.onerror = () => reject(putRequest.error);
+                  putRequest.onsuccess = () => resolve({ wasConflict: false });
+                }
+              };
+
+              tx.onerror = () => reject(tx.error);
+            });
+
+            if (result.wasConflict) {
+              conflicts++;
             }
-
             recordsPulled++;
           } catch (error: any) {
             errors.push(`${storeName}[${record.id}]: ${error.message}`);
           }
         }
-
-        await tx.done;
       } catch (error: any) {
         errors.push(`${tableName}: ${error.message}`);
       }
