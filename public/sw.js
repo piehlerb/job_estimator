@@ -1,4 +1,4 @@
-const CACHE_NAME = 'estimation-app-v2'; // Increment version to force cache update
+const CACHE_NAME = 'estimation-app-v3'; // Increment version to force cache update
 const BASE_PATH = '/job_estimator';
 const urlsToCache = [
   `${BASE_PATH}/`,
@@ -61,11 +61,19 @@ self.addEventListener('fetch', (event) => {
     // For static assets, use cache-first strategy
     event.respondWith(
       caches.match(event.request).then((response) => {
-        return response || fetch(event.request).then((fetchResponse) => {
+        if (response) {
+          return response;
+        }
+
+        return fetch(event.request).then((fetchResponse) => {
+          // Clone the response before using it
+          const responseToCache = fetchResponse.clone();
+
           // Cache successful responses to static assets
           if (fetchResponse && fetchResponse.status === 200) {
-            const cache = caches.open(CACHE_NAME);
-            cache.then((c) => c.put(event.request, fetchResponse.clone()));
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseToCache);
+            });
           }
           return fetchResponse;
         });
