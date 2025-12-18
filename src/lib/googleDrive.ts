@@ -42,6 +42,7 @@ declare global {
 }
 
 let gisInited = false;
+let gapiInited = false;
 let tokenClient: any = null;
 
 /**
@@ -119,7 +120,9 @@ async function initializeGapiClient(): Promise<void> {
     config.apiKey = GOOGLE_API_KEY;
   }
 
+  console.log('[initializeGapiClient] Initializing with discovery docs');
   await window.gapi.client.init(config);
+  console.log('[initializeGapiClient] Initialized. Checking drive API:', !!window.gapi.client.drive);
 }
 
 /**
@@ -148,6 +151,12 @@ export async function initGoogleDrive(): Promise<void> {
     throw new Error('Google Client ID not configured. Please enter your Client ID in Settings → Google Drive.');
   }
 
+  // Skip if already initialized
+  if (gapiInited && window.gapi?.client) {
+    console.log('Google Drive API already initialized');
+    return;
+  }
+
   try {
     await Promise.all([loadGoogleAPI(), loadGoogleIdentity()]);
 
@@ -155,6 +164,7 @@ export async function initGoogleDrive(): Promise<void> {
     await new Promise<void>((resolve) => {
       window.gapi!.load('client', async () => {
         await initializeGapiClient();
+        gapiInited = true;
         resolve();
       });
     });
@@ -210,12 +220,28 @@ export async function requestGoogleAuth(forceConsent: boolean = false): Promise<
 /**
  * Set existing auth token
  */
-export function setAuthToken(auth: GoogleDriveAuth): void {
-  if (!window.gapi?.client) {
-    throw new Error('Google API client not initialized');
+export async function setAuthToken(auth: GoogleDriveAuth): Promise<void> {
+  // Wait for GAPI client AND Drive API to be ready
+  const maxAttempts = 30;
+  let attempts = 0;
+
+  while (attempts < maxAttempts) {
+    if (window.gapi?.client?.drive) {
+      console.log('[setAuthToken] Setting token, drive API is ready');
+      window.gapi.client.setToken({ access_token: auth.accessToken });
+      return;
+    }
+
+    if (attempts % 5 === 0) {
+      console.log('[setAuthToken] Waiting for Drive API... attempt', attempts, 'gapi:', !!window.gapi, 'client:', !!window.gapi?.client, 'drive:', !!window.gapi?.client?.drive);
+    }
+
+    // Wait 100ms before checking again
+    await new Promise(resolve => setTimeout(resolve, 100));
+    attempts++;
   }
 
-  window.gapi.client.setToken({ access_token: auth.accessToken });
+  throw new Error('Google API client not initialized after waiting');
 }
 
 /**

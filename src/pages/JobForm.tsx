@@ -198,7 +198,19 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
 
   // Photo handlers
   const handlePhotoCapture = (photo: JobPhoto) => {
-    setPhotos([...photos, photo]);
+    console.log('[JobForm] handlePhotoCapture called with photo:', photo.fileName);
+    setPhotos(prev => {
+      console.log('[JobForm] Adding photo to state, current count:', prev.length);
+      return [...prev, photo];
+    });
+  };
+
+  const handleMultiplePhotosCapture = (newPhotos: JobPhoto[]) => {
+    console.log('[JobForm] handleMultiplePhotosCapture called with', newPhotos.length, 'photos');
+    setPhotos(prev => {
+      console.log('[JobForm] Adding multiple photos to state, current count:', prev.length, 'adding:', newPhotos.length);
+      return [...prev, ...newPhotos];
+    });
   };
 
   const handleDeletePhoto = (photoId: string) => {
@@ -308,6 +320,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
         setChipBlends([...chipBlends, newBlend]);
       }
 
+      console.log('[JobForm] Saving job with', photos.length, 'photos');
       const job: Job = {
         id: jobId || generateId(),
         name: formData.name,
@@ -346,8 +359,12 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
       }
 
       // Upload photos if online and drive available
+      console.log('[JobForm] Job saved. Photos in job:', job.photos?.length || 0);
       if (photos.length > 0 && isOnline() && driveAvailable) {
+        console.log('[JobForm] Triggering photo upload for', photos.length, 'photos');
         await uploadPhotos(job);
+      } else {
+        console.log('[JobForm] Not uploading photos. Count:', photos.length, 'Online:', isOnline(), 'Drive available:', driveAvailable);
       }
 
       onBack();
@@ -884,6 +901,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
             <div className="space-y-4">
               <PhotoCapture
                 onPhotoCapture={handlePhotoCapture}
+                onMultiplePhotosCapture={handleMultiplePhotosCapture}
                 disabled={saving || uploadingPhotos}
               />
 

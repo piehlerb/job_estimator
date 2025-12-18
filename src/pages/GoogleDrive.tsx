@@ -55,7 +55,7 @@ export default function GoogleDrive() {
 
         // Set auth token if available and not expired
         if (auth && !isAuthExpired(auth)) {
-          setAuthToken(auth);
+          await setAuthToken(auth);
         }
       } catch (error) {
         console.error('Failed to initialize Google Drive:', error);

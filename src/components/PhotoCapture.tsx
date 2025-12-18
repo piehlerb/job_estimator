@@ -17,10 +17,11 @@ import {
 
 interface PhotoCaptureProps {
   onPhotoCapture: (photo: JobPhoto) => void;
+  onMultiplePhotosCapture?: (photos: JobPhoto[]) => void;
   disabled?: boolean;
 }
 
-export default function PhotoCapture({ onPhotoCapture, disabled }: PhotoCaptureProps) {
+export default function PhotoCapture({ onPhotoCapture, onMultiplePhotosCapture, disabled }: PhotoCaptureProps) {
   const [category, setCategory] = useState<'Estimate' | 'Before' | 'During' | 'After'>('Estimate');
   const [capturing, setCapturing] = useState(false);
 
@@ -44,9 +45,12 @@ export default function PhotoCapture({ onPhotoCapture, disabled }: PhotoCaptureP
         return;
       }
 
-      // Process each file
+      // Process each file and collect all photos
+      console.log(`[PhotoCapture] Processing ${files.length} file(s)`);
+      const processedPhotos: JobPhoto[] = [];
       for (const file of files) {
         try {
+          console.log(`[PhotoCapture] Processing file: ${file.name}`);
           // Convert to base64 for local storage (no compression)
           const base64 = await blobToBase64(file);
 
@@ -57,11 +61,27 @@ export default function PhotoCapture({ onPhotoCapture, disabled }: PhotoCaptureP
           // Create photo object
           const photo = createJobPhoto(category, fileName, base64);
 
-          // Return to parent
-          onPhotoCapture(photo);
+          processedPhotos.push(photo);
+          console.log(`[PhotoCapture] Processed photo: ${fileName}`);
         } catch (error) {
           console.error('Error processing file:', file.name, error);
           // Continue processing other files even if one fails
+        }
+      }
+
+      // Return all photos at once to avoid state update issues
+      console.log(`[PhotoCapture] Processed ${processedPhotos.length} photo(s), onMultiplePhotosCapture exists: ${!!onMultiplePhotosCapture}`);
+      if (processedPhotos.length > 0) {
+        if (onMultiplePhotosCapture && processedPhotos.length > 1) {
+          console.log('[PhotoCapture] Calling onMultiplePhotosCapture with', processedPhotos.length, 'photos');
+          onMultiplePhotosCapture(processedPhotos);
+        } else if (processedPhotos.length === 1) {
+          console.log('[PhotoCapture] Calling onPhotoCapture with single photo');
+          onPhotoCapture(processedPhotos[0]);
+        } else {
+          // Fallback: use single capture for multiple photos
+          console.log('[PhotoCapture] Fallback: calling onPhotoCapture for each photo');
+          processedPhotos.forEach(photo => onPhotoCapture(photo));
         }
       }
     } catch (error) {
