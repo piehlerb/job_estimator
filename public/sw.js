@@ -1,4 +1,4 @@
-const CACHE_NAME = 'estimation-app-v1';
+const CACHE_NAME = 'estimation-app-v2'; // Increment version to force cache update
 const BASE_PATH = '/job_estimator';
 const urlsToCache = [
   `${BASE_PATH}/`,
@@ -35,20 +35,40 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
+  // NEVER cache Supabase requests - always fetch fresh
+  if (url.hostname.includes('supabase.co') ||
+      url.pathname.includes('/auth/') ||
+      url.pathname.includes('/rest/')) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
+  // For API requests (non-Supabase), use network-first strategy
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(
       fetch(event.request)
         .then((response) => {
-          const cache = caches.open(CACHE_NAME);
-          cache.then((c) => c.put(event.request, response.clone()));
+          // Only cache successful responses
+          if (response && response.status === 200) {
+            const cache = caches.open(CACHE_NAME);
+            cache.then((c) => c.put(event.request, response.clone()));
+          }
           return response;
         })
         .catch(() => caches.match(event.request))
     );
   } else {
+    // For static assets, use cache-first strategy
     event.respondWith(
       caches.match(event.request).then((response) => {
-        return response || fetch(event.request);
+        return response || fetch(event.request).then((fetchResponse) => {
+          // Cache successful responses to static assets
+          if (fetchResponse && fetchResponse.status === 200) {
+            const cache = caches.open(CACHE_NAME);
+            cache.then((c) => c.put(event.request, fetchResponse.clone()));
+          }
+          return fetchResponse;
+        });
       })
     );
   }
