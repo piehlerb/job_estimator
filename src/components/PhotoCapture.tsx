@@ -142,7 +142,7 @@ export default function PhotoCapture({ onPhotoCapture, onMultiplePhotosCapture, 
       </div>
 
       <p className="text-xs text-slate-500">
-        Select multiple photos at once when uploading. Photos will be uploaded at full size to Google Drive when online.
+        Desktop: Select multiple photos at once. Mobile: Click "Upload Photos" repeatedly to add more photos.
       </p>
     </div>
   );
