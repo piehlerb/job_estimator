@@ -63,6 +63,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
     chipBlend: '',
     baseColor: '' as BaseColor | '',
     status: 'Pending' as JobStatus,
+    notes: '',
     includeBasecoatTint: false,
     includeTopcoatTint: false,
   });
@@ -107,6 +108,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
             chipBlend: job.chipBlend || '',
             baseColor: job.baseColor || '',
             status: job.status || 'Pending',
+            notes: job.notes || '',
             includeBasecoatTint: job.includeBasecoatTint || false,
             includeTopcoatTint: job.includeTopcoatTint || false,
           });
@@ -321,6 +323,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
         chipBlend: formData.chipBlend || undefined,
         baseColor: formData.baseColor || undefined,
         status: formData.status,
+        notes: formData.notes || undefined,
         includeBasecoatTint: formData.includeBasecoatTint,
         includeTopcoatTint: formData.includeTopcoatTint,
         // Photos and Google Drive
@@ -393,6 +396,17 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+
+            <div className="md:col-span-2 lg:col-span-3">
+              <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Notes</label>
+              <textarea
+                placeholder="Add any additional notes about this job..."
+                value={formData.notes}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                rows={3}
+                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y"
               />
             </div>
 

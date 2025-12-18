@@ -76,6 +76,7 @@ export interface Job {
   chipBlend?: string;
   baseColor?: BaseColor;
   status: JobStatus;
+  notes?: string;
   // Tint options
   includeBasecoatTint?: boolean;
   includeTopcoatTint?: boolean;

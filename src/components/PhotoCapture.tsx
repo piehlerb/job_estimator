@@ -9,7 +9,6 @@ import { JobPhoto } from '../types';
 import {
   captureFromCamera,
   selectMultipleFiles,
-  compressImage,
   blobToBase64,
   generatePhotoFileName,
   getFileExtension,
@@ -48,11 +47,8 @@ export default function PhotoCapture({ onPhotoCapture, disabled }: PhotoCaptureP
       // Process each file
       for (const file of files) {
         try {
-          // Compress the image
-          const compressedBlob = await compressImage(file);
-
-          // Convert to base64 for local storage
-          const base64 = await blobToBase64(compressedBlob);
+          // Convert to base64 for local storage (no compression)
+          const base64 = await blobToBase64(file);
 
           // Generate filename
           const extension = getFileExtension(file.name, file.type);
@@ -126,7 +122,7 @@ export default function PhotoCapture({ onPhotoCapture, disabled }: PhotoCaptureP
       </div>
 
       <p className="text-xs text-slate-500">
-        Select multiple photos at once when uploading. Photos will be compressed to max 2MB and uploaded to Google Drive when online.
+        Select multiple photos at once when uploading. Photos will be uploaded at full size to Google Drive when online.
       </p>
     </div>
   );
