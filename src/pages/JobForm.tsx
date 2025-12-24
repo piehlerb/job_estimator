@@ -66,6 +66,9 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
     notes: '',
     includeBasecoatTint: false,
     includeTopcoatTint: false,
+    antiSlip: false,
+    abrasionResistance: false,
+    cyclo1Topcoat: false,
   });
 
   useEffect(() => {
@@ -87,7 +90,8 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
       setActiveLaborers(laborers);
       setChipBlends(blends);
       if (storedCosts) {
-        setCosts(storedCosts);
+        // Merge with defaults to ensure new fields have values
+        setCosts({ ...getDefaultCosts(), ...storedCosts });
       }
 
       if (jobId) {
@@ -111,6 +115,9 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
             notes: job.notes || '',
             includeBasecoatTint: job.includeBasecoatTint || false,
             includeTopcoatTint: job.includeTopcoatTint || false,
+            antiSlip: job.antiSlip || false,
+            abrasionResistance: job.abrasionResistance || false,
+            cyclo1Topcoat: job.cyclo1Topcoat || false,
           });
           setChipBlendInput(job.chipBlend || '');
           // Set selected laborers from snapshot
@@ -155,7 +162,17 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
     }
 
     // Use snapshot costs if editing existing job, otherwise use current costs
-    const costsToUse = existingJob ? existingJob.costsSnapshot : costs;
+    // For existing jobs, use current costs for new fields (antiSlip, abrasionResistance)
+    // that don't exist in older snapshots
+    const costsToUse = existingJob
+      ? {
+          ...getDefaultCosts(),
+          ...existingJob.costsSnapshot,
+          // Override with current costs for new fields if snapshot doesn't have them
+          antiSlipCostPerGal: existingJob.costsSnapshot.antiSlipCostPerGal ?? costs.antiSlipCostPerGal,
+          abrasionResistanceCostPerGal: existingJob.costsSnapshot.abrasionResistanceCostPerGal ?? costs.abrasionResistanceCostPerGal,
+        }
+      : costs;
     const systemToUse = existingJob ? existingJob.systemSnapshot : selectedSystem;
     const laborersToUse = getSelectedLaborers();
 
@@ -170,6 +187,9 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
       totalPrice: parseFloat(formData.totalPrice) || 0,
       includeBasecoatTint: formData.includeBasecoatTint,
       includeTopcoatTint: formData.includeTopcoatTint,
+      antiSlip: formData.antiSlip,
+      abrasionResistance: formData.abrasionResistance,
+      cyclo1Topcoat: formData.cyclo1Topcoat,
     };
 
     const calc = calculateJobOutputs(inputs, systemToUse, costsToUse, laborersToUse);
@@ -339,6 +359,9 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
         notes: formData.notes || undefined,
         includeBasecoatTint: formData.includeBasecoatTint,
         includeTopcoatTint: formData.includeTopcoatTint,
+        antiSlip: formData.antiSlip,
+        abrasionResistance: formData.abrasionResistance,
+        cyclo1Topcoat: formData.cyclo1Topcoat,
         // Photos and Google Drive
         googleDriveFolderId: existingJob?.googleDriveFolderId,
         photos: photos.length > 0 ? photos : undefined,
@@ -654,6 +677,84 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                 </label>
               </div>
             </div>
+
+            <div>
+              <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Anti-Slip</label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="antiSlip"
+                    checked={!formData.antiSlip}
+                    onChange={() => setFormData({ ...formData, antiSlip: false })}
+                    className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                  />
+                  <span className="text-xs sm:text-sm text-slate-700">No</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="antiSlip"
+                    checked={formData.antiSlip}
+                    onChange={() => setFormData({ ...formData, antiSlip: true })}
+                    className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                  />
+                  <span className="text-xs sm:text-sm text-slate-700">Yes</span>
+                </label>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Abrasion Resistance</label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="abrasionResistance"
+                    checked={!formData.abrasionResistance}
+                    onChange={() => setFormData({ ...formData, abrasionResistance: false })}
+                    className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                  />
+                  <span className="text-xs sm:text-sm text-slate-700">No</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="abrasionResistance"
+                    checked={formData.abrasionResistance}
+                    onChange={() => setFormData({ ...formData, abrasionResistance: true })}
+                    className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                  />
+                  <span className="text-xs sm:text-sm text-slate-700">Yes</span>
+                </label>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Cyclo1 Topcoat</label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="cyclo1Topcoat"
+                    checked={!formData.cyclo1Topcoat}
+                    onChange={() => setFormData({ ...formData, cyclo1Topcoat: false })}
+                    className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                  />
+                  <span className="text-xs sm:text-sm text-slate-700">No</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="cyclo1Topcoat"
+                    checked={formData.cyclo1Topcoat}
+                    onChange={() => setFormData({ ...formData, cyclo1Topcoat: true })}
+                    className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                  />
+                  <span className="text-xs sm:text-sm text-slate-700">Yes</span>
+                </label>
+              </div>
+            </div>
           </div>
 
           {/* Laborer Selection */}
@@ -760,6 +861,14 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                   <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
                     <p className="text-xs text-slate-500">Tint Cost</p>
                     <p className="text-sm sm:text-base md:text-lg font-semibold">{formatCurrency(calculation.tintCost)}</p>
+                  </div>
+                  <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
+                    <p className="text-xs text-slate-500">Anti-Slip Cost</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold">{formatCurrency(calculation.antiSlipCost)}</p>
+                  </div>
+                  <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
+                    <p className="text-xs text-slate-500">Abrasion Resistance Cost</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold">{formatCurrency(calculation.abrasionResistanceCost)}</p>
                   </div>
                 </div>
               </div>

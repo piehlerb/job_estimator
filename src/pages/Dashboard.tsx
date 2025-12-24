@@ -1,6 +1,6 @@
 import { Plus, Trash2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { getAllJobs, deleteJob } from '../lib/db';
+import { getAllJobs, deleteJob, getDefaultCosts } from '../lib/db';
 import { Job, JobCalculation } from '../types';
 import { calculateJobOutputs } from '../lib/calculations';
 
@@ -29,6 +29,8 @@ export default function Dashboard({ onNewJob, onEditJob }: DashboardProps) {
       const allJobs = await getAllJobs();
       // Calculate values for each job using their snapshots
       const withCalc = allJobs.map((job) => {
+        // Merge costs snapshot with defaults to ensure new fields have values
+        const mergedCosts = { ...getDefaultCosts(), ...job.costsSnapshot };
         const calc = calculateJobOutputs(
           {
             floorFootage: job.floorFootage,
@@ -41,9 +43,12 @@ export default function Dashboard({ onNewJob, onEditJob }: DashboardProps) {
             totalPrice: job.totalPrice,
             includeBasecoatTint: job.includeBasecoatTint || false,
             includeTopcoatTint: job.includeTopcoatTint || false,
+            antiSlip: job.antiSlip || false,
+            abrasionResistance: job.abrasionResistance || false,
+            cyclo1Topcoat: job.cyclo1Topcoat || false,
           },
           job.systemSnapshot,
-          job.costsSnapshot,
+          mergedCosts,
           job.laborersSnapshot
         );
         return { job, calc };

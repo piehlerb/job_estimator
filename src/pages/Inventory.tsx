@@ -13,6 +13,7 @@ import {
   getMiscInventory,
   saveMiscInventory,
   saveBaseCoatInventory,
+  getDefaultCosts,
   ChipBlend,
 } from '../lib/db';
 import { Job, ChipInventory, TopCoatInventory, BaseCoatInventory, MiscInventory } from '../types';
@@ -125,6 +126,8 @@ export default function Inventory() {
       jobList.forEach((job) => {
         if (!job.chipBlend) return;
 
+        // Merge costs snapshot with defaults to ensure new fields have values
+        const mergedCosts = { ...getDefaultCosts(), ...job.costsSnapshot };
         // Calculate chip needed in pounds (chipNeeded is boxes, 40 lbs per box)
         const calc = calculateJobOutputs(
           {
@@ -138,9 +141,12 @@ export default function Inventory() {
             totalPrice: job.totalPrice,
             includeBasecoatTint: job.includeBasecoatTint || false,
             includeTopcoatTint: job.includeTopcoatTint || false,
+            antiSlip: job.antiSlip || false,
+            abrasionResistance: job.abrasionResistance || false,
+            cyclo1Topcoat: job.cyclo1Topcoat || false,
           },
           job.systemSnapshot,
-          job.costsSnapshot,
+          mergedCosts,
           job.laborersSnapshot
         );
 
@@ -170,6 +176,7 @@ export default function Inventory() {
 
     const calculateTopForJobs = (jobList: Job[]) => {
       return jobList.reduce((sum, job) => {
+        const mergedCosts = { ...getDefaultCosts(), ...job.costsSnapshot };
         const calc = calculateJobOutputs(
           {
             floorFootage: job.floorFootage,
@@ -182,9 +189,12 @@ export default function Inventory() {
             totalPrice: job.totalPrice,
             includeBasecoatTint: job.includeBasecoatTint || false,
             includeTopcoatTint: job.includeTopcoatTint || false,
+            antiSlip: job.antiSlip || false,
+            abrasionResistance: job.abrasionResistance || false,
+            cyclo1Topcoat: job.cyclo1Topcoat || false,
           },
           job.systemSnapshot,
-          job.costsSnapshot,
+          mergedCosts,
           job.laborersSnapshot
         );
         return sum + calc.topGallons;
@@ -208,6 +218,7 @@ export default function Inventory() {
       return jobList
         .filter((job) => job.baseColor === color)
         .reduce((sum, job) => {
+          const mergedCosts = { ...getDefaultCosts(), ...job.costsSnapshot };
           const calc = calculateJobOutputs(
             {
               floorFootage: job.floorFootage,
@@ -220,9 +231,12 @@ export default function Inventory() {
               totalPrice: job.totalPrice,
               includeBasecoatTint: job.includeBasecoatTint || false,
               includeTopcoatTint: job.includeTopcoatTint || false,
+              antiSlip: job.antiSlip || false,
+              abrasionResistance: job.abrasionResistance || false,
+              cyclo1Topcoat: job.cyclo1Topcoat || false,
             },
             job.systemSnapshot,
-            job.costsSnapshot,
+            mergedCosts,
             job.laborersSnapshot
           );
           return sum + calc.baseGallons;

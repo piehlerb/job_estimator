@@ -408,6 +408,8 @@ export function getDefaultCosts(): Costs {
     consumablesCost: 0,
     cyclo1CostPerGal: 0,
     tintCostPerQuart: 0,
+    antiSlipCostPerGal: 0,
+    abrasionResistanceCostPerGal: 0,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };

@@ -11,6 +11,9 @@ interface JobInputs {
   totalPrice: number;
   includeBasecoatTint: boolean;
   includeTopcoatTint: boolean;
+  antiSlip: boolean;
+  abrasionResistance: boolean;
+  cyclo1Topcoat: boolean;
 }
 
 export function calculateJobOutputs(
@@ -30,6 +33,9 @@ export function calculateJobOutputs(
     totalPrice,
     includeBasecoatTint,
     includeTopcoatTint,
+    antiSlip,
+    abrasionResistance,
+    cyclo1Topcoat,
   } = inputs;
 
   const {
@@ -48,6 +54,8 @@ export function calculateJobOutputs(
     consumablesCost,
     cyclo1CostPerGal,
     tintCostPerQuart,
+    antiSlipCostPerGal = 0,
+    abrasionResistanceCostPerGal = 0,
   } = costs;
 
   // Price per sqft
@@ -84,11 +92,17 @@ export function calculateJobOutputs(
   // Crack fill cost
   const crackFillCost = crackFillGallons * crackFillCostPerGal;
 
-  // Cyclo1 needed: floorFootage / cyclo1Spread
-  const cyclo1Needed = cyclo1Spread > 0 ? floorFootage / cyclo1Spread : 0;
+  // Cyclo1 needed: floorFootage / cyclo1Spread (only if cyclo1Topcoat is enabled)
+  const cyclo1Needed = cyclo1Topcoat && cyclo1Spread > 0 ? floorFootage / cyclo1Spread : 0;
 
   // Cyclo1 cost: cyclo1Needed * cyclo1CostPerGal (only calculate if cyclo1 is needed)
   const cyclo1Cost = cyclo1Needed > 0 ? cyclo1Needed * cyclo1CostPerGal : 0;
+
+  // Anti-slip cost: based on topcoat gallons (if anti-slip is enabled)
+  const antiSlipCost = antiSlip ? topGallons * antiSlipCostPerGal : 0;
+
+  // Abrasion resistance cost: based on cyclo1 gallons (if abrasion resistance is enabled)
+  const abrasionResistanceCost = abrasionResistance ? cyclo1Needed * abrasionResistanceCostPerGal : 0;
 
   // Tint needed: calculate based on which coats include tint
   // Formula: (topGallons * 128 * 0.1) if includeTopcoatTint + (baseGallons * 128 * 0.1) if includeBasecoatTint
@@ -121,7 +135,8 @@ export function calculateJobOutputs(
 
   // Total costs
   const totalCosts = chipCost + baseCost + topCost + consumablesCost + crackFillCost
-    + cyclo1Cost + tintCost + gasHeaterCost + gasTravelCost + gasGeneratorCost + royaltyCost + laborCost;
+    + cyclo1Cost + tintCost + antiSlipCost + abrasionResistanceCost
+    + gasHeaterCost + gasTravelCost + gasGeneratorCost + royaltyCost + laborCost;
 
   // Total costs per sqft
   const totalCostsPerSqft = floorFootage > 0 ? totalCosts / floorFootage : 0;
@@ -173,6 +188,8 @@ export function calculateJobOutputs(
     cyclo1Cost,
     tintNeeded,
     tintCost,
+    antiSlipCost,
+    abrasionResistanceCost,
     gasGeneratorCost,
     gasHeaterCost,
     gasTravelCost,

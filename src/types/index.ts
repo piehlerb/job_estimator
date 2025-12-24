@@ -25,6 +25,8 @@ export interface Costs {
   consumablesCost: number;
   cyclo1CostPerGal: number;
   tintCostPerQuart: number;
+  antiSlipCostPerGal: number;
+  abrasionResistanceCostPerGal: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -80,6 +82,10 @@ export interface Job {
   // Tint options
   includeBasecoatTint?: boolean;
   includeTopcoatTint?: boolean;
+  // Additive options
+  antiSlip?: boolean;
+  abrasionResistance?: boolean;
+  cyclo1Topcoat?: boolean;
   // Google Drive integration
   googleDriveFolderId?: string;
   photos?: JobPhoto[];
@@ -141,6 +147,8 @@ export interface JobCalculation {
   cyclo1Cost: number;
   tintNeeded: number;
   tintCost: number;
+  antiSlipCost: number;
+  abrasionResistanceCost: number;
   gasGeneratorCost: number;
   gasHeaterCost: number;
   gasTravelCost: number;

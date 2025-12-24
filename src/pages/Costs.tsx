@@ -19,6 +19,8 @@ export default function Costs() {
     consumablesCost: '',
     cyclo1CostPerGal: '',
     tintCostPerQuart: '',
+    antiSlipCostPerGal: '',
+    abrasionResistanceCostPerGal: '',
   });
 
   useEffect(() => {
@@ -30,7 +32,12 @@ export default function Costs() {
     const storedCosts = await getCosts();
 
     if (storedCosts) {
-      setCosts(storedCosts);
+      // Merge with defaults to ensure new fields have values
+      const mergedCosts = {
+        ...getDefaultCosts(),
+        ...storedCosts,
+      };
+      setCosts(mergedCosts);
       setCostsForm({
         baseCostPerGal: storedCosts.baseCostPerGal.toString(),
         topCostPerGal: storedCosts.topCostPerGal.toString(),
@@ -39,6 +46,8 @@ export default function Costs() {
         consumablesCost: storedCosts.consumablesCost.toString(),
         cyclo1CostPerGal: (storedCosts.cyclo1CostPerGal || 0).toString(),
         tintCostPerQuart: (storedCosts.tintCostPerQuart || 0).toString(),
+        antiSlipCostPerGal: (storedCosts.antiSlipCostPerGal || 0).toString(),
+        abrasionResistanceCostPerGal: (storedCosts.abrasionResistanceCostPerGal || 0).toString(),
       });
     }
 
@@ -59,6 +68,8 @@ export default function Costs() {
         consumablesCost: parseFloat(costsForm.consumablesCost) || 0,
         cyclo1CostPerGal: parseFloat(costsForm.cyclo1CostPerGal) || 0,
         tintCostPerQuart: parseFloat(costsForm.tintCostPerQuart) || 0,
+        antiSlipCostPerGal: parseFloat(costsForm.antiSlipCostPerGal) || 0,
+        abrasionResistanceCostPerGal: parseFloat(costsForm.abrasionResistanceCostPerGal) || 0,
         updatedAt: new Date().toISOString(),
       };
 
@@ -165,6 +176,30 @@ export default function Costs() {
                 placeholder="0.00"
                 value={costsForm.tintCostPerQuart}
                 onChange={(e) => setCostsForm({ ...costsForm, tintCostPerQuart: e.target.value })}
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-900 mb-2">Anti-Slip Cost per Gallon ($)</label>
+              <input
+                type="number"
+                step="0.01"
+                placeholder="0.00"
+                value={costsForm.antiSlipCostPerGal}
+                onChange={(e) => setCostsForm({ ...costsForm, antiSlipCostPerGal: e.target.value })}
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-semibold text-slate-900 mb-2">Abrasion Resistance Cost per Gallon ($)</label>
+              <input
+                type="number"
+                step="0.01"
+                placeholder="0.00"
+                value={costsForm.abrasionResistanceCostPerGal}
+                onChange={(e) => setCostsForm({ ...costsForm, abrasionResistanceCostPerGal: e.target.value })}
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
