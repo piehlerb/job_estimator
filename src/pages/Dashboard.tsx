@@ -58,6 +58,7 @@ export default function Dashboard({ onNewJob, onEditJob }: DashboardProps) {
             antiSlip: job.antiSlip || false,
             abrasionResistance: job.abrasionResistance || false,
             cyclo1Topcoat: job.cyclo1Topcoat || false,
+            cyclo1Coats: job.cyclo1Coats || 1,
           },
           job.systemSnapshot,
           mergedCosts,

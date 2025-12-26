@@ -86,6 +86,7 @@ export interface Job {
   antiSlip?: boolean;
   abrasionResistance?: boolean;
   cyclo1Topcoat?: boolean;
+  cyclo1Coats?: number; // 1 or 2 coats (only used if cyclo1Topcoat is true)
   // Google Drive integration
   googleDriveFolderId?: string;
   photos?: JobPhoto[];

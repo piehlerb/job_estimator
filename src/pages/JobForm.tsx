@@ -69,6 +69,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
     antiSlip: false,
     abrasionResistance: false,
     cyclo1Topcoat: false,
+    cyclo1Coats: '1',
   });
 
   useEffect(() => {
@@ -118,6 +119,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
             antiSlip: job.antiSlip || false,
             abrasionResistance: job.abrasionResistance || false,
             cyclo1Topcoat: job.cyclo1Topcoat || false,
+            cyclo1Coats: (job.cyclo1Coats || 1).toString(),
           });
           setChipBlendInput(job.chipBlend || '');
           // Set selected laborers from snapshot
@@ -190,6 +192,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
       antiSlip: formData.antiSlip,
       abrasionResistance: formData.abrasionResistance,
       cyclo1Topcoat: formData.cyclo1Topcoat,
+      cyclo1Coats: parseInt(formData.cyclo1Coats) || 1,
     };
 
     const calc = calculateJobOutputs(inputs, systemToUse, costsToUse, laborersToUse);
@@ -362,6 +365,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
         antiSlip: formData.antiSlip,
         abrasionResistance: formData.abrasionResistance,
         cyclo1Topcoat: formData.cyclo1Topcoat,
+        cyclo1Coats: parseInt(formData.cyclo1Coats) || 1,
         // Photos and Google Drive
         googleDriveFolderId: existingJob?.googleDriveFolderId,
         photos: photos.length > 0 ? photos : undefined,
@@ -755,6 +759,34 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                 </label>
               </div>
             </div>
+
+            {formData.cyclo1Topcoat && (
+              <div>
+                <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Cyclo1 Coats</label>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="cyclo1Coats"
+                      checked={formData.cyclo1Coats === '1'}
+                      onChange={() => setFormData({ ...formData, cyclo1Coats: '1' })}
+                      className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                    />
+                    <span className="text-xs sm:text-sm text-slate-700">1 Coat</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="cyclo1Coats"
+                      checked={formData.cyclo1Coats === '2'}
+                      onChange={() => setFormData({ ...formData, cyclo1Coats: '2' })}
+                      className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                    />
+                    <span className="text-xs sm:text-sm text-slate-700">2 Coats</span>
+                  </label>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Laborer Selection */}

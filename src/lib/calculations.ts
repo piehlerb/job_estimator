@@ -14,6 +14,7 @@ interface JobInputs {
   antiSlip: boolean;
   abrasionResistance: boolean;
   cyclo1Topcoat: boolean;
+  cyclo1Coats: number;
 }
 
 export function calculateJobOutputs(
@@ -36,6 +37,7 @@ export function calculateJobOutputs(
     antiSlip,
     abrasionResistance,
     cyclo1Topcoat,
+    cyclo1Coats,
   } = inputs;
 
   const {
@@ -92,8 +94,9 @@ export function calculateJobOutputs(
   // Crack fill cost
   const crackFillCost = crackFillGallons * crackFillCostPerGal;
 
-  // Cyclo1 needed: floorFootage / cyclo1Spread (only if cyclo1Topcoat is enabled)
-  const cyclo1Needed = cyclo1Topcoat && cyclo1Spread > 0 ? floorFootage / cyclo1Spread : 0;
+  // Cyclo1 needed: floorFootage / cyclo1Spread * cyclo1Coats (only if cyclo1Topcoat is enabled)
+  const coats = cyclo1Coats || 1; // Default to 1 coat if not specified
+  const cyclo1Needed = cyclo1Topcoat && cyclo1Spread > 0 ? (floorFootage / cyclo1Spread) * coats : 0;
 
   // Cyclo1 cost: cyclo1Needed * cyclo1CostPerGal (only calculate if cyclo1 is needed)
   const cyclo1Cost = cyclo1Needed > 0 ? cyclo1Needed * cyclo1CostPerGal : 0;
