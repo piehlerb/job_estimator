@@ -1,7 +1,7 @@
 import { Plus, Trash2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { getAllJobs, deleteJob, getDefaultCosts } from '../lib/db';
-import { Job, JobCalculation } from '../types';
+import { getAllJobs, deleteJob, getDefaultCosts, getCosts } from '../lib/db';
+import { Job, JobCalculation, Costs } from '../types';
 import { calculateJobOutputs } from '../lib/calculations';
 
 interface DashboardProps {
@@ -26,11 +26,23 @@ export default function Dashboard({ onNewJob, onEditJob }: DashboardProps) {
   const loadJobs = async () => {
     setLoading(true);
     try {
-      const allJobs = await getAllJobs();
+      const [allJobs, currentCosts] = await Promise.all([
+        getAllJobs(),
+        getCosts(),
+      ]);
+      const costs = currentCosts || getDefaultCosts();
+
       // Calculate values for each job using their snapshots
       const withCalc = allJobs.map((job) => {
-        // Merge costs snapshot with defaults to ensure new fields have values
-        const mergedCosts = { ...getDefaultCosts(), ...job.costsSnapshot };
+        // Merge costs snapshot with defaults, then use current costs for new fields
+        // that may not exist in older snapshots
+        const mergedCosts: Costs = {
+          ...getDefaultCosts(),
+          ...job.costsSnapshot,
+          // Use current costs for new additive fields if snapshot doesn't have them
+          antiSlipCostPerGal: job.costsSnapshot.antiSlipCostPerGal ?? costs.antiSlipCostPerGal,
+          abrasionResistanceCostPerGal: job.costsSnapshot.abrasionResistanceCostPerGal ?? costs.abrasionResistanceCostPerGal,
+        };
         const calc = calculateJobOutputs(
           {
             floorFootage: job.floorFootage,

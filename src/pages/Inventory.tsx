@@ -14,9 +14,10 @@ import {
   saveMiscInventory,
   saveBaseCoatInventory,
   getDefaultCosts,
+  getCosts,
   ChipBlend,
 } from '../lib/db';
-import { Job, ChipInventory, TopCoatInventory, BaseCoatInventory, MiscInventory } from '../types';
+import { Job, ChipInventory, TopCoatInventory, BaseCoatInventory, MiscInventory, Costs } from '../types';
 import { calculateJobOutputs } from '../lib/calculations';
 
 function generateId(): string {
@@ -78,13 +79,14 @@ export default function Inventory() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [blends, chips, topCoat, baseCoat, misc, jobs] = await Promise.all([
+      const [blends, chips, topCoat, baseCoat, misc, jobs, currentCosts] = await Promise.all([
         getAllChipBlends(),
         getAllChipInventory(),
         getTopCoatInventory(),
         getBaseCoatInventory(),
         getMiscInventory(),
         getAllJobs(),
+        getCosts(),
       ]);
 
       setChipBlends(blends);
@@ -94,7 +96,8 @@ export default function Inventory() {
       if (misc) setMiscInventory(misc);
 
       // Calculate commitments from jobs that are today or in the future
-      calculateCommitments(jobs);
+      const costs = currentCosts || getDefaultCosts();
+      calculateCommitments(jobs, costs);
     } catch (error) {
       console.error('Error loading inventory:', error);
     } finally {
@@ -102,9 +105,18 @@ export default function Inventory() {
     }
   };
 
-  const calculateCommitments = (jobs: Job[]) => {
+  const calculateCommitments = (jobs: Job[], currentCosts: Costs) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+
+    // Helper to merge job costs snapshot with current costs for new fields
+    const getMergedCosts = (job: Job): Costs => ({
+      ...getDefaultCosts(),
+      ...job.costsSnapshot,
+      // Use current costs for new additive fields if snapshot doesn't have them
+      antiSlipCostPerGal: job.costsSnapshot.antiSlipCostPerGal ?? currentCosts.antiSlipCostPerGal,
+      abrasionResistanceCostPerGal: job.costsSnapshot.abrasionResistanceCostPerGal ?? currentCosts.abrasionResistanceCostPerGal,
+    });
 
     // Filter jobs that are today or in the future
     const relevantJobs = jobs.filter((job) => {
@@ -126,8 +138,7 @@ export default function Inventory() {
       jobList.forEach((job) => {
         if (!job.chipBlend) return;
 
-        // Merge costs snapshot with defaults to ensure new fields have values
-        const mergedCosts = { ...getDefaultCosts(), ...job.costsSnapshot };
+        const mergedCosts = getMergedCosts(job);
         // Calculate chip needed in pounds (chipNeeded is boxes, 40 lbs per box)
         const calc = calculateJobOutputs(
           {
@@ -176,7 +187,7 @@ export default function Inventory() {
 
     const calculateTopForJobs = (jobList: Job[]) => {
       return jobList.reduce((sum, job) => {
-        const mergedCosts = { ...getDefaultCosts(), ...job.costsSnapshot };
+        const mergedCosts = getMergedCosts(job);
         const calc = calculateJobOutputs(
           {
             floorFootage: job.floorFootage,
@@ -218,7 +229,7 @@ export default function Inventory() {
       return jobList
         .filter((job) => job.baseColor === color)
         .reduce((sum, job) => {
-          const mergedCosts = { ...getDefaultCosts(), ...job.costsSnapshot };
+          const mergedCosts = getMergedCosts(job);
           const calc = calculateJobOutputs(
             {
               floorFootage: job.floorFootage,
