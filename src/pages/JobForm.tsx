@@ -11,8 +11,9 @@ import {
   getAllChipBlends,
   addChipBlend,
   ChipBlend,
+  getAllChipInventory,
 } from '../lib/db';
-import { BaseColor, ChipSystem, Costs, Job, JobCalculation, JobStatus, Laborer, JobPhoto, InstallDaySchedule } from '../types';
+import { BaseColor, ChipSystem, Costs, Job, JobCalculation, JobStatus, Laborer, JobPhoto, InstallDaySchedule, ChipInventory } from '../types';
 import { calculateJobOutputs } from '../lib/calculations';
 import PhotoCapture from '../components/PhotoCapture';
 import PhotoGallery from '../components/PhotoGallery';
@@ -44,6 +45,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
   const [chipBlends, setChipBlends] = useState<ChipBlend[]>([]);
   const [chipBlendInput, setChipBlendInput] = useState('');
   const [showBlendDropdown, setShowBlendDropdown] = useState(false);
+  const [chipInventory, setChipInventory] = useState<ChipInventory[]>([]);
 
   // Photo state
   const [photos, setPhotos] = useState<JobPhoto[]>([]);
@@ -89,9 +91,11 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
       const storedCosts = await getCosts();
       const laborers = await getActiveLaborers();
       const blends = await getAllChipBlends();
+      const inventory = await getAllChipInventory();
       setSystems(allSystems);
       setActiveLaborers(laborers);
       setChipBlends(blends);
+      setChipInventory(inventory);
       if (storedCosts) {
         // Merge with defaults to ensure new fields have values
         setCosts({ ...getDefaultCosts(), ...storedCosts });
@@ -410,6 +414,60 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
       style: 'currency',
       currency: 'USD',
     }).format(value);
+  };
+
+  // Calculate inventory status for chip blend
+  const getInventoryStatus = () => {
+    if (!formData.chipBlend || !calculation) {
+      return null;
+    }
+
+    // Find matching inventory by blend name (case-insensitive)
+    const inventoryItem = chipInventory.find(
+      (inv) => inv.blend.toLowerCase() === formData.chipBlend.toLowerCase()
+    );
+
+    if (!inventoryItem || inventoryItem.pounds <= 0) {
+      return {
+        hasInventory: false,
+        message: "We don't have this chip blend in inventory",
+      };
+    }
+
+    // Calculate how many boxes we have (40 lbs per box)
+    const boxesInInventory = Math.floor(inventoryItem.pounds / 40);
+    const boxesNeeded = calculation.chipNeeded;
+
+    if (boxesInInventory >= boxesNeeded) {
+      // We have enough in inventory
+      const selectedSystem = systems.find((s) => s.id === formData.system);
+      const boxCost = selectedSystem?.boxCost || 0;
+      const savings = boxesNeeded * boxCost;
+
+      return {
+        hasInventory: true,
+        boxesInInventory,
+        boxesNeeded,
+        savings,
+        message: `We have this chip in inventory: You only need ${boxesNeeded} box${boxesNeeded !== 1 ? 'es' : ''}, saving ${formatCurrency(savings)}`,
+      };
+    } else {
+      // We have some inventory but not enough
+      const selectedSystem = systems.find((s) => s.id === formData.system);
+      const boxCost = selectedSystem?.boxCost || 0;
+      const boxesToBuy = boxesNeeded - boxesInInventory;
+      const savings = boxesInInventory * boxCost;
+
+      return {
+        hasInventory: true,
+        partial: true,
+        boxesInInventory,
+        boxesNeeded,
+        boxesToBuy,
+        savings,
+        message: `We have ${boxesInInventory} box${boxesInInventory !== 1 ? 'es' : ''} in inventory. You need to buy ${boxesToBuy} more box${boxesToBuy !== 1 ? 'es' : ''}, saving ${formatCurrency(savings)}`,
+      };
+    }
   };
 
   if (loading) {
@@ -806,6 +864,33 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
               {/* Material Costs */}
               <div className="mb-4 sm:mb-6">
                 <h4 className="text-xs sm:text-sm font-semibold text-slate-700 mb-2 sm:mb-3 uppercase tracking-wide">Material Costs</h4>
+
+                {/* Inventory Status */}
+                {(() => {
+                  const inventoryStatus = getInventoryStatus();
+                  if (!inventoryStatus) return null;
+
+                  return (
+                    <div className={`mb-3 sm:mb-4 p-3 sm:p-4 rounded-lg border-2 ${
+                      inventoryStatus.hasInventory
+                        ? inventoryStatus.partial
+                          ? 'bg-yellow-50 border-yellow-400'
+                          : 'bg-green-50 border-green-400'
+                        : 'bg-slate-50 border-slate-300'
+                    }`}>
+                      <p className={`text-sm sm:text-base font-semibold ${
+                        inventoryStatus.hasInventory
+                          ? inventoryStatus.partial
+                            ? 'text-yellow-800'
+                            : 'text-green-800'
+                          : 'text-slate-700'
+                      }`}>
+                        {inventoryStatus.message}
+                      </p>
+                    </div>
+                  );
+                })()}
+
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 md:gap-4">
                   <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
                     <p className="text-xs text-slate-500">Chip Needed</p>

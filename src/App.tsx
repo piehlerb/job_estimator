@@ -5,7 +5,6 @@ import JobForm from './pages/JobForm';
 import ChipSystems from './pages/ChipSystems';
 import Laborers from './pages/Laborers';
 import Costs from './pages/Costs';
-import Backup from './pages/Backup';
 import GoogleDrive from './pages/GoogleDrive';
 import Inventory from './pages/Inventory';
 import Calendar from './pages/Calendar';
@@ -14,7 +13,7 @@ import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { useAuth } from './contexts/AuthContext';
 import { useAutoSync } from './hooks/useAutoSync';
 
-type Page = 'dashboard' | 'new-job' | 'edit-job' | 'chip-systems' | 'laborers' | 'costs' | 'backup' | 'google-drive' | 'inventory' | 'calendar';
+type Page = 'dashboard' | 'new-job' | 'edit-job' | 'chip-systems' | 'laborers' | 'costs' | 'google-drive' | 'inventory' | 'calendar';
 
 function App() {
   const [currentPage, setCurrentPage] = useState<Page>('dashboard');
@@ -104,9 +103,6 @@ function App() {
       )}
       {currentPage === 'costs' && (
         <Costs />
-      )}
-      {currentPage === 'backup' && (
-        <Backup />
       )}
       {currentPage === 'google-drive' && (
         <GoogleDrive />
