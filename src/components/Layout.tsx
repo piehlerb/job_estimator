@@ -1,6 +1,7 @@
 import { Menu, X, Wifi, WifiOff, Cog, Users, DollarSign, Database, Cloud, Home, Plus, Package, CalendarDays, LogOut, User, RefreshCw } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { signOut } from '../lib/auth';
+import { APP_VERSION } from '../version';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -182,18 +183,21 @@ export default function Layout({
             )}
 
             {/* Online/Offline Status */}
-            <div className="flex items-center gap-2 px-3 py-2 md:px-4 rounded-lg bg-slate-800">
-              {isOnline ? (
-                <>
-                  <Wifi size={16} className="text-green-400 md:w-[18px] md:h-[18px]" />
-                  <span className="text-xs md:text-sm font-medium">Online</span>
-                </>
-              ) : (
-                <>
-                  <WifiOff size={16} className="text-orange-400 md:w-[18px] md:h-[18px]" />
-                  <span className="text-xs md:text-sm font-medium">Offline</span>
-                </>
-              )}
+            <div className="flex items-center justify-between px-3 py-2 md:px-4 rounded-lg bg-slate-800">
+              <div className="flex items-center gap-2">
+                {isOnline ? (
+                  <>
+                    <Wifi size={16} className="text-green-400 md:w-[18px] md:h-[18px]" />
+                    <span className="text-xs md:text-sm font-medium">Online</span>
+                  </>
+                ) : (
+                  <>
+                    <WifiOff size={16} className="text-orange-400 md:w-[18px] md:h-[18px]" />
+                    <span className="text-xs md:text-sm font-medium">Offline</span>
+                  </>
+                )}
+              </div>
+              <span className="text-xs text-slate-500">v{APP_VERSION}</span>
             </div>
           </div>
         </div>

@@ -1,5 +1,9 @@
-const CACHE_NAME = 'estimation-app-v3'; // Increment version to force cache update
+// Cache version - UPDATE THIS WITH EACH DEPLOYMENT
+const CACHE_VERSION = '1.1.0';
+const CACHE_NAME = `estimation-app-v${CACHE_VERSION}`;
 const BASE_PATH = '/job_estimator';
+
+// Only cache the shell - not hashed assets (Vite adds hashes to JS/CSS)
 const urlsToCache = [
   `${BASE_PATH}/`,
   `${BASE_PATH}/index.html`,
@@ -7,28 +11,34 @@ const urlsToCache = [
 ];
 
 self.addEventListener('install', (event) => {
+  console.log(`[SW] Installing version ${CACHE_VERSION}`);
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(urlsToCache).catch(() => {
-        console.log('Some assets could not be cached');
+        console.log('[SW] Some assets could not be cached');
       });
     })
   );
+  // Force the waiting service worker to become active
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
+  console.log(`[SW] Activating version ${CACHE_VERSION}`);
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cacheName) => {
+          // Delete all old caches
           if (cacheName !== CACHE_NAME) {
+            console.log(`[SW] Deleting old cache: ${cacheName}`);
             return caches.delete(cacheName);
           }
         })
       );
     })
   );
+  // Take control of all clients immediately
   self.clients.claim();
 });
 
@@ -43,12 +53,11 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // For API requests (non-Supabase), use network-first strategy
+  // For API requests, use network-first strategy
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(
       fetch(event.request)
         .then((response) => {
-          // Only cache successful responses
           if (response && response.status === 200) {
             const cache = caches.open(CACHE_NAME);
             cache.then((c) => c.put(event.request, response.clone()));
@@ -57,27 +66,67 @@ self.addEventListener('fetch', (event) => {
         })
         .catch(() => caches.match(event.request))
     );
-  } else {
-    // For static assets, use cache-first strategy
+    return;
+  }
+
+  // For hashed assets (JS/CSS with hash in filename), use network-first
+  // These files have unique names per build, so we should fetch fresh versions
+  const isHashedAsset = /\.[a-f0-9]{8,}\.(js|css)$/i.test(url.pathname);
+
+  if (isHashedAsset) {
+    // Network-first for hashed assets
     event.respondWith(
-      caches.match(event.request).then((response) => {
-        if (response) {
-          return response;
-        }
-
-        return fetch(event.request).then((fetchResponse) => {
-          // Clone the response before using it
-          const responseToCache = fetchResponse.clone();
-
-          // Cache successful responses to static assets
-          if (fetchResponse && fetchResponse.status === 200) {
+      fetch(event.request)
+        .then((response) => {
+          if (response && response.status === 200) {
+            const responseToCache = response.clone();
             caches.open(CACHE_NAME).then((cache) => {
               cache.put(event.request, responseToCache);
             });
           }
-          return fetchResponse;
-        });
-      })
+          return response;
+        })
+        .catch(() => caches.match(event.request))
     );
+    return;
   }
+
+  // For index.html and other HTML files, use network-first
+  // This ensures users get the latest HTML which references new assets
+  if (url.pathname.endsWith('.html') || url.pathname.endsWith('/')) {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response && response.status === 200) {
+            const responseToCache = response.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseToCache);
+            });
+          }
+          return response;
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // For other static assets (images, fonts, etc.), use cache-first
+  event.respondWith(
+    caches.match(event.request).then((response) => {
+      if (response) {
+        return response;
+      }
+
+      return fetch(event.request).then((fetchResponse) => {
+        const responseToCache = fetchResponse.clone();
+
+        if (fetchResponse && fetchResponse.status === 200) {
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseToCache);
+          });
+        }
+        return fetchResponse;
+      });
+    })
+  );
 });
