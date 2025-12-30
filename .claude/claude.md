@@ -240,6 +240,43 @@ supabase/
 6. **Use IF NOT EXISTS** in migrations for safety
 7. **Version control migrations** - never delete old migration files
 
+## App Versioning
+
+The app version is tracked in **three files** that must be kept in sync:
+
+| File | Constant | Purpose |
+|------|----------|---------|
+| `package.json` | `version` | npm package version |
+| `public/sw.js` | `CACHE_VERSION` | Service worker cache name |
+| `src/version.ts` | `APP_VERSION` | Displayed in UI sidebar |
+
+### When to Update Version
+
+Update the version number when deploying changes that users need to see immediately:
+- New features
+- Bug fixes
+- UI changes
+- Any code changes
+
+### How to Update Version
+
+1. Increment version in all three files (use semantic versioning: `MAJOR.MINOR.PATCH`)
+2. The service worker cache name includes the version, so changing it will:
+   - Trigger a new service worker install
+   - Delete old caches
+   - Force fresh asset downloads
+
+### Version Display
+
+The version is shown in the sidebar footer, bottom-left corner (e.g., "v1.1.0").
+
+### Caching Strategy
+
+The service worker uses different strategies:
+- **Network-first**: HTML files, hashed JS/CSS assets (ensures fresh code)
+- **Cache-first**: Static assets like images and fonts (better offline performance)
+- **Never cached**: Supabase API requests (always fresh data)
+
 ## Need Help?
 
 - Check existing fields in `src/types/index.ts` for patterns
