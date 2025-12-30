@@ -13,20 +13,26 @@ All three layers are kept in sync automatically through the sync and backup syst
 
 ## Install Day Scheduling
 
-Jobs support per-day scheduling where you can specify hours and laborers for each individual install day:
+All jobs use per-day scheduling where you specify hours and laborers for each individual install day:
 
 **How it works:**
 - Set the number of install days (e.g., 3 days)
 - For each day, specify:
   - Hours for that day (e.g., Day 1: 8h, Day 2: 10h, Day 3: 6h)
   - Which laborers work that day
-- Calculations automatically use the per-day schedule when available
-- Legacy `jobHours` field is maintained for backward compatibility
+- Calculations use the per-day schedule for all labor and gas costs
+- The `jobHours` field stores the sum of all daily hours (for backward compatibility with older code)
+
+**Legacy Data Migration:**
+- When loading old jobs without `installSchedule`, the app automatically converts them:
+  - Divides total hours evenly across install days
+  - Assigns all selected laborers to each day
+- Migration happens on-the-fly when editing a job (see `src/lib/jobMigration.ts`)
 
 **Fields:**
-- `Job.installSchedule` - Array of `InstallDaySchedule` objects (optional)
+- `Job.installSchedule` - Array of `InstallDaySchedule` objects (required for all new/edited jobs)
 - Each schedule object contains: `day` (number), `hours` (number), `laborerIds` (string[])
-- When `installSchedule` is present, it takes precedence over `jobHours` in calculations
+- `Job.jobHours` - Total hours (auto-calculated as sum of daily hours, kept for backward compatibility)
 
 ## Adding a New Field to an Existing Type
 
