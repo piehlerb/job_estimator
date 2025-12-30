@@ -21,6 +21,7 @@ import { uploadPendingPhotos, isDriveAvailable } from '../lib/photoUploadManager
 import { isOnline } from '../lib/photoStorage';
 import { initGoogleDrive, requestGoogleAuth, setGoogleCredentials } from '../lib/googleDrive';
 import { getGoogleDriveSettings, saveGoogleDriveAuth } from '../lib/db';
+import { convertLegacyJobToSchedule } from '../lib/jobMigration';
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -35,7 +36,6 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
   const [systems, setSystems] = useState<ChipSystem[]>([]);
   const [costs, setCosts] = useState<Costs>(getDefaultCosts());
   const [activeLaborers, setActiveLaborers] = useState<Laborer[]>([]);
-  const [selectedLaborerIds, setSelectedLaborerIds] = useState<string[]>([]);
   const [installSchedule, setInstallSchedule] = useState<InstallDaySchedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -80,7 +80,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
 
   useEffect(() => {
     calculateCosts();
-  }, [formData, systems, costs, selectedLaborerIds, activeLaborers, installSchedule]);
+  }, [formData, systems, costs, activeLaborers, installSchedule]);
 
   const loadData = async () => {
     setLoading(true);
@@ -124,11 +124,10 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
             cyclo1Coats: (job.cyclo1Coats || 1).toString(),
           });
           setChipBlendInput(job.chipBlend || '');
-          // Set selected laborers from snapshot
-          setSelectedLaborerIds(job.laborersSnapshot.map((l) => l.id));
-          // Load install schedule if available
-          if (job.installSchedule && job.installSchedule.length > 0) {
-            setInstallSchedule(job.installSchedule);
+          // Load or convert to install schedule
+          const schedule = convertLegacyJobToSchedule(job);
+          if (schedule) {
+            setInstallSchedule(schedule);
           }
           // Load photos
           setPhotos(job.photos || []);
@@ -146,20 +145,20 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
   };
 
   const getSelectedLaborers = (): Laborer[] => {
-    // Get laborers from active list by selected IDs
-    // For existing jobs, also include any snapshot laborers that may no longer be active
-    const fromActive = activeLaborers.filter((l) => selectedLaborerIds.includes(l.id));
+    // Get unique laborers from install schedule
+    const uniqueLaborerIds = new Set<string>();
+    installSchedule.forEach(day => {
+      day.laborerIds.forEach(id => uniqueLaborerIds.add(id));
+    });
 
-    if (existingJob) {
-      // Include snapshot laborers that are selected but not in active list
-      const activeIds = activeLaborers.map((l) => l.id);
-      const fromSnapshot = existingJob.laborersSnapshot.filter(
-        (l) => selectedLaborerIds.includes(l.id) && !activeIds.includes(l.id)
-      );
-      return [...fromActive, ...fromSnapshot];
-    }
+    // Get laborers from active list and snapshot
+    const allLaborers = existingJob
+      ? [...activeLaborers, ...existingJob.laborersSnapshot.filter(
+          (sl) => !activeLaborers.some((al) => al.id === sl.id)
+        )]
+      : activeLaborers;
 
-    return fromActive;
+    return allLaborers.filter(l => uniqueLaborerIds.has(l.id));
   };
 
   const calculateCosts = () => {
@@ -204,14 +203,6 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
 
     const calc = calculateJobOutputs(inputs, systemToUse, costsToUse, laborersToUse);
     setCalculation(calc);
-  };
-
-  const handleLaborerToggle = (laborerId: string) => {
-    setSelectedLaborerIds((prev) =>
-      prev.includes(laborerId)
-        ? prev.filter((id) => id !== laborerId)
-        : [...prev, laborerId]
-    );
   };
 
   const handleChipBlendSelect = (blendName: string) => {
@@ -340,6 +331,9 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
 
       const laborersToSave = getSelectedLaborers();
 
+      // Calculate total hours from schedule
+      const totalHours = installSchedule.reduce((sum, day) => sum + day.hours, 0);
+
       // If chip blend is entered and not in the list, add it
       if (formData.chipBlend && !chipBlends.some((b) => b.name.toLowerCase() === formData.chipBlend.toLowerCase())) {
         const newBlend: ChipBlend = {
@@ -361,7 +355,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
         travelDistance: parseFloat(formData.travelDistance) || 0,
         installDate: formData.installDate,
         installDays: parseFloat(formData.installDays) || 1,
-        jobHours: parseFloat(formData.jobHours) || 10,
+        jobHours: totalHours, // Store total hours for backward compatibility
         installSchedule: installSchedule.length > 0 ? installSchedule : undefined,
         totalPrice: parseFloat(formData.totalPrice) || 0,
         chipBlend: formData.chipBlend || undefined,
@@ -553,20 +547,6 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                 min="1"
                 value={formData.installDays}
                 onChange={(e) => setFormData({ ...formData, installDays: e.target.value })}
-                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">
-                Job Hours
-                <span className="text-xs text-slate-500 ml-2">(Legacy - used when no daily schedule)</span>
-              </label>
-              <input
-                type="number"
-                placeholder="10"
-                value={formData.jobHours}
-                onChange={(e) => setFormData({ ...formData, jobHours: e.target.value })}
                 className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
@@ -816,55 +796,6 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
               })()}
               onChange={setInstallSchedule}
             />
-          </div>
-
-          {/* Laborer Selection (Legacy - for backward compatibility) */}
-          <div className="border border-slate-200 rounded-lg p-3 sm:p-4">
-            <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-2 sm:mb-3">
-              Assign Laborers
-              <span className="text-xs text-slate-500 ml-2">(Legacy - use Daily Schedule above instead)</span>
-            </label>
-            {(() => {
-              // For existing jobs, combine active laborers with any snapshot laborers not in active list
-              const availableLaborers = existingJob
-                ? [...activeLaborers, ...existingJob.laborersSnapshot.filter(
-                    (sl) => !activeLaborers.some((al) => al.id === sl.id)
-                  )]
-                : activeLaborers;
-
-              if (availableLaborers.length === 0) {
-                return <p className="text-slate-500 text-xs sm:text-sm">No active laborers. Add laborers in Settings.</p>;
-              }
-
-              return (
-                <div className="flex flex-wrap gap-2">
-                  {availableLaborers.map((laborer) => {
-                    const isSelected = selectedLaborerIds.includes(laborer.id);
-                    const isInactive = !activeLaborers.some((al) => al.id === laborer.id);
-                    return (
-                      <button
-                        key={laborer.id}
-                        type="button"
-                        onClick={() => handleLaborerToggle(laborer.id)}
-                        className={`px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
-                          isSelected
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                        }`}
-                      >
-                        {laborer.name} (${laborer.fullyLoadedRate}/hr)
-                        {isInactive && <span className="ml-1 text-xs opacity-75">(inactive)</span>}
-                      </button>
-                    );
-                  })}
-                </div>
-              );
-            })()}
-            {selectedLaborers.length > 0 && (
-              <p className="text-xs sm:text-sm text-slate-600 mt-2">
-                Total labor rate: ${selectedLaborers.reduce((sum, l) => sum + l.fullyLoadedRate, 0).toFixed(2)}/hr
-              </p>
-            )}
           </div>
 
           {/* Calculation Results */}
