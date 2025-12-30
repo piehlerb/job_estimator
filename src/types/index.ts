@@ -62,6 +62,12 @@ export interface JobPhoto {
   errorMessage?: string; // For failed uploads
 }
 
+export interface InstallDaySchedule {
+  day: number; // Day number (1, 2, 3, etc.)
+  hours: number; // Hours for this specific day
+  laborerIds: string[]; // Laborers assigned to this day
+}
+
 export interface Job {
   id: string;
   name: string;
@@ -72,7 +78,8 @@ export interface Job {
   travelDistance: number;
   installDate: string;
   installDays: number;
-  jobHours: number;
+  jobHours: number; // Legacy field - total hours (kept for backward compatibility)
+  installSchedule?: InstallDaySchedule[]; // Per-day schedule with hours and laborers
   totalPrice: number;
   // Optional fields
   chipBlend?: string;

@@ -9,13 +9,12 @@ import Backup from './pages/Backup';
 import GoogleDrive from './pages/GoogleDrive';
 import Inventory from './pages/Inventory';
 import Calendar from './pages/Calendar';
-import SupabaseTest from './pages/SupabaseTest';
 import Login from './pages/Login';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { useAuth } from './contexts/AuthContext';
 import { useAutoSync } from './hooks/useAutoSync';
 
-type Page = 'dashboard' | 'new-job' | 'edit-job' | 'chip-systems' | 'laborers' | 'costs' | 'backup' | 'google-drive' | 'inventory' | 'calendar' | 'supabase-test';
+type Page = 'dashboard' | 'new-job' | 'edit-job' | 'chip-systems' | 'laborers' | 'costs' | 'backup' | 'google-drive' | 'inventory' | 'calendar';
 
 function App() {
   const [currentPage, setCurrentPage] = useState<Page>('dashboard');
@@ -117,9 +116,6 @@ function App() {
       )}
       {currentPage === 'calendar' && (
         <Calendar onEditJob={(id) => handleNavigation('edit-job', id)} />
-      )}
-      {currentPage === 'supabase-test' && (
-        <SupabaseTest />
       )}
     </Layout>
   );

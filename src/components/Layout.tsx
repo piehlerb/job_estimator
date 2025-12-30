@@ -7,7 +7,7 @@ interface LayoutProps {
   children: React.ReactNode;
   sidebarOpen: boolean;
   onSidebarToggle: () => void;
-  onNavigate: (page: 'dashboard' | 'new-job' | 'edit-job' | 'chip-systems' | 'laborers' | 'costs' | 'backup' | 'google-drive' | 'inventory' | 'calendar' | 'supabase-test') => void;
+  onNavigate: (page: 'dashboard' | 'new-job' | 'edit-job' | 'chip-systems' | 'laborers' | 'costs' | 'backup' | 'google-drive' | 'inventory' | 'calendar') => void;
   isOnline: boolean;
   isSyncing?: boolean;
   lastSyncTime?: Date | null;
@@ -142,14 +142,6 @@ export default function Layout({
             >
               <Cloud size={18} className="md:w-5 md:h-5" />
               <span>Google Drive</span>
-            </button>
-
-            <button
-              onClick={() => onNavigate('supabase-test')}
-              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-yellow-300 hover:bg-slate-800 hover:text-yellow-200 transition-colors text-sm md:text-base border border-yellow-500/30"
-            >
-              <Database size={18} className="md:w-5 md:h-5" />
-              <span>Supabase Test</span>
             </button>
           </nav>
 

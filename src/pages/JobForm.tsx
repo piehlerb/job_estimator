@@ -12,10 +12,11 @@ import {
   addChipBlend,
   ChipBlend,
 } from '../lib/db';
-import { BaseColor, ChipSystem, Costs, Job, JobCalculation, JobStatus, Laborer, JobPhoto } from '../types';
+import { BaseColor, ChipSystem, Costs, Job, JobCalculation, JobStatus, Laborer, JobPhoto, InstallDaySchedule } from '../types';
 import { calculateJobOutputs } from '../lib/calculations';
 import PhotoCapture from '../components/PhotoCapture';
 import PhotoGallery from '../components/PhotoGallery';
+import InstallDayScheduleComponent from '../components/InstallDaySchedule';
 import { uploadPendingPhotos, isDriveAvailable } from '../lib/photoUploadManager';
 import { isOnline } from '../lib/photoStorage';
 import { initGoogleDrive, requestGoogleAuth, setGoogleCredentials } from '../lib/googleDrive';
@@ -35,6 +36,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
   const [costs, setCosts] = useState<Costs>(getDefaultCosts());
   const [activeLaborers, setActiveLaborers] = useState<Laborer[]>([]);
   const [selectedLaborerIds, setSelectedLaborerIds] = useState<string[]>([]);
+  const [installSchedule, setInstallSchedule] = useState<InstallDaySchedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [calculation, setCalculation] = useState<JobCalculation | null>(null);
@@ -78,7 +80,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
 
   useEffect(() => {
     calculateCosts();
-  }, [formData, systems, costs, selectedLaborerIds, activeLaborers]);
+  }, [formData, systems, costs, selectedLaborerIds, activeLaborers, installSchedule]);
 
   const loadData = async () => {
     setLoading(true);
@@ -124,6 +126,10 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
           setChipBlendInput(job.chipBlend || '');
           // Set selected laborers from snapshot
           setSelectedLaborerIds(job.laborersSnapshot.map((l) => l.id));
+          // Load install schedule if available
+          if (job.installSchedule && job.installSchedule.length > 0) {
+            setInstallSchedule(job.installSchedule);
+          }
           // Load photos
           setPhotos(job.photos || []);
         }
@@ -193,6 +199,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
       abrasionResistance: formData.abrasionResistance,
       cyclo1Topcoat: formData.cyclo1Topcoat,
       cyclo1Coats: parseInt(formData.cyclo1Coats) || 1,
+      installSchedule: installSchedule.length > 0 ? installSchedule : undefined,
     };
 
     const calc = calculateJobOutputs(inputs, systemToUse, costsToUse, laborersToUse);
@@ -355,6 +362,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
         installDate: formData.installDate,
         installDays: parseFloat(formData.installDays) || 1,
         jobHours: parseFloat(formData.jobHours) || 10,
+        installSchedule: installSchedule.length > 0 ? installSchedule : undefined,
         totalPrice: parseFloat(formData.totalPrice) || 0,
         chipBlend: formData.chipBlend || undefined,
         baseColor: formData.baseColor || undefined,
@@ -542,6 +550,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
               <input
                 type="number"
                 placeholder="1"
+                min="1"
                 value={formData.installDays}
                 onChange={(e) => setFormData({ ...formData, installDays: e.target.value })}
                 className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -549,7 +558,10 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
             </div>
 
             <div>
-              <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Job Hours</label>
+              <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">
+                Job Hours
+                <span className="text-xs text-slate-500 ml-2">(Legacy - used when no daily schedule)</span>
+              </label>
               <input
                 type="number"
                 placeholder="10"
@@ -789,10 +801,28 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
             )}
           </div>
 
-          {/* Laborer Selection */}
+          {/* Daily Schedule Section */}
+          <div className="border border-slate-200 rounded-lg p-3 sm:p-4 bg-slate-50">
+            <InstallDayScheduleComponent
+              installDays={parseInt(formData.installDays) || 1}
+              schedule={installSchedule}
+              availableLaborers={(() => {
+                // For existing jobs, combine active laborers with snapshot laborers
+                return existingJob
+                  ? [...activeLaborers, ...existingJob.laborersSnapshot.filter(
+                      (sl) => !activeLaborers.some((al) => al.id === sl.id)
+                    )]
+                  : activeLaborers;
+              })()}
+              onChange={setInstallSchedule}
+            />
+          </div>
+
+          {/* Laborer Selection (Legacy - for backward compatibility) */}
           <div className="border border-slate-200 rounded-lg p-3 sm:p-4">
             <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-2 sm:mb-3">
               Assign Laborers
+              <span className="text-xs text-slate-500 ml-2">(Legacy - use Daily Schedule above instead)</span>
             </label>
             {(() => {
               // For existing jobs, combine active laborers with any snapshot laborers not in active list

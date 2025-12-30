@@ -1,4 +1,4 @@
-import { ChipSystem, Costs, Laborer, JobCalculation } from '../types';
+import { ChipSystem, Costs, Laborer, JobCalculation, InstallDaySchedule } from '../types';
 
 interface JobInputs {
   floorFootage: number;
@@ -15,6 +15,7 @@ interface JobInputs {
   abrasionResistance: boolean;
   cyclo1Topcoat: boolean;
   cyclo1Coats: number;
+  installSchedule?: InstallDaySchedule[]; // Optional per-day schedule
 }
 
 export function calculateJobOutputs(
@@ -38,6 +39,7 @@ export function calculateJobOutputs(
     abrasionResistance,
     cyclo1Topcoat,
     cyclo1Coats,
+    installSchedule,
   } = inputs;
 
   const {
@@ -115,23 +117,35 @@ export function calculateJobOutputs(
   // Tint cost: tintNeeded / 32 * tintCostPerQuart (only calculate if tint is needed)
   const tintCost = tintNeeded > 0 ? (tintNeeded / 32) * tintCostPerQuart : 0;
 
-  // Gas generator cost: gasCost * jobHours * 1.2
-  const gasGeneratorCost = gasCost * jobHours * 1.2;
+  // Calculate total hours from schedule if available, otherwise use jobHours
+  const totalHours = installSchedule && installSchedule.length > 0
+    ? installSchedule.reduce((sum, day) => sum + day.hours, 0)
+    : jobHours;
 
-  // Gas heater cost: if install month is 11, 12, 1, 2, 3 then (gasCost + 1) * jobHours, else 0
+  // Gas generator cost: gasCost * totalHours * 1.2
+  const gasGeneratorCost = gasCost * totalHours * 1.2;
+
+  // Gas heater cost: if install month is 11, 12, 1, 2, 3 then (gasCost + 1) * totalHours, else 0
   const installMonth = installDate ? new Date(installDate).getMonth() + 1 : 0;
   const isWinterMonth = [11, 12, 1, 2, 3].includes(installMonth);
-  const gasHeaterCost = isWinterMonth ? (gasCost + 1) * jobHours : 0;
+  const gasHeaterCost = isWinterMonth ? (gasCost + 1) * totalHours : 0;
 
   // Gas travel cost:
   // Initial estimate trip: travelDistance * 2 * gasCost / 20
   // Work days travel: travelDistance * 2 * gasCost / 10 * installDays
   const gasTravelCost = (travelDistance * 2 * gasCost / 20) + (travelDistance * 2 * gasCost / 10 * installDays);
 
-  // Labor: sum of (jobHours * fullyLoadedRate) for each laborer
-  const laborCost = laborers.reduce((sum, laborer) => {
-    return sum + (jobHours * laborer.fullyLoadedRate);
-  }, 0);
+  // Labor: calculate based on installSchedule if available, otherwise use legacy method
+  const laborCost = installSchedule && installSchedule.length > 0
+    ? installSchedule.reduce((total, daySchedule) => {
+        // Get laborers for this day and sum their costs
+        const dayLaborers = laborers.filter(l => daySchedule.laborerIds.includes(l.id));
+        const dayRate = dayLaborers.reduce((sum, l) => sum + l.fullyLoadedRate, 0);
+        return total + (dayRate * daySchedule.hours);
+      }, 0)
+    : laborers.reduce((sum, laborer) => {
+        return sum + (jobHours * laborer.fullyLoadedRate);
+      }, 0);
 
   // Royalty cost: totalPrice * 0.05
   const royaltyCost = totalPrice * 0.05;
