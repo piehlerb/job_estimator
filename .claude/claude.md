@@ -11,6 +11,23 @@ The app uses a three-tier data architecture:
 
 All three layers are kept in sync automatically through the sync and backup systems.
 
+## Install Day Scheduling
+
+Jobs support per-day scheduling where you can specify hours and laborers for each individual install day:
+
+**How it works:**
+- Set the number of install days (e.g., 3 days)
+- For each day, specify:
+  - Hours for that day (e.g., Day 1: 8h, Day 2: 10h, Day 3: 6h)
+  - Which laborers work that day
+- Calculations automatically use the per-day schedule when available
+- Legacy `jobHours` field is maintained for backward compatibility
+
+**Fields:**
+- `Job.installSchedule` - Array of `InstallDaySchedule` objects (optional)
+- Each schedule object contains: `day` (number), `hours` (number), `laborerIds` (string[])
+- When `installSchedule` is present, it takes precedence over `jobHours` in calculations
+
 ## Adding a New Field to an Existing Type
 
 When adding a new field to any data type (Job, System, Costs, Laborer, etc.), follow this checklist:
