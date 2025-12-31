@@ -13,7 +13,17 @@
       "Bash(git pull:*)",
       "Bash(git rm:*)",
       "Bash(echo \"# Supabase Configuration\n# Copy this file to .env.local and fill in your actual values\n\n# Get these from: https://supabase.com/dashboard/project/_/settings/api\nVITE_SUPABASE_URL=https://your-project-id.supabase.co\nVITE_SUPABASE_ANON_KEY=your-anon-key-here\")",
-      "Bash(npm run dev:*)"
+      "Bash(npm run dev:*)",
+      "Bash(cat:*)",
+      "Bash(md5sum:*)",
+      "Bash(git fetch:*)",
+      "Bash(git stash:*)",
+      "Bash(node -e 'const fs = require(\"\"fs\"\"); const content = `name: Deploy to GitHub Pages\n\non:\n  push:\n    branches:\n      - main\n  workflow_dispatch:\n\npermissions:\n  contents: read\n  pages: write\n  id-token: write\n\nconcurrency:\n  group: \"\"pages\"\"\n  cancel-in-progress: false\n\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - name: Checkout\n        uses: actions/checkout@v4\n\n      - name: Setup Node\n        uses: actions/setup-node@v4\n        with:\n          node-version: \"\"20\"\"\n          cache: \"\"npm\"\"\n\n      - name: Install dependencies\n        run: npm ci\n\n      - name: Build\n        run: npm run build\n        env:\n          VITE_SUPABASE_URL: \\${{ secrets.VITE_SUPABASE_URL }}\n          VITE_SUPABASE_ANON_KEY: \\${{ secrets.VITE_SUPABASE_ANON_KEY }}\n\n      - name: Setup Pages\n        uses: actions/configure-pages@v4\n\n      - name: Upload artifact\n        uses: actions/upload-pages-artifact@v3\n        with:\n          path: ./dist\n\n  deploy:\n    environment:\n      name: github-pages\n      url: \\${{ steps.deployment.outputs.page_url }}\n    runs-on: ubuntu-latest\n    needs: build\n    steps:\n      - name: Deploy to GitHub Pages\n        id: deployment\n        uses: actions/deploy-pages@v4\n`; fs.writeFileSync(\"\".github/workflows/deploy.yml\"\", content); console.log(\"\"done\"\");')",
+      "Bash(git commit -m \"$(cat <<''EOF''\nAdd Supabase env vars to deploy workflow and enable network access\n\n- Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY secrets to GitHub Actions build\n- Enable host: true in vite config for mobile device testing\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git push)",
+      "Bash(gh run list:*)",
+      "Bash(node -e:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nFix asset paths for GitHub Pages deployment\n\n- Change absolute paths to relative paths for manifest, icons, and service worker\n- Fixes blank page issue when deployed to GitHub Pages subdirectory\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")"
     ],
     "deny": [],
     "ask": []

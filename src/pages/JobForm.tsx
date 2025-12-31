@@ -23,6 +23,8 @@ import { isOnline } from '../lib/photoStorage';
 import { initGoogleDrive, requestGoogleAuth, setGoogleCredentials } from '../lib/googleDrive';
 import { getGoogleDriveSettings, saveGoogleDriveAuth } from '../lib/db';
 import { convertLegacyJobToSchedule } from '../lib/jobMigration';
+import { compareSnapshots, SnapshotChanges } from '../lib/snapshotComparison';
+import SnapshotChangeBanner from '../components/SnapshotChangeBanner';
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -46,6 +48,11 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
   const [chipBlendInput, setChipBlendInput] = useState('');
   const [showBlendDropdown, setShowBlendDropdown] = useState(false);
   const [chipInventory, setChipInventory] = useState<ChipInventory[]>([]);
+
+  // Snapshot comparison state
+  const [snapshotChanges, setSnapshotChanges] = useState<SnapshotChanges | null>(null);
+  const [showSnapshotBanner, setShowSnapshotBanner] = useState(false);
+  const [useCurrentValues, setUseCurrentValues] = useState(false);
 
   // Photo state
   const [photos, setPhotos] = useState<JobPhoto[]>([]);
@@ -82,9 +89,10 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
 
   useEffect(() => {
     calculateCosts();
-  }, [formData, systems, costs, activeLaborers, installSchedule]);
+  }, [formData, systems, costs, activeLaborers, installSchedule, useCurrentValues, existingJob]);
 
   const loadData = async () => {
+    console.log('[JobForm] Loading data, jobId:', jobId);
     setLoading(true);
     try {
       const allSystems = await getAllSystems();
@@ -92,6 +100,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
       const laborers = await getActiveLaborers();
       const blends = await getAllChipBlends();
       const inventory = await getAllChipInventory();
+      console.log('[JobForm] Data loaded:', { systems: allSystems.length, costs: !!storedCosts, laborers: laborers.length });
       setSystems(allSystems);
       setActiveLaborers(laborers);
       setChipBlends(blends);
@@ -102,7 +111,9 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
       }
 
       if (jobId) {
+        console.log('[JobForm] Loading existing job:', jobId);
         const job = await getJob(jobId);
+        console.log('[JobForm] Job loaded:', !!job);
         if (job) {
           setExistingJob(job);
           setFormData({
@@ -135,15 +146,39 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
           }
           // Load photos
           setPhotos(job.photos || []);
+
+          // Compare snapshots with current values
+          try {
+            const currentSystem = allSystems.find(s => s.id === job.systemId);
+            console.log('[JobForm] Comparing snapshots...');
+            const changes = compareSnapshots(
+              job.systemSnapshot,
+              currentSystem || null,
+              job.costsSnapshot,
+              storedCosts || null
+            );
+            console.log('[JobForm] Snapshot comparison result:', changes);
+
+            if (changes.hasChanges) {
+              console.log('[JobForm] Changes detected, showing banner');
+              setSnapshotChanges(changes);
+              setShowSnapshotBanner(true);
+            }
+          } catch (error) {
+            console.error('Error comparing snapshots:', error);
+            // Continue loading even if comparison fails
+          }
         }
       }
 
       // Check Drive availability
       const available = await isDriveAvailable();
       setDriveAvailable(available);
+      console.log('[JobForm] Data loading complete');
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
+      console.log('[JobForm] Setting loading to false');
       setLoading(false);
     }
   };
@@ -173,9 +208,8 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
     }
 
     // Use snapshot costs if editing existing job, otherwise use current costs
-    // For existing jobs, use current costs for new fields (antiSlip, abrasionResistance)
-    // that don't exist in older snapshots
-    const costsToUse = existingJob
+    // If user chose to use current values, override with current values
+    const costsToUse = existingJob && !useCurrentValues
       ? {
           ...getDefaultCosts(),
           ...existingJob.costsSnapshot,
@@ -184,7 +218,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
           abrasionResistanceCostPerGal: existingJob.costsSnapshot.abrasionResistanceCostPerGal ?? costs.abrasionResistanceCostPerGal,
         }
       : costs;
-    const systemToUse = existingJob ? existingJob.systemSnapshot : selectedSystem;
+    const systemToUse = existingJob && !useCurrentValues ? existingJob.systemSnapshot : selectedSystem;
     const laborersToUse = getSelectedLaborers();
 
     const inputs = {
@@ -219,6 +253,16 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
     setChipBlendInput(value);
     setFormData({ ...formData, chipBlend: value });
     setShowBlendDropdown(true);
+  };
+
+  const handleUpdateToCurrentValues = () => {
+    setUseCurrentValues(true);
+    setShowSnapshotBanner(false);
+  };
+
+  const handleKeepOriginalValues = () => {
+    setUseCurrentValues(false);
+    setShowSnapshotBanner(false);
   };
 
   // Photo handlers
@@ -375,10 +419,10 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
         // Photos and Google Drive
         googleDriveFolderId: existingJob?.googleDriveFolderId,
         photos: photos.length > 0 ? photos : undefined,
-        // Preserve costs and system snapshots for existing jobs, create new ones for new jobs
+        // Update snapshots if user chose to use current values, otherwise preserve original
         // Laborers can be edited, so always save current selection
-        costsSnapshot: existingJob ? existingJob.costsSnapshot : costs,
-        systemSnapshot: existingJob ? existingJob.systemSnapshot : selectedSystem,
+        costsSnapshot: existingJob && !useCurrentValues ? existingJob.costsSnapshot : costs,
+        systemSnapshot: existingJob && !useCurrentValues ? existingJob.systemSnapshot : selectedSystem,
         laborersSnapshot: laborersToSave,
         createdAt: existingJob?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -488,6 +532,15 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
 
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4 sm:p-6 md:p-8">
         <h2 className="text-xl sm:text-2xl font-bold text-slate-900 mb-4 sm:mb-6">{jobId ? 'Edit Job' : 'Create New Job'}</h2>
+
+        {/* Snapshot Change Banner */}
+        {showSnapshotBanner && snapshotChanges && (
+          <SnapshotChangeBanner
+            changes={snapshotChanges}
+            onUpdate={handleUpdateToCurrentValues}
+            onDismiss={handleKeepOriginalValues}
+          />
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
           {/* Job Inputs */}
