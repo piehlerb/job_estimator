@@ -1,7 +1,7 @@
 import { Plus, Trash2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { getAllJobs, deleteJob, getDefaultCosts, getCosts } from '../lib/db';
-import { Job, JobCalculation, Costs } from '../types';
+import { getAllJobs, deleteJob, getDefaultCosts, getCosts, getPricing, getDefaultPricing } from '../lib/db';
+import { Job, JobCalculation, Costs, Pricing } from '../types';
 import { calculateJobOutputs } from '../lib/calculations';
 
 interface DashboardProps {
@@ -26,11 +26,13 @@ export default function Dashboard({ onNewJob, onEditJob }: DashboardProps) {
   const loadJobs = async () => {
     setLoading(true);
     try {
-      const [allJobs, currentCosts] = await Promise.all([
+      const [allJobs, currentCosts, currentPricing] = await Promise.all([
         getAllJobs(),
         getCosts(),
+        getPricing(),
       ]);
       const costs = currentCosts || getDefaultCosts();
+      const pricing = currentPricing || getDefaultPricing();
 
       // Calculate values for each job using their snapshots
       const withCalc = allJobs.map((job) => {
@@ -43,6 +45,9 @@ export default function Dashboard({ onNewJob, onEditJob }: DashboardProps) {
           antiSlipCostPerGal: job.costsSnapshot.antiSlipCostPerGal ?? costs.antiSlipCostPerGal,
           abrasionResistanceCostPerGal: job.costsSnapshot.abrasionResistanceCostPerGal ?? costs.abrasionResistanceCostPerGal,
         };
+        const mergedPricing: Pricing = job.pricingSnapshot
+          ? { ...getDefaultPricing(), ...job.pricingSnapshot }
+          : pricing;
         const calc = calculateJobOutputs(
           {
             floorFootage: job.floorFootage,
@@ -59,10 +64,13 @@ export default function Dashboard({ onNewJob, onEditJob }: DashboardProps) {
             abrasionResistance: job.abrasionResistance || false,
             cyclo1Topcoat: job.cyclo1Topcoat || false,
             cyclo1Coats: job.cyclo1Coats || 1,
+            coatingRemoval: job.coatingRemoval || 'None',
+            moistureMitigation: job.moistureMitigation || false,
           },
           job.systemSnapshot,
           mergedCosts,
-          job.laborersSnapshot
+          job.laborersSnapshot,
+          mergedPricing
         );
         return { job, calc };
       });

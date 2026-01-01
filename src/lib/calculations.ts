@@ -1,4 +1,4 @@
-import { ChipSystem, Costs, Laborer, JobCalculation, InstallDaySchedule } from '../types';
+import { ChipSystem, Costs, Laborer, JobCalculation, InstallDaySchedule, Pricing, CoatingRemovalType } from '../types';
 
 interface JobInputs {
   floorFootage: number;
@@ -15,6 +15,8 @@ interface JobInputs {
   abrasionResistance: boolean;
   cyclo1Topcoat: boolean;
   cyclo1Coats: number;
+  coatingRemoval: CoatingRemovalType;
+  moistureMitigation: boolean;
   installSchedule?: InstallDaySchedule[]; // Optional per-day schedule
 }
 
@@ -22,7 +24,8 @@ export function calculateJobOutputs(
   inputs: JobInputs,
   system: ChipSystem,
   costs: Costs,
-  laborers: Laborer[]
+  laborers: Laborer[],
+  pricing: Pricing
 ): JobCalculation {
   const {
     floorFootage,
@@ -39,6 +42,8 @@ export function calculateJobOutputs(
     abrasionResistance,
     cyclo1Topcoat,
     cyclo1Coats,
+    coatingRemoval,
+    moistureMitigation,
     installSchedule,
   } = inputs;
 
@@ -172,18 +177,44 @@ export function calculateJobOutputs(
   const suggestedCrackPrice = crackFillCost * 3;
 
   // Suggested floor price per sqft: min of ((totalCosts - suggestedDiscount - suggestedCrackPrice + 2000) / floorFootage) and 8, with minimum of 6
-  const suggestedFloorPricePerSqft = floorFootage > 0
+  const suggestedFloorPricePerSqftInitial = floorFootage > 0
     ? Math.max(6, Math.min((totalCosts - suggestedDiscount - suggestedCrackPrice + 2000) / floorFootage, 8))
     : 0;
 
-  // Suggested floor price
-  const suggestedFloorPrice = suggestedFloorPricePerSqft * floorFootage;
+  // Suggested vertical price: verticalFootage * pricing.verticalPricePerSqft
+  const suggestedVerticalPrice = verticalFootage * pricing.verticalPricePerSqft;
 
-  // Suggested vertical price: verticalFootage * 12
-  const suggestedVerticalPrice = verticalFootage * 12;
+  // Suggested anti-slip price: floorFootage * pricing.antiSlipPricePerSqft (only if anti-slip is enabled)
+  const suggestedAntiSlipPrice = antiSlip ? floorFootage * pricing.antiSlipPricePerSqft : 0;
 
-  // Suggested total
-  const suggestedTotal = suggestedCrackPrice + suggestedFloorPrice + suggestedVerticalPrice + suggestedDiscount;
+  // Suggested coating removal price: floorFootage * price per sqft based on removal type
+  const suggestedCoatingRemovalPrice = coatingRemoval === 'Paint'
+    ? floorFootage * pricing.coatingRemovalPaintPerSqft
+    : coatingRemoval === 'Epoxy'
+    ? floorFootage * pricing.coatingRemovalEpoxyPerSqft
+    : 0;
+
+  // Suggested moisture mitigation price: floorFootage * pricing.moistureMitigationPerSqft (only if enabled)
+  const suggestedMoistureMitigationPrice = moistureMitigation ? floorFootage * pricing.moistureMitigationPerSqft : 0;
+
+  // Calculate initial floor price and total
+  let suggestedFloorPrice = suggestedFloorPricePerSqftInitial * floorFootage;
+  let suggestedTotalRaw = suggestedCrackPrice + suggestedFloorPrice + suggestedVerticalPrice
+    + suggestedAntiSlipPrice + suggestedCoatingRemovalPrice + suggestedMoistureMitigationPrice + suggestedDiscount;
+
+  // If total is below minimum $2500, adjust floor price to meet minimum
+  const MINIMUM_JOB_PRICE = 2500;
+  let suggestedFloorPricePerSqft = suggestedFloorPricePerSqftInitial;
+
+  if (suggestedTotalRaw < MINIMUM_JOB_PRICE && floorFootage > 0) {
+    // Calculate how much we need to add to floor price to reach minimum
+    const shortfall = MINIMUM_JOB_PRICE - suggestedTotalRaw;
+    suggestedFloorPrice = suggestedFloorPrice + shortfall;
+    suggestedFloorPricePerSqft = suggestedFloorPrice / floorFootage;
+    suggestedTotalRaw = MINIMUM_JOB_PRICE;
+  }
+
+  const suggestedTotal = suggestedTotalRaw;
 
   // Suggested margin
   const suggestedMargin = suggestedTotal - totalCosts;
@@ -222,6 +253,9 @@ export function calculateJobOutputs(
     suggestedFloorPricePerSqft,
     suggestedFloorPrice,
     suggestedVerticalPrice,
+    suggestedAntiSlipPrice,
+    suggestedCoatingRemovalPrice,
+    suggestedMoistureMitigationPrice,
     suggestedTotal,
     suggestedMargin,
     suggestedMarginPct,

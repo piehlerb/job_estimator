@@ -7,13 +7,15 @@ import {
   updateJob,
   getCosts,
   getDefaultCosts,
+  getPricing,
+  getDefaultPricing,
   getActiveLaborers,
   getAllChipBlends,
   addChipBlend,
   ChipBlend,
   getAllChipInventory,
 } from '../lib/db';
-import { BaseColor, ChipSystem, Costs, Job, JobCalculation, JobStatus, Laborer, JobPhoto, InstallDaySchedule, ChipInventory } from '../types';
+import { BaseColor, ChipSystem, Costs, Pricing, Job, JobCalculation, JobStatus, Laborer, JobPhoto, InstallDaySchedule, ChipInventory, CoatingRemovalType } from '../types';
 import { calculateJobOutputs } from '../lib/calculations';
 import PhotoCapture from '../components/PhotoCapture';
 import PhotoGallery from '../components/PhotoGallery';
@@ -38,11 +40,13 @@ interface JobFormProps {
 export default function JobForm({ jobId, onBack }: JobFormProps) {
   const [systems, setSystems] = useState<ChipSystem[]>([]);
   const [costs, setCosts] = useState<Costs>(getDefaultCosts());
+  const [pricing, setPricing] = useState<Pricing>(getDefaultPricing());
   const [activeLaborers, setActiveLaborers] = useState<Laborer[]>([]);
   const [installSchedule, setInstallSchedule] = useState<InstallDaySchedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [calculation, setCalculation] = useState<JobCalculation | null>(null);
+  const [usedPricing, setUsedPricing] = useState<Pricing>(getDefaultPricing());
   const [existingJob, setExistingJob] = useState<Job | null>(null);
   const [chipBlends, setChipBlends] = useState<ChipBlend[]>([]);
   const [chipBlendInput, setChipBlendInput] = useState('');
@@ -81,6 +85,8 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
     abrasionResistance: false,
     cyclo1Topcoat: false,
     cyclo1Coats: '1',
+    coatingRemoval: 'None' as CoatingRemovalType,
+    moistureMitigation: false,
   });
 
   useEffect(() => {
@@ -89,7 +95,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
 
   useEffect(() => {
     calculateCosts();
-  }, [formData, systems, costs, activeLaborers, installSchedule, useCurrentValues, existingJob]);
+  }, [formData, systems, costs, pricing, activeLaborers, installSchedule, useCurrentValues, existingJob]);
 
   const loadData = async () => {
     console.log('[JobForm] Loading data, jobId:', jobId);
@@ -97,10 +103,11 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
     try {
       const allSystems = await getAllSystems();
       const storedCosts = await getCosts();
+      const storedPricing = await getPricing();
       const laborers = await getActiveLaborers();
       const blends = await getAllChipBlends();
       const inventory = await getAllChipInventory();
-      console.log('[JobForm] Data loaded:', { systems: allSystems.length, costs: !!storedCosts, laborers: laborers.length });
+      console.log('[JobForm] Data loaded:', { systems: allSystems.length, costs: !!storedCosts, pricing: !!storedPricing, laborers: laborers.length });
       setSystems(allSystems);
       setActiveLaborers(laborers);
       setChipBlends(blends);
@@ -108,6 +115,10 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
       if (storedCosts) {
         // Merge with defaults to ensure new fields have values
         setCosts({ ...getDefaultCosts(), ...storedCosts });
+      }
+      if (storedPricing) {
+        // Merge with defaults to ensure new fields have values
+        setPricing({ ...getDefaultPricing(), ...storedPricing });
       }
 
       if (jobId) {
@@ -137,6 +148,8 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
             abrasionResistance: job.abrasionResistance || false,
             cyclo1Topcoat: job.cyclo1Topcoat || false,
             cyclo1Coats: (job.cyclo1Coats || 1).toString(),
+            coatingRemoval: job.coatingRemoval || 'None',
+            moistureMitigation: job.moistureMitigation || false,
           });
           setChipBlendInput(job.chipBlend || '');
           // Load or convert to install schedule
@@ -207,7 +220,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
       return;
     }
 
-    // Use snapshot costs if editing existing job, otherwise use current costs
+    // Use snapshot costs/pricing if editing existing job, otherwise use current costs/pricing
     // If user chose to use current values, override with current values
     const costsToUse = existingJob && !useCurrentValues
       ? {
@@ -218,6 +231,10 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
           abrasionResistanceCostPerGal: existingJob.costsSnapshot.abrasionResistanceCostPerGal ?? costs.abrasionResistanceCostPerGal,
         }
       : costs;
+    const pricingToUse = existingJob && !useCurrentValues && existingJob.pricingSnapshot
+      ? { ...getDefaultPricing(), ...existingJob.pricingSnapshot }
+      : pricing;
+    setUsedPricing(pricingToUse);
     const systemToUse = existingJob && !useCurrentValues ? existingJob.systemSnapshot : selectedSystem;
     const laborersToUse = getSelectedLaborers();
 
@@ -236,10 +253,12 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
       abrasionResistance: formData.abrasionResistance,
       cyclo1Topcoat: formData.cyclo1Topcoat,
       cyclo1Coats: parseInt(formData.cyclo1Coats) || 1,
+      coatingRemoval: formData.coatingRemoval,
+      moistureMitigation: formData.moistureMitigation,
       installSchedule: installSchedule.length > 0 ? installSchedule : undefined,
     };
 
-    const calc = calculateJobOutputs(inputs, systemToUse, costsToUse, laborersToUse);
+    const calc = calculateJobOutputs(inputs, systemToUse, costsToUse, laborersToUse, pricingToUse);
     setCalculation(calc);
   };
 
@@ -416,12 +435,15 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
         abrasionResistance: formData.abrasionResistance,
         cyclo1Topcoat: formData.cyclo1Topcoat,
         cyclo1Coats: parseInt(formData.cyclo1Coats) || 1,
+        coatingRemoval: formData.coatingRemoval,
+        moistureMitigation: formData.moistureMitigation,
         // Photos and Google Drive
         googleDriveFolderId: existingJob?.googleDriveFolderId,
         photos: photos.length > 0 ? photos : undefined,
         // Update snapshots if user chose to use current values, otherwise preserve original
         // Laborers can be edited, so always save current selection
         costsSnapshot: existingJob && !useCurrentValues ? existingJob.costsSnapshot : costs,
+        pricingSnapshot: existingJob && !useCurrentValues ? existingJob.pricingSnapshot : pricing,
         systemSnapshot: existingJob && !useCurrentValues ? existingJob.systemSnapshot : selectedSystem,
         laborersSnapshot: laborersToSave,
         createdAt: existingJob?.createdAt || new Date().toISOString(),
@@ -890,6 +912,51 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                 </div>
               </div>
             )}
+
+            <div>
+              <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Coating Removal</label>
+              <div className="flex flex-wrap gap-3 sm:gap-4">
+                {(['None', 'Paint', 'Epoxy'] as CoatingRemovalType[]).map((type) => (
+                  <label key={type} className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="coatingRemoval"
+                      value={type}
+                      checked={formData.coatingRemoval === type}
+                      onChange={(e) => setFormData({ ...formData, coatingRemoval: e.target.value as CoatingRemovalType })}
+                      className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                    />
+                    <span className="text-xs sm:text-sm text-slate-700">{type}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Moisture Mitigation</label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="moistureMitigation"
+                    checked={!formData.moistureMitigation}
+                    onChange={() => setFormData({ ...formData, moistureMitigation: false })}
+                    className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                  />
+                  <span className="text-xs sm:text-sm text-slate-700">No</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="moistureMitigation"
+                    checked={formData.moistureMitigation}
+                    onChange={() => setFormData({ ...formData, moistureMitigation: true })}
+                    className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                  />
+                  <span className="text-xs sm:text-sm text-slate-700">Yes</span>
+                </label>
+              </div>
+            </div>
           </div>
 
           {/* Daily Schedule Section */}
@@ -1080,15 +1147,35 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                   </div>
                   <div>
                     <p className="text-xs text-blue-600">Floor $/sqft</p>
-                    <p className="text-sm sm:text-base md:text-lg font-semibold text-blue-900">{formatCurrency(calculation.suggestedFloorPricePerSqft)}</p>
+                    <p className={`text-sm sm:text-base md:text-lg font-semibold ${
+                      calculation.suggestedFloorPricePerSqft > 8 ? 'text-red-600' : 'text-blue-900'
+                    }`}>
+                      {formatCurrency(calculation.suggestedFloorPricePerSqft)}
+                    </p>
                   </div>
                   <div>
                     <p className="text-xs text-blue-600">Floor Price</p>
                     <p className="text-sm sm:text-base md:text-lg font-semibold text-blue-900">{formatCurrency(calculation.suggestedFloorPrice)}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-blue-600">Vertical Price</p>
+                    <p className="text-xs text-blue-600">Vertical Price - {formatCurrency(usedPricing.verticalPricePerSqft)}/sqft</p>
                     <p className="text-sm sm:text-base md:text-lg font-semibold text-blue-900">{formatCurrency(calculation.suggestedVerticalPrice)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-blue-600">Anti-Slip Price - {formatCurrency(usedPricing.antiSlipPricePerSqft)}/sqft</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold text-blue-900">{formatCurrency(calculation.suggestedAntiSlipPrice)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-blue-600">
+                      Coating Removal - {formData.coatingRemoval}
+                      {formData.coatingRemoval === 'Paint' && ` - ${formatCurrency(usedPricing.coatingRemovalPaintPerSqft)}/sqft`}
+                      {formData.coatingRemoval === 'Epoxy' && ` - ${formatCurrency(usedPricing.coatingRemovalEpoxyPerSqft)}/sqft`}
+                    </p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold text-blue-900">{formatCurrency(calculation.suggestedCoatingRemovalPrice)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-blue-600">Moisture Mitigation - {formatCurrency(usedPricing.moistureMitigationPerSqft)}/sqft</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold text-blue-900">{formatCurrency(calculation.suggestedMoistureMitigationPrice)}</p>
                   </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 pt-3 sm:pt-4 border-t border-blue-200">

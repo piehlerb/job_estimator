@@ -15,9 +15,11 @@ import {
   saveBaseCoatInventory,
   getDefaultCosts,
   getCosts,
+  getPricing,
+  getDefaultPricing,
   ChipBlend,
 } from '../lib/db';
-import { Job, ChipInventory, TopCoatInventory, BaseCoatInventory, MiscInventory, Costs } from '../types';
+import { Job, ChipInventory, TopCoatInventory, BaseCoatInventory, MiscInventory, Costs, Pricing } from '../types';
 import { calculateJobOutputs } from '../lib/calculations';
 
 function generateId(): string {
@@ -79,7 +81,7 @@ export default function Inventory() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [blends, chips, topCoat, baseCoat, misc, jobs, currentCosts] = await Promise.all([
+      const [blends, chips, topCoat, baseCoat, misc, jobs, currentCosts, currentPricing] = await Promise.all([
         getAllChipBlends(),
         getAllChipInventory(),
         getTopCoatInventory(),
@@ -87,6 +89,7 @@ export default function Inventory() {
         getMiscInventory(),
         getAllJobs(),
         getCosts(),
+        getPricing(),
       ]);
 
       setChipBlends(blends);
@@ -97,7 +100,8 @@ export default function Inventory() {
 
       // Calculate commitments from jobs that are today or in the future
       const costs = currentCosts || getDefaultCosts();
-      calculateCommitments(jobs, costs);
+      const pricing = currentPricing || getDefaultPricing();
+      calculateCommitments(jobs, costs, pricing);
     } catch (error) {
       console.error('Error loading inventory:', error);
     } finally {
@@ -105,7 +109,7 @@ export default function Inventory() {
     }
   };
 
-  const calculateCommitments = (jobs: Job[], currentCosts: Costs) => {
+  const calculateCommitments = (jobs: Job[], currentCosts: Costs, currentPricing: Pricing) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -117,6 +121,12 @@ export default function Inventory() {
       antiSlipCostPerGal: job.costsSnapshot.antiSlipCostPerGal ?? currentCosts.antiSlipCostPerGal,
       abrasionResistanceCostPerGal: job.costsSnapshot.abrasionResistanceCostPerGal ?? currentCosts.abrasionResistanceCostPerGal,
     });
+
+    // Helper to merge job pricing snapshot with current pricing
+    const getMergedPricing = (job: Job): Pricing =>
+      job.pricingSnapshot
+        ? { ...getDefaultPricing(), ...job.pricingSnapshot }
+        : currentPricing;
 
     // Filter jobs that are today or in the future
     const relevantJobs = jobs.filter((job) => {
@@ -139,6 +149,7 @@ export default function Inventory() {
         if (!job.chipBlend) return;
 
         const mergedCosts = getMergedCosts(job);
+        const mergedPricing = getMergedPricing(job);
         // Calculate chip needed in pounds (chipNeeded is boxes, 40 lbs per box)
         const calc = calculateJobOutputs(
           {
@@ -156,10 +167,13 @@ export default function Inventory() {
             abrasionResistance: job.abrasionResistance || false,
             cyclo1Topcoat: job.cyclo1Topcoat || false,
             cyclo1Coats: job.cyclo1Coats || 1,
+            coatingRemoval: job.coatingRemoval || 'None',
+            moistureMitigation: job.moistureMitigation || false,
           },
           job.systemSnapshot,
           mergedCosts,
-          job.laborersSnapshot
+          job.laborersSnapshot,
+          mergedPricing
         );
 
         const poundsNeeded = calc.chipNeeded * 40; // Convert boxes to pounds
@@ -189,6 +203,7 @@ export default function Inventory() {
     const calculateTopForJobs = (jobList: Job[]) => {
       return jobList.reduce((sum, job) => {
         const mergedCosts = getMergedCosts(job);
+        const mergedPricing = getMergedPricing(job);
         const calc = calculateJobOutputs(
           {
             floorFootage: job.floorFootage,
@@ -205,10 +220,13 @@ export default function Inventory() {
             abrasionResistance: job.abrasionResistance || false,
             cyclo1Topcoat: job.cyclo1Topcoat || false,
             cyclo1Coats: job.cyclo1Coats || 1,
+            coatingRemoval: job.coatingRemoval || 'None',
+            moistureMitigation: job.moistureMitigation || false,
           },
           job.systemSnapshot,
           mergedCosts,
-          job.laborersSnapshot
+          job.laborersSnapshot,
+          mergedPricing
         );
         return sum + calc.topGallons;
       }, 0);
@@ -232,6 +250,7 @@ export default function Inventory() {
         .filter((job) => job.baseColor === color)
         .reduce((sum, job) => {
           const mergedCosts = getMergedCosts(job);
+          const mergedPricing = getMergedPricing(job);
           const calc = calculateJobOutputs(
             {
               floorFootage: job.floorFootage,
@@ -248,10 +267,13 @@ export default function Inventory() {
               abrasionResistance: job.abrasionResistance || false,
               cyclo1Topcoat: job.cyclo1Topcoat || false,
               cyclo1Coats: job.cyclo1Coats || 1,
+              coatingRemoval: job.coatingRemoval || 'None',
+              moistureMitigation: job.moistureMitigation || false,
             },
             job.systemSnapshot,
             mergedCosts,
-            job.laborersSnapshot
+            job.laborersSnapshot,
+            mergedPricing
           );
           return sum + calc.baseGallons;
         }, 0);

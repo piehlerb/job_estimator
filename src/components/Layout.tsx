@@ -7,7 +7,7 @@ interface LayoutProps {
   children: React.ReactNode;
   sidebarOpen: boolean;
   onSidebarToggle: () => void;
-  onNavigate: (page: 'dashboard' | 'new-job' | 'edit-job' | 'chip-systems' | 'laborers' | 'costs' | 'google-drive' | 'inventory' | 'calendar') => void;
+  onNavigate: (page: 'dashboard' | 'new-job' | 'edit-job' | 'chip-systems' | 'laborers' | 'costs' | 'pricing' | 'google-drive' | 'inventory' | 'calendar') => void;
   isOnline: boolean;
   isSyncing?: boolean;
   lastSyncTime?: Date | null;
@@ -126,6 +126,14 @@ export default function Layout({
             >
               <DollarSign size={18} className="md:w-5 md:h-5" />
               <span>Costs</span>
+            </button>
+
+            <button
+              onClick={() => onNavigate('pricing')}
+              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors text-sm md:text-base"
+            >
+              <DollarSign size={18} className="md:w-5 md:h-5" />
+              <span>Pricing</span>
             </button>
 
             <button

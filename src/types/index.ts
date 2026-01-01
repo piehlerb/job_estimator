@@ -50,6 +50,20 @@ export interface PricingVariable {
   deleted?: boolean;
 }
 
+// Pricing configuration for job pricing elements
+export interface Pricing {
+  id: string;
+  verticalPricePerSqft: number; // Price per sqft for vertical surfaces
+  antiSlipPricePerSqft: number; // Price per sqft for anti-slip additive
+  coatingRemovalPaintPerSqft: number; // Price per sqft for paint removal
+  coatingRemovalEpoxyPerSqft: number; // Price per sqft for epoxy removal
+  moistureMitigationPerSqft: number; // Price per sqft for moisture mitigation
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CoatingRemovalType = 'None' | 'Paint' | 'Epoxy';
+
 export interface JobPhoto {
   id: string;
   category: 'Estimate' | 'Before' | 'During' | 'After';
@@ -94,11 +108,16 @@ export interface Job {
   abrasionResistance?: boolean;
   cyclo1Topcoat?: boolean;
   cyclo1Coats?: number; // 1 or 2 coats (only used if cyclo1Topcoat is true)
+  // Surface preparation
+  coatingRemoval?: CoatingRemovalType; // Type of coating removal needed
+  moistureMitigation?: boolean; // Whether moisture mitigation is needed
   // Google Drive integration
   googleDriveFolderId?: string;
   photos?: JobPhoto[];
   // Snapshot of costs at time of job creation (so old jobs don't change)
   costsSnapshot: Costs;
+  // Snapshot of pricing at time of job creation
+  pricingSnapshot?: Pricing;
   // Snapshot of system at time of job creation
   systemSnapshot: ChipSystem;
   // Snapshot of laborers assigned to this job
@@ -172,6 +191,9 @@ export interface JobCalculation {
   suggestedFloorPricePerSqft: number;
   suggestedFloorPrice: number;
   suggestedVerticalPrice: number;
+  suggestedAntiSlipPrice: number;
+  suggestedCoatingRemovalPrice: number;
+  suggestedMoistureMitigationPrice: number;
   suggestedTotal: number;
   suggestedMargin: number;
   suggestedMarginPct: number;

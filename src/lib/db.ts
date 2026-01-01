@@ -1,7 +1,7 @@
-import { ChipSystem, PricingVariable, Job, Costs, Laborer, ChipInventory, TopCoatInventory, BaseCoatInventory, MiscInventory, GoogleDriveAuth, GoogleDriveSettings } from '../types';
+import { ChipSystem, PricingVariable, Job, Costs, Laborer, ChipInventory, TopCoatInventory, BaseCoatInventory, MiscInventory, GoogleDriveAuth, GoogleDriveSettings, Pricing } from '../types';
 
 const DB_NAME = 'JobEstimator';
-const DB_VERSION = 8; // Incremented for metadata store
+const DB_VERSION = 9; // Incremented for pricing store
 
 // Auto-sync flag - can be disabled for batch operations
 let autoSyncEnabled = true;
@@ -62,6 +62,9 @@ export async function initDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains('costs')) {
         db.createObjectStore('costs', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('pricing')) {
+        db.createObjectStore('pricing', { keyPath: 'id' });
       }
       if (!db.objectStoreNames.contains('laborers')) {
         db.createObjectStore('laborers', { keyPath: 'id' });
@@ -410,6 +413,47 @@ export function getDefaultCosts(): Costs {
     tintCostPerQuart: 0,
     antiSlipCostPerGal: 0,
     abrasionResistanceCostPerGal: 0,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+// Pricing
+export async function getPricing(): Promise<Pricing | null> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['pricing'], 'readonly');
+    const store = transaction.objectStore('pricing');
+    const request = store.get('current');
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result || null);
+  });
+}
+
+export async function savePricing(pricing: Pricing): Promise<void> {
+  const db = await getDB();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(['pricing'], 'readwrite');
+    const store = transaction.objectStore('pricing');
+    const request = store.put({ ...pricing, id: 'current' });
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve();
+  });
+
+  // Trigger background sync
+  await triggerBackgroundSync();
+}
+
+export function getDefaultPricing(): Pricing {
+  return {
+    id: 'current',
+    verticalPricePerSqft: 12,
+    antiSlipPricePerSqft: 0.50,
+    coatingRemovalPaintPerSqft: 1.00,
+    coatingRemovalEpoxyPerSqft: 2.00,
+    moistureMitigationPerSqft: 3.00,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
