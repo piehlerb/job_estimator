@@ -432,6 +432,7 @@ export async function getPricing(): Promise<Pricing | null> {
 }
 
 export async function savePricing(pricing: Pricing): Promise<void> {
+  console.log('[DB] Saving pricing to IndexedDB:', pricing);
   const db = await getDB();
   await new Promise<void>((resolve, reject) => {
     const transaction = db.transaction(['pricing'], 'readwrite');
@@ -439,11 +440,16 @@ export async function savePricing(pricing: Pricing): Promise<void> {
     const request = store.put({ ...pricing, id: 'current' });
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve();
+    request.onsuccess = () => {
+      console.log('[DB] Pricing saved to IndexedDB successfully');
+      resolve();
+    };
   });
 
   // Trigger background sync
+  console.log('[DB] Triggering background sync...');
   await triggerBackgroundSync();
+  console.log('[DB] Background sync completed');
 }
 
 export function getDefaultPricing(): Pricing {
@@ -454,6 +460,8 @@ export function getDefaultPricing(): Pricing {
     coatingRemovalPaintPerSqft: 1.00,
     coatingRemovalEpoxyPerSqft: 2.00,
     moistureMitigationPerSqft: 3.00,
+    floorPriceMin: 6.00,
+    floorPriceMax: 8.00,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };

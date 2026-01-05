@@ -111,9 +111,13 @@ export async function pushToSupabase(): Promise<{
     for (const { store, getter } of tablesToSync) {
       try {
         const records = await getter();
-        if (!records || records.length === 0) continue;
+        if (!records || records.length === 0) {
+          console.log(`[Sync] No records to sync for ${store}`);
+          continue;
+        }
 
         const tableName = getSupabaseTableName(store);
+        console.log(`[Sync] Syncing ${records.length} record(s) to ${tableName}`, store === 'pricing' ? records : '');
 
         // Convert to snake_case and add user_id
         const recordsToSync = records.map((record: any) => {
@@ -129,6 +133,10 @@ export async function pushToSupabase(): Promise<{
           };
         });
 
+        if (store === 'pricing') {
+          console.log('[Sync] Pricing records to sync:', recordsToSync);
+        }
+
         // Batch insert/upsert
         const batches = batchArray(recordsToSync, BATCH_SIZE);
 
@@ -141,8 +149,11 @@ export async function pushToSupabase(): Promise<{
             });
 
           if (error) {
-            errors.push(`${store}: ${error.message}`);
+            console.error(`[Sync] Error syncing ${store}:`, error);
+            console.error(`[Sync] Failed batch data:`, batch);
+            errors.push(`${store}: ${error.message} - ${error.details || ''} - ${error.hint || ''}`);
           } else {
+            console.log(`[Sync] Successfully synced ${batch.length} record(s) to ${tableName}`);
             recordsPushed += batch.length;
           }
         }

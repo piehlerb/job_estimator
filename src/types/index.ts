@@ -58,6 +58,8 @@ export interface Pricing {
   coatingRemovalPaintPerSqft: number; // Price per sqft for paint removal
   coatingRemovalEpoxyPerSqft: number; // Price per sqft for epoxy removal
   moistureMitigationPerSqft: number; // Price per sqft for moisture mitigation
+  floorPriceMin?: number; // Minimum floor price per sqft for suggested pricing
+  floorPriceMax?: number; // Maximum floor price per sqft for suggested pricing
   createdAt: string;
   updatedAt: string;
 }

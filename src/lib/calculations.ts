@@ -176,9 +176,11 @@ export function calculateJobOutputs(
   // Suggested crack price: crackFillCost * 3
   const suggestedCrackPrice = crackFillCost * 3;
 
-  // Suggested floor price per sqft: min of ((totalCosts - suggestedDiscount - suggestedCrackPrice + 2000) / floorFootage) and 8, with minimum of 6
+  // Suggested floor price per sqft: min of ((totalCosts - suggestedDiscount - suggestedCrackPrice + 2000) / floorFootage) and max, with minimum of min
+  const floorPriceMin = pricing.floorPriceMin ?? 6;
+  const floorPriceMax = pricing.floorPriceMax ?? 8;
   const suggestedFloorPricePerSqftInitial = floorFootage > 0
-    ? Math.max(6, Math.min((totalCosts - suggestedDiscount - suggestedCrackPrice + 2000) / floorFootage, 8))
+    ? Math.max(floorPriceMin, Math.min((totalCosts - suggestedDiscount - suggestedCrackPrice + 2000) / floorFootage, floorPriceMax))
     : 0;
 
   // Suggested vertical price: verticalFootage * pricing.verticalPricePerSqft
