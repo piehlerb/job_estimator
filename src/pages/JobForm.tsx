@@ -1192,6 +1192,47 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                     <p className="text-xl sm:text-2xl font-bold text-green-600">{calculation.suggestedMarginPct.toFixed(1)}%</p>
                   </div>
                 </div>
+
+                {/* Effective Price Per Square Foot Analysis */}
+                {parseFloat(formData.floorFootage) > 0 && (
+                  <div className="mt-4 pt-4 border-t border-blue-200">
+                    <h5 className="text-xs sm:text-sm font-semibold text-blue-800 mb-2 uppercase tracking-wide">Effective Price Per Sq Ft</h5>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
+                      {(() => {
+                        const floorFootage = parseFloat(formData.floorFootage);
+                        const baseTotal = calculation.suggestedTotal;
+                        const effectivePricePerSqft = baseTotal / floorFootage;
+
+                        // Calculate price adjustments based on floor price changes
+                        const adjustments = [-0.50, -0.25, 0, 0.25, 0.50];
+
+                        return adjustments.map(adjustment => {
+                          const adjustedTotal = baseTotal + (adjustment * floorFootage);
+                          const adjustedEffectivePrice = adjustedTotal / floorFootage;
+                          const adjustedMargin = adjustedTotal - calculation.totalCosts;
+                          const adjustedMarginPct = adjustedTotal > 0 ? (adjustedMargin / adjustedTotal) * 100 : 0;
+
+                          return (
+                            <div key={adjustment} className={`bg-white p-2 sm:p-3 rounded border ${adjustment === 0 ? 'border-blue-400 border-2' : 'border-slate-200'}`}>
+                              <p className="text-xs text-slate-500">
+                                {adjustment === 0 ? 'Current' : `${adjustment > 0 ? '+' : ''}${formatCurrency(adjustment)}/sqft`}
+                              </p>
+                              <p className={`text-sm sm:text-base font-semibold ${adjustment === 0 ? 'text-blue-900' : 'text-slate-700'}`}>
+                                {formatCurrency(adjustedEffectivePrice)}
+                              </p>
+                              <p className="text-xs text-slate-400 mt-1">
+                                Total: {formatCurrency(adjustedTotal)}
+                              </p>
+                              <p className={`text-xs font-semibold mt-1 ${adjustedMarginPct >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                Margin: {adjustedMarginPct.toFixed(1)}%
+                              </p>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
