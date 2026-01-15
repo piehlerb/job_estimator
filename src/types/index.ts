@@ -87,6 +87,8 @@ export interface InstallDaySchedule {
 export interface Job {
   id: string;
   name: string;
+  customerName?: string;
+  customerAddress?: string;
   systemId: string;
   floorFootage: number;
   verticalFootage: number;

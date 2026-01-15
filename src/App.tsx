@@ -2,6 +2,7 @@ import { useState } from 'react';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import JobForm from './pages/JobForm';
+import JobSheet from './pages/JobSheet';
 import ChipSystems from './pages/ChipSystems';
 import Laborers from './pages/Laborers';
 import Costs from './pages/Costs';
@@ -14,7 +15,7 @@ import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { useAuth } from './contexts/AuthContext';
 import { useAutoSync } from './hooks/useAutoSync';
 
-type Page = 'dashboard' | 'new-job' | 'edit-job' | 'chip-systems' | 'laborers' | 'costs' | 'pricing' | 'google-drive' | 'inventory' | 'calendar';
+type Page = 'dashboard' | 'new-job' | 'edit-job' | 'job-sheet' | 'chip-systems' | 'laborers' | 'costs' | 'pricing' | 'google-drive' | 'inventory' | 'calendar';
 
 function App() {
   const [currentPage, setCurrentPage] = useState<Page>('dashboard');
@@ -76,6 +77,11 @@ function App() {
     return <Login onSuccess={handleLoginSuccess} onContinueOffline={handleContinueOffline} />;
   }
 
+  // Job Sheet is rendered outside Layout (no sidebar/menu)
+  if (currentPage === 'job-sheet' && editingJobId) {
+    return <JobSheet jobId={editingJobId} onBack={handleBackToDashboard} />;
+  }
+
   // User is authenticated or in offline mode - show main app
   return (
     <Layout
@@ -88,7 +94,11 @@ function App() {
       onManualSync={triggerSync}
     >
       {currentPage === 'dashboard' && (
-        <Dashboard onNewJob={() => handleNavigation('new-job')} onEditJob={(id) => handleNavigation('edit-job', id)} />
+        <Dashboard
+          onNewJob={() => handleNavigation('new-job')}
+          onEditJob={(id) => handleNavigation('edit-job', id)}
+          onViewJobSheet={(id) => handleNavigation('job-sheet', id)}
+        />
       )}
       {currentPage === 'new-job' && (
         <JobForm onBack={handleBackToDashboard} />

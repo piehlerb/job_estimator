@@ -66,6 +66,8 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
 
   const [formData, setFormData] = useState({
     name: '',
+    customerName: '',
+    customerAddress: '',
     system: '',
     floorFootage: '',
     verticalFootage: '',
@@ -129,6 +131,8 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
           setExistingJob(job);
           setFormData({
             name: job.name,
+            customerName: job.customerName || '',
+            customerAddress: job.customerAddress || '',
             system: job.systemId,
             floorFootage: job.floorFootage.toString(),
             verticalFootage: job.verticalFootage.toString(),
@@ -415,6 +419,8 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
       const job: Job = {
         id: jobId || generateId(),
         name: formData.name,
+        customerName: formData.customerName || undefined,
+        customerAddress: formData.customerAddress || undefined,
         systemId: formData.system,
         floorFootage: parseFloat(formData.floorFootage) || 0,
         verticalFootage: parseFloat(formData.verticalFootage) || 0,
@@ -574,6 +580,28 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                 placeholder="e.g., Smith Residence - Kitchen"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Customer Name</label>
+              <input
+                type="text"
+                placeholder="e.g., John Smith"
+                value={formData.customerName}
+                onChange={(e) => setFormData({ ...formData, customerName: e.target.value })}
+                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+
+            <div className="md:col-span-2 lg:col-span-1">
+              <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Customer Address</label>
+              <input
+                type="text"
+                placeholder="e.g., 123 Main St, City, State 12345"
+                value={formData.customerAddress}
+                onChange={(e) => setFormData({ ...formData, customerAddress: e.target.value })}
                 className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
