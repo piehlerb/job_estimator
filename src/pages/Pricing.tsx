@@ -12,13 +12,10 @@ export default function Pricing() {
   const [pricingSaving, setPricingSaving] = useState(false);
 
   const [pricingForm, setPricingForm] = useState({
-    verticalPricePerSqft: '',
     antiSlipPricePerSqft: '',
     coatingRemovalPaintPerSqft: '',
     coatingRemovalEpoxyPerSqft: '',
     moistureMitigationPerSqft: '',
-    floorPriceMin: '',
-    floorPriceMax: '',
   });
 
   useEffect(() => {
@@ -37,13 +34,10 @@ export default function Pricing() {
       };
       setPricing(mergedPricing);
       setPricingForm({
-        verticalPricePerSqft: storedPricing.verticalPricePerSqft.toString(),
         antiSlipPricePerSqft: storedPricing.antiSlipPricePerSqft.toString(),
         coatingRemovalPaintPerSqft: storedPricing.coatingRemovalPaintPerSqft.toString(),
         coatingRemovalEpoxyPerSqft: storedPricing.coatingRemovalEpoxyPerSqft.toString(),
         moistureMitigationPerSqft: storedPricing.moistureMitigationPerSqft.toString(),
-        floorPriceMin: (storedPricing.floorPriceMin ?? 6.00).toString(),
-        floorPriceMax: (storedPricing.floorPriceMax ?? 8.00).toString(),
       });
     }
 
@@ -57,13 +51,10 @@ export default function Pricing() {
     try {
       const updatedPricing: PricingType = {
         ...pricing,
-        verticalPricePerSqft: parseFloat(pricingForm.verticalPricePerSqft) || 0,
         antiSlipPricePerSqft: parseFloat(pricingForm.antiSlipPricePerSqft) || 0,
         coatingRemovalPaintPerSqft: parseFloat(pricingForm.coatingRemovalPaintPerSqft) || 0,
         coatingRemovalEpoxyPerSqft: parseFloat(pricingForm.coatingRemovalEpoxyPerSqft) || 0,
         moistureMitigationPerSqft: parseFloat(pricingForm.moistureMitigationPerSqft) || 0,
-        floorPriceMin: parseFloat(pricingForm.floorPriceMin) || 6.00,
-        floorPriceMax: parseFloat(pricingForm.floorPriceMax) || 8.00,
         updatedAt: new Date().toISOString(),
       };
 
@@ -87,23 +78,14 @@ export default function Pricing() {
       <h1 className="text-3xl font-bold text-slate-900 mb-8">Pricing Settings</h1>
 
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
-        <p className="text-sm text-slate-600 mb-6">
+        <p className="text-sm text-slate-600 mb-4">
           These pricing values are used for suggested pricing calculations in new jobs. Existing jobs retain their original pricing values.
+        </p>
+        <p className="text-sm text-blue-600 mb-6 bg-blue-50 p-3 rounded-lg border border-blue-200">
+          <strong>Note:</strong> Vertical pricing and floor price constraints are now configured per chip system in the Chip Systems page.
         </p>
         <form onSubmit={handleSavePricing} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-semibold text-slate-900 mb-2">Vertical Price per Sqft ($)</label>
-              <input
-                type="number"
-                step="0.01"
-                placeholder="0.00"
-                value={pricingForm.verticalPricePerSqft}
-                onChange={(e) => setPricingForm({ ...pricingForm, verticalPricePerSqft: e.target.value })}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-              <p className="text-xs text-slate-500 mt-1">Multiplied by vertical square footage</p>
-            </div>
             <div>
               <label className="block text-sm font-semibold text-slate-900 mb-2">Anti-Slip Price per Sqft ($)</label>
               <input
@@ -155,34 +137,6 @@ export default function Pricing() {
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
               <p className="text-xs text-slate-500 mt-1">Multiplied by floor square footage (when moisture mitigation is selected)</p>
-            </div>
-          </div>
-          <div className="border-t border-slate-200 my-6"></div>
-          <h3 className="text-lg font-semibold text-slate-900 mb-4">Floor Price Constraints</h3>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-semibold text-slate-900 mb-2">Minimum Floor Price per Sqft ($)</label>
-              <input
-                type="number"
-                step="0.01"
-                placeholder="6.00"
-                value={pricingForm.floorPriceMin}
-                onChange={(e) => setPricingForm({ ...pricingForm, floorPriceMin: e.target.value })}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-              <p className="text-xs text-slate-500 mt-1">Minimum suggested floor price per square foot</p>
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-slate-900 mb-2">Maximum Floor Price per Sqft ($)</label>
-              <input
-                type="number"
-                step="0.01"
-                placeholder="8.00"
-                value={pricingForm.floorPriceMax}
-                onChange={(e) => setPricingForm({ ...pricingForm, floorPriceMax: e.target.value })}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-              <p className="text-xs text-slate-500 mt-1">Maximum suggested floor price per square foot</p>
             </div>
           </div>
           <div className="pt-4">

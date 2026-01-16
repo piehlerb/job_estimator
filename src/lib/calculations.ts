@@ -177,14 +177,16 @@ export function calculateJobOutputs(
   const suggestedCrackPrice = crackFillCost * 3;
 
   // Suggested floor price per sqft: min of ((totalCosts - suggestedDiscount - suggestedCrackPrice + 2000) / floorFootage) and max, with minimum of min
-  const floorPriceMin = pricing.floorPriceMin ?? 6;
-  const floorPriceMax = pricing.floorPriceMax ?? 8;
+  // Use system-specific pricing, fallback to global pricing if not set
+  const floorPriceMin = system.floorPriceMin ?? pricing.floorPriceMin ?? 6;
+  const floorPriceMax = system.floorPriceMax ?? pricing.floorPriceMax ?? 8;
   const suggestedFloorPricePerSqftInitial = floorFootage > 0
     ? Math.max(floorPriceMin, Math.min((totalCosts - suggestedDiscount - suggestedCrackPrice + 2000) / floorFootage, floorPriceMax))
     : 0;
 
-  // Suggested vertical price: verticalFootage * pricing.verticalPricePerSqft
-  const suggestedVerticalPrice = verticalFootage * pricing.verticalPricePerSqft;
+  // Suggested vertical price: verticalFootage * system-specific vertical price (fallback to global pricing)
+  const verticalPricePerSqft = system.verticalPricePerSqft ?? pricing.verticalPricePerSqft;
+  const suggestedVerticalPrice = verticalFootage * verticalPricePerSqft;
 
   // Suggested anti-slip price: floorFootage * pricing.antiSlipPricePerSqft (only if anti-slip is enabled)
   const suggestedAntiSlipPrice = antiSlip ? floorFootage * pricing.antiSlipPricePerSqft : 0;

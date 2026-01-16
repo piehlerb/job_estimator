@@ -10,6 +10,9 @@ export interface ChipSystem {
   baseSpread: number;
   topSpread: number;
   cyclo1Spread: number;
+  verticalPricePerSqft?: number; // Price per sqft for vertical surfaces
+  floorPriceMin?: number; // Minimum floor price per sqft for suggested pricing
+  floorPriceMax?: number; // Maximum floor price per sqft for suggested pricing
   createdAt: string;
   updatedAt: string;
   deleted?: boolean;
@@ -53,13 +56,13 @@ export interface PricingVariable {
 // Pricing configuration for job pricing elements
 export interface Pricing {
   id: string;
-  verticalPricePerSqft: number; // Price per sqft for vertical surfaces
+  verticalPricePerSqft: number; // DEPRECATED: Moved to ChipSystem - kept for backward compatibility
   antiSlipPricePerSqft: number; // Price per sqft for anti-slip additive
   coatingRemovalPaintPerSqft: number; // Price per sqft for paint removal
   coatingRemovalEpoxyPerSqft: number; // Price per sqft for epoxy removal
   moistureMitigationPerSqft: number; // Price per sqft for moisture mitigation
-  floorPriceMin?: number; // Minimum floor price per sqft for suggested pricing
-  floorPriceMax?: number; // Maximum floor price per sqft for suggested pricing
+  floorPriceMin?: number; // DEPRECATED: Moved to ChipSystem - kept for backward compatibility
+  floorPriceMax?: number; // DEPRECATED: Moved to ChipSystem - kept for backward compatibility
   createdAt: string;
   updatedAt: string;
 }

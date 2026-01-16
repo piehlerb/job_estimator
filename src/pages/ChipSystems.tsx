@@ -25,6 +25,9 @@ export default function ChipSystems() {
     baseSpread: '',
     topSpread: '',
     cyclo1Spread: '',
+    verticalPricePerSqft: '',
+    floorPriceMin: '',
+    floorPriceMax: '',
   });
 
   useEffect(() => {
@@ -51,6 +54,9 @@ export default function ChipSystems() {
         baseSpread: parseFloat(systemForm.baseSpread) || 0,
         topSpread: parseFloat(systemForm.topSpread) || 0,
         cyclo1Spread: parseFloat(systemForm.cyclo1Spread) || 0,
+        verticalPricePerSqft: parseFloat(systemForm.verticalPricePerSqft) || 0.75,
+        floorPriceMin: parseFloat(systemForm.floorPriceMin) || 6.00,
+        floorPriceMax: parseFloat(systemForm.floorPriceMax) || 8.00,
         createdAt: editingSystem?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -64,7 +70,7 @@ export default function ChipSystems() {
       await loadData();
       setShowSystemForm(false);
       setEditingSystem(null);
-      setSystemForm({ name: '', feetPerLb: '', boxCost: '', baseSpread: '', topSpread: '', cyclo1Spread: '' });
+      setSystemForm({ name: '', feetPerLb: '', boxCost: '', baseSpread: '', topSpread: '', cyclo1Spread: '', verticalPricePerSqft: '', floorPriceMin: '', floorPriceMax: '' });
     } catch (error) {
       console.error('Error saving system:', error);
     }
@@ -79,6 +85,9 @@ export default function ChipSystems() {
       baseSpread: system.baseSpread.toString(),
       topSpread: system.topSpread.toString(),
       cyclo1Spread: (system.cyclo1Spread || 0).toString(),
+      verticalPricePerSqft: (system.verticalPricePerSqft ?? 0.75).toString(),
+      floorPriceMin: (system.floorPriceMin ?? 6.00).toString(),
+      floorPriceMax: (system.floorPriceMax ?? 8.00).toString(),
     });
     setShowSystemForm(true);
   };
@@ -97,7 +106,7 @@ export default function ChipSystems() {
           <button
             onClick={() => {
               setEditingSystem(null);
-              setSystemForm({ name: '', feetPerLb: '', boxCost: '', baseSpread: '', topSpread: '', cyclo1Spread: '' });
+              setSystemForm({ name: '', feetPerLb: '', boxCost: '', baseSpread: '', topSpread: '', cyclo1Spread: '', verticalPricePerSqft: '', floorPriceMin: '', floorPriceMax: '' });
               setShowSystemForm(true);
             }}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
@@ -113,7 +122,7 @@ export default function ChipSystems() {
             <button
               onClick={() => {
                 setEditingSystem(null);
-                setSystemForm({ name: '', feetPerLb: '', boxCost: '', baseSpread: '', topSpread: '', cyclo1Spread: '' });
+                setSystemForm({ name: '', feetPerLb: '', boxCost: '', baseSpread: '', topSpread: '', cyclo1Spread: '', verticalPricePerSqft: '', floorPriceMin: '', floorPriceMax: '' });
                 setShowSystemForm(true);
               }}
               className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
@@ -235,6 +244,46 @@ export default function ChipSystems() {
                     onChange={(e) => setSystemForm({ ...systemForm, cyclo1Spread: e.target.value })}
                     className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
+                </div>
+              </div>
+              <div className="border-t border-slate-200 my-4"></div>
+              <h5 className="text-md font-semibold text-slate-900 mb-3">Pricing Configuration</h5>
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-900 mb-2">Vertical Price per Sqft ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="0.75"
+                    value={systemForm.verticalPricePerSqft}
+                    onChange={(e) => setSystemForm({ ...systemForm, verticalPricePerSqft: e.target.value })}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">Price per sqft for vertical surfaces</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-900 mb-2">Floor Price Min ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="6.00"
+                    value={systemForm.floorPriceMin}
+                    onChange={(e) => setSystemForm({ ...systemForm, floorPriceMin: e.target.value })}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">Minimum suggested floor price/sqft</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-900 mb-2">Floor Price Max ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="8.00"
+                    value={systemForm.floorPriceMax}
+                    onChange={(e) => setSystemForm({ ...systemForm, floorPriceMax: e.target.value })}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">Maximum suggested floor price/sqft</p>
                 </div>
               </div>
               <div className="flex gap-3">

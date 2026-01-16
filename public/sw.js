@@ -1,5 +1,5 @@
 // Cache version - UPDATE THIS WITH EACH DEPLOYMENT
-const CACHE_VERSION = '1.5.0';
+const CACHE_VERSION = '1.5.1';
 const CACHE_NAME = `estimation-app-v${CACHE_VERSION}`;
 const BASE_PATH = '/job_estimator';
 
@@ -69,15 +69,29 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // For hashed assets (JS/CSS with hash in filename), use network-first
-  // These files have unique names per build, so we should fetch fresh versions
+  // For hashed assets (JS/CSS with hash in filename), use cache-first with background update
+  // These files have unique names per build, so cached versions are safe to serve
   const isHashedAsset = /\.[a-f0-9]{8,}\.(js|css)$/i.test(url.pathname);
 
   if (isHashedAsset) {
-    // Network-first for hashed assets
+    // Cache-first for hashed assets (instant offline loading)
     event.respondWith(
-      fetch(event.request)
-        .then((response) => {
+      caches.match(event.request).then((cachedResponse) => {
+        // Serve from cache immediately if available
+        if (cachedResponse) {
+          // Update cache in background for next time
+          fetch(event.request).then((response) => {
+            if (response && response.status === 200) {
+              caches.open(CACHE_NAME).then((cache) => {
+                cache.put(event.request, response);
+              });
+            }
+          }).catch(() => {/* Ignore network errors */});
+          return cachedResponse;
+        }
+
+        // Not in cache, fetch from network
+        return fetch(event.request).then((response) => {
           if (response && response.status === 200) {
             const responseToCache = response.clone();
             caches.open(CACHE_NAME).then((cache) => {
@@ -85,18 +99,32 @@ self.addEventListener('fetch', (event) => {
             });
           }
           return response;
-        })
-        .catch(() => caches.match(event.request))
+        });
+      })
     );
     return;
   }
 
-  // For index.html and other HTML files, use network-first
-  // This ensures users get the latest HTML which references new assets
+  // For index.html and other HTML files, use cache-first with background update
+  // This ensures instant offline loading while keeping content fresh
   if (url.pathname.endsWith('.html') || url.pathname.endsWith('/')) {
     event.respondWith(
-      fetch(event.request)
-        .then((response) => {
+      caches.match(event.request).then((cachedResponse) => {
+        // Serve from cache immediately if available
+        if (cachedResponse) {
+          // Update cache in background for next time
+          fetch(event.request).then((response) => {
+            if (response && response.status === 200) {
+              caches.open(CACHE_NAME).then((cache) => {
+                cache.put(event.request, response);
+              });
+            }
+          }).catch(() => {/* Ignore network errors */});
+          return cachedResponse;
+        }
+
+        // Not in cache, fetch from network
+        return fetch(event.request).then((response) => {
           if (response && response.status === 200) {
             const responseToCache = response.clone();
             caches.open(CACHE_NAME).then((cache) => {
@@ -104,8 +132,8 @@ self.addEventListener('fetch', (event) => {
             });
           }
           return response;
-        })
-        .catch(() => caches.match(event.request))
+        });
+      })
     );
     return;
   }
