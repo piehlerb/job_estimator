@@ -71,7 +71,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
     system: '',
     floorFootage: '',
     verticalFootage: '',
-    crackFillFactor: '1',
+    crackFillFactor: '0',
     travelDistance: '0',
     installDate: '',
     installDays: '1',
@@ -245,7 +245,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
     const inputs = {
       floorFootage: parseFloat(formData.floorFootage) || 0,
       verticalFootage: parseFloat(formData.verticalFootage) || 0,
-      crackFillFactor: parseFloat(formData.crackFillFactor) || 1,
+      crackFillFactor: parseFloat(formData.crackFillFactor) || 0,
       travelDistance: parseFloat(formData.travelDistance) || 0,
       installDate: formData.installDate,
       installDays: parseFloat(formData.installDays) || 1,
@@ -424,7 +424,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
         systemId: formData.system,
         floorFootage: parseFloat(formData.floorFootage) || 0,
         verticalFootage: parseFloat(formData.verticalFootage) || 0,
-        crackFillFactor: parseFloat(formData.crackFillFactor) || 1,
+        crackFillFactor: parseFloat(formData.crackFillFactor) || 0,
         travelDistance: parseFloat(formData.travelDistance) || 0,
         installDate: formData.installDate,
         installDays: parseFloat(formData.installDays) || 1,
@@ -672,7 +672,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
               <input
                 type="number"
                 step="0.1"
-                placeholder="1"
+                placeholder="0"
                 value={formData.crackFillFactor}
                 onChange={(e) => setFormData({ ...formData, crackFillFactor: e.target.value })}
                 className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
