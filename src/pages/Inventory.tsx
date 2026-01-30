@@ -21,6 +21,7 @@ import {
 } from '../lib/db';
 import { Job, ChipInventory, TopCoatInventory, BaseCoatInventory, MiscInventory, Costs, Pricing } from '../types';
 import { calculateJobOutputs } from '../lib/calculations';
+import { normalizeChipBlendName } from '../lib/syncHelpers';
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -178,10 +179,12 @@ export default function Inventory() {
 
         const poundsNeeded = calc.chipNeeded * 40; // Convert boxes to pounds
 
-        if (!chipByBlend[job.chipBlend]) {
-          chipByBlend[job.chipBlend] = { committed: 0, potential: 0 };
+        // Normalize chip blend name for consistent grouping
+        const normalizedBlend = normalizeChipBlendName(job.chipBlend);
+        if (!chipByBlend[normalizedBlend]) {
+          chipByBlend[normalizedBlend] = { committed: 0, potential: 0 };
         }
-        chipByBlend[job.chipBlend][type] += poundsNeeded;
+        chipByBlend[normalizedBlend][type] += poundsNeeded;
       });
     };
 
@@ -313,11 +316,15 @@ export default function Inventory() {
   const handleAddChipInventory = async () => {
     if (!newChipBlend || !newChipPounds) return;
 
+    // Normalize chip blend name (trim whitespace, title case)
+    const normalizedBlend = normalizeChipBlendName(newChipBlend);
+    if (!normalizedBlend) return;
+
     // If blend doesn't exist in the list, add it
-    if (!chipBlends.some((b) => b.name.toLowerCase() === newChipBlend.toLowerCase())) {
+    if (!chipBlends.some((b) => normalizeChipBlendName(b.name) === normalizedBlend)) {
       const newBlend: ChipBlend = {
         id: generateId(),
-        name: newChipBlend,
+        name: normalizedBlend,
       };
       await addChipBlend(newBlend);
       setChipBlends([...chipBlends, newBlend]);
@@ -325,7 +332,7 @@ export default function Inventory() {
 
     const inventory: ChipInventory = {
       id: generateId(),
-      blend: newChipBlend,
+      blend: normalizedBlend,
       pounds: parseFloat(newChipPounds) || 0,
       updatedAt: new Date().toISOString(),
     };
@@ -400,7 +407,9 @@ export default function Inventory() {
                 .slice()
                 .sort((a, b) => a.blend.localeCompare(b.blend))
                 .map((inv) => {
-                const commitment = chipCommitments.find((c) => c.blend === inv.blend);
+                // Use normalized blend name for commitment lookup
+                const normalizedInvBlend = normalizeChipBlendName(inv.blend);
+                const commitment = chipCommitments.find((c) => c.blend === normalizedInvBlend);
                 const committed = commitment?.committed || 0;
                 const potential = commitment?.potential || 0;
                 const available = getAvailable(inv.pounds, committed);

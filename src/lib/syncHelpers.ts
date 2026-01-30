@@ -167,3 +167,15 @@ export function delay(ms: number): Promise<void> {
 export function getBackoffDelay(retryCount: number, baseDelay: number = 1000): number {
   return Math.min(baseDelay * Math.pow(2, retryCount), 30000); // Max 30 seconds
 }
+
+/**
+ * Normalize a chip blend name for consistent storage and comparison.
+ * - Trims leading/trailing whitespace
+ * - Converts to Title Case for consistent display
+ * This prevents duplicates like "wombat", "Wombat", "WOMBAT", "wombat " from being created.
+ */
+export function normalizeChipBlendName(name: string): string {
+  if (!name) return '';
+  // Trim whitespace and convert to title case
+  return name.trim().toLowerCase().replace(/\b\w/g, char => char.toUpperCase());
+}

@@ -27,6 +27,7 @@ import { getGoogleDriveSettings, saveGoogleDriveAuth } from '../lib/db';
 import { convertLegacyJobToSchedule } from '../lib/jobMigration';
 import { compareSnapshots, SnapshotChanges } from '../lib/snapshotComparison';
 import SnapshotChangeBanner from '../components/SnapshotChangeBanner';
+import { normalizeChipBlendName } from '../lib/syncHelpers';
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -405,11 +406,14 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
       // Calculate total hours from schedule
       const totalHours = installSchedule.reduce((sum, day) => sum + day.hours, 0);
 
+      // Normalize chip blend name before saving (trim whitespace, title case)
+      const normalizedChipBlend = normalizeChipBlendName(formData.chipBlend);
+
       // If chip blend is entered and not in the list, add it
-      if (formData.chipBlend && !chipBlends.some((b) => b.name.toLowerCase() === formData.chipBlend.toLowerCase())) {
+      if (normalizedChipBlend && !chipBlends.some((b) => normalizeChipBlendName(b.name) === normalizedChipBlend)) {
         const newBlend: ChipBlend = {
           id: generateId(),
-          name: formData.chipBlend,
+          name: normalizedChipBlend,
         };
         await addChipBlend(newBlend);
         setChipBlends([...chipBlends, newBlend]);
@@ -431,7 +435,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
         jobHours: totalHours, // Store total hours for backward compatibility
         installSchedule: installSchedule.length > 0 ? installSchedule : undefined,
         totalPrice: parseFloat(formData.totalPrice) || 0,
-        chipBlend: formData.chipBlend || undefined,
+        chipBlend: normalizedChipBlend || undefined,
         baseColor: formData.baseColor || undefined,
         status: formData.status,
         notes: formData.notes || undefined,
@@ -494,9 +498,10 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
       return null;
     }
 
-    // Find matching inventory by blend name (case-insensitive)
+    // Find matching inventory by blend name (using normalized comparison)
+    const normalizedFormBlend = normalizeChipBlendName(formData.chipBlend);
     const inventoryItem = chipInventory.find(
-      (inv) => inv.blend.toLowerCase() === formData.chipBlend.toLowerCase()
+      (inv) => normalizeChipBlendName(inv.blend) === normalizedFormBlend
     );
 
     if (!inventoryItem || inventoryItem.pounds <= 0) {
