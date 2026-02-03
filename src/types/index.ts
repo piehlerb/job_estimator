@@ -58,6 +58,7 @@ export interface Pricing {
   id: string;
   verticalPricePerSqft: number; // DEPRECATED: Moved to ChipSystem - kept for backward compatibility
   antiSlipPricePerSqft: number; // Price per sqft for anti-slip additive
+  abrasionResistancePricePerSqft: number; // Price per sqft for abrasion resistance additive
   coatingRemovalPaintPerSqft: number; // Price per sqft for paint removal
   coatingRemovalEpoxyPerSqft: number; // Price per sqft for epoxy removal
   moistureMitigationPerSqft: number; // Price per sqft for moisture mitigation
@@ -199,6 +200,7 @@ export interface JobCalculation {
   suggestedFloorPrice: number;
   suggestedVerticalPrice: number;
   suggestedAntiSlipPrice: number;
+  suggestedAbrasionResistancePrice: number;
   suggestedCoatingRemovalPrice: number;
   suggestedMoistureMitigationPrice: number;
   suggestedTotal: number;

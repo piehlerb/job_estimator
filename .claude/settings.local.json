@@ -23,7 +23,10 @@
       "Bash(git push)",
       "Bash(gh run list:*)",
       "Bash(node -e:*)",
-      "Bash(git commit -m \"$(cat <<''EOF''\nFix asset paths for GitHub Pages deployment\n\n- Change absolute paths to relative paths for manifest, icons, and service worker\n- Fixes blank page issue when deployed to GitHub Pages subdirectory\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")"
+      "Bash(git commit -m \"$(cat <<''EOF''\nFix asset paths for GitHub Pages deployment\n\n- Change absolute paths to relative paths for manifest, icons, and service worker\n- Fixes blank page issue when deployed to GitHub Pages subdirectory\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(tasklist:*)",
+      "Bash(echo:*)",
+      "Bash(npx tsc:*)"
     ],
     "deny": [],
     "ask": []

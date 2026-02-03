@@ -1,5 +1,5 @@
 // Cache version - UPDATE THIS WITH EACH DEPLOYMENT
-const CACHE_VERSION = '1.5.2';
+const CACHE_VERSION = '1.5.3';
 const CACHE_NAME = `estimation-app-v${CACHE_VERSION}`;
 const BASE_PATH = '/job_estimator';
 

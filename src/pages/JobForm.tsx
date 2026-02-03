@@ -1199,6 +1199,10 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                     <p className="text-sm sm:text-base md:text-lg font-semibold text-blue-900">{formatCurrency(calculation.suggestedAntiSlipPrice)}</p>
                   </div>
                   <div>
+                    <p className="text-xs text-blue-600">Abrasion Resistance Price - {formatCurrency(usedPricing.abrasionResistancePricePerSqft)}/sqft</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold text-blue-900">{formatCurrency(calculation.suggestedAbrasionResistancePrice)}</p>
+                  </div>
+                  <div>
                     <p className="text-xs text-blue-600">
                       Coating Removal - {formData.coatingRemoval}
                       {formData.coatingRemoval === 'Paint' && ` - ${formatCurrency(usedPricing.coatingRemovalPaintPerSqft)}/sqft`}

@@ -191,6 +191,9 @@ export function calculateJobOutputs(
   // Suggested anti-slip price: floorFootage * pricing.antiSlipPricePerSqft (only if anti-slip is enabled)
   const suggestedAntiSlipPrice = antiSlip ? floorFootage * pricing.antiSlipPricePerSqft : 0;
 
+  // Suggested abrasion resistance price: floorFootage * pricing.abrasionResistancePricePerSqft (only if abrasion resistance is enabled)
+  const suggestedAbrasionResistancePrice = abrasionResistance ? floorFootage * pricing.abrasionResistancePricePerSqft : 0;
+
   // Suggested coating removal price: floorFootage * price per sqft based on removal type
   const suggestedCoatingRemovalPrice = coatingRemoval === 'Paint'
     ? floorFootage * pricing.coatingRemovalPaintPerSqft
@@ -204,7 +207,7 @@ export function calculateJobOutputs(
   // Calculate initial floor price and total
   let suggestedFloorPrice = suggestedFloorPricePerSqftInitial * floorFootage;
   let suggestedTotalRaw = suggestedCrackPrice + suggestedFloorPrice + suggestedVerticalPrice
-    + suggestedAntiSlipPrice + suggestedCoatingRemovalPrice + suggestedMoistureMitigationPrice + suggestedDiscount;
+    + suggestedAntiSlipPrice + suggestedAbrasionResistancePrice + suggestedCoatingRemovalPrice + suggestedMoistureMitigationPrice + suggestedDiscount;
 
   // If total is below minimum $2500, adjust floor price to meet minimum
   const MINIMUM_JOB_PRICE = 2500;
@@ -258,6 +261,7 @@ export function calculateJobOutputs(
     suggestedFloorPrice,
     suggestedVerticalPrice,
     suggestedAntiSlipPrice,
+    suggestedAbrasionResistancePrice,
     suggestedCoatingRemovalPrice,
     suggestedMoistureMitigationPrice,
     suggestedTotal,

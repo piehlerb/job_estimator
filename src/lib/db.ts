@@ -457,6 +457,7 @@ export function getDefaultPricing(): Pricing {
     id: 'current',
     verticalPricePerSqft: 12,
     antiSlipPricePerSqft: 0.50,
+    abrasionResistancePricePerSqft: 0.50,
     coatingRemovalPaintPerSqft: 1.00,
     coatingRemovalEpoxyPerSqft: 2.00,
     moistureMitigationPerSqft: 3.00,

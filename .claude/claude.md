@@ -289,6 +289,8 @@ Update the version number when deploying changes that users need to see immediat
    - Delete old caches
    - Force fresh asset downloads
 
+**IMPORTANT: Always bump the version before pushing to GitHub!** This ensures users get the latest changes immediately and the service worker cache is properly invalidated.
+
 ### Version Display
 
 The version is shown in the sidebar footer, bottom-left corner (e.g., "v1.1.0").

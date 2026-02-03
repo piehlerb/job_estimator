@@ -13,6 +13,7 @@ export default function Pricing() {
 
   const [pricingForm, setPricingForm] = useState({
     antiSlipPricePerSqft: '',
+    abrasionResistancePricePerSqft: '',
     coatingRemovalPaintPerSqft: '',
     coatingRemovalEpoxyPerSqft: '',
     moistureMitigationPerSqft: '',
@@ -35,6 +36,7 @@ export default function Pricing() {
       setPricing(mergedPricing);
       setPricingForm({
         antiSlipPricePerSqft: storedPricing.antiSlipPricePerSqft.toString(),
+        abrasionResistancePricePerSqft: storedPricing.abrasionResistancePricePerSqft?.toString() || '0',
         coatingRemovalPaintPerSqft: storedPricing.coatingRemovalPaintPerSqft.toString(),
         coatingRemovalEpoxyPerSqft: storedPricing.coatingRemovalEpoxyPerSqft.toString(),
         moistureMitigationPerSqft: storedPricing.moistureMitigationPerSqft.toString(),
@@ -52,6 +54,7 @@ export default function Pricing() {
       const updatedPricing: PricingType = {
         ...pricing,
         antiSlipPricePerSqft: parseFloat(pricingForm.antiSlipPricePerSqft) || 0,
+        abrasionResistancePricePerSqft: parseFloat(pricingForm.abrasionResistancePricePerSqft) || 0,
         coatingRemovalPaintPerSqft: parseFloat(pricingForm.coatingRemovalPaintPerSqft) || 0,
         coatingRemovalEpoxyPerSqft: parseFloat(pricingForm.coatingRemovalEpoxyPerSqft) || 0,
         moistureMitigationPerSqft: parseFloat(pricingForm.moistureMitigationPerSqft) || 0,
@@ -97,6 +100,18 @@ export default function Pricing() {
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
               <p className="text-xs text-slate-500 mt-1">Multiplied by floor square footage (when anti-slip is selected)</p>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-900 mb-2">Abrasion Resistance Price per Sqft ($)</label>
+              <input
+                type="number"
+                step="0.01"
+                placeholder="0.00"
+                value={pricingForm.abrasionResistancePricePerSqft}
+                onChange={(e) => setPricingForm({ ...pricingForm, abrasionResistancePricePerSqft: e.target.value })}
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <p className="text-xs text-slate-500 mt-1">Multiplied by floor square footage (when abrasion resistance is selected)</p>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
