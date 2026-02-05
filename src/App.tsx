@@ -26,7 +26,7 @@ function App() {
   const { user, loading } = useAuth();
 
   // Auto sync - enabled only when user is authenticated and online
-  const { isSyncing, lastSyncTime, triggerSync } = useAutoSync({
+  const { triggerSync } = useAutoSync({
     enabled: !!user && !offlineMode,
     intervalMinutes: 5, // Sync every 5 minutes
     onSyncComplete: (result) => {
@@ -89,8 +89,6 @@ function App() {
       onSidebarToggle={() => setSidebarOpen(!sidebarOpen)}
       onNavigate={handleNavigation}
       isOnline={isOnline}
-      isSyncing={isSyncing}
-      lastSyncTime={lastSyncTime}
       onManualSync={triggerSync}
     >
       {currentPage === 'dashboard' && (

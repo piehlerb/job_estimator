@@ -14,30 +14,75 @@ export function setAutoSync(enabled: boolean): void {
 }
 
 /**
+ * Add a record to the sync queue
+ */
+async function queueForSync(
+  storeName: string,
+  recordId: string,
+  operation: 'create' | 'update' | 'delete'
+): Promise<void> {
+  try {
+    const { addToSyncQueue } = await import('./syncQueue');
+    await addToSyncQueue(storeName, recordId, operation);
+  } catch (error) {
+    console.warn('Failed to queue record for sync:', error);
+  }
+}
+
+/**
  * Trigger a background sync (non-blocking)
  * This is called automatically after CRUD operations
+ * Now uses a debounced approach to batch changes
  */
+let syncTimeout: NodeJS.Timeout | null = null;
+const SYNC_DEBOUNCE_MS = 2000; // Wait 2 seconds after last change before syncing
+
 async function triggerBackgroundSync(): Promise<void> {
   if (!autoSyncEnabled) return;
 
-  try {
-    // Dynamic import to avoid circular dependency
-    const { syncWithSupabase } = await import('./sync');
-    const { getCurrentUser } = await import('./auth');
+  // Clear any existing timeout
+  if (syncTimeout) {
+    clearTimeout(syncTimeout);
+  }
 
-    // Only sync if user is authenticated
-    const user = await getCurrentUser();
-    if (!user) {
-      return; // Silently skip if not authenticated
+  // Debounce: wait for changes to settle before syncing
+  syncTimeout = setTimeout(async () => {
+    try {
+      // Dynamic import to avoid circular dependency
+      const { syncWithSupabase } = await import('./sync');
+      const { getCurrentUser } = await import('./auth');
+
+      // Only sync if user is authenticated
+      const user = await getCurrentUser();
+      if (!user) {
+        return; // Silently skip if not authenticated
+      }
+
+      // Run sync in background without blocking
+      syncWithSupabase().catch(error => {
+        console.warn('Background sync failed:', error);
+        // Notify user of sync failure
+        notifySyncError(error);
+      });
+    } catch (error) {
+      // Silently fail - don't disrupt user operations
+      console.warn('Failed to trigger background sync:', error);
     }
+  }, SYNC_DEBOUNCE_MS);
+}
 
-    // Run sync in background without blocking
-    syncWithSupabase().catch(error => {
-      console.warn('Background sync failed:', error);
-    });
-  } catch (error) {
-    // Silently fail - don't disrupt user operations
-    console.warn('Failed to trigger background sync:', error);
+/**
+ * Notify user of sync errors
+ */
+async function notifySyncError(error: any): Promise<void> {
+  console.error('Sync error:', error.message);
+
+  // Try to update SyncContext if available
+  try {
+    // This is called from a non-React context, so we can't use hooks
+    // The error will be caught by the sync function and displayed via SyncContext
+  } catch (err) {
+    // Ignore - context may not be available
   }
 }
 
@@ -145,6 +190,9 @@ export async function addSystem(system: ChipSystem): Promise<void> {
     request.onsuccess = () => resolve();
   });
 
+  // Queue for sync
+  await queueForSync('systems', system.id, 'create');
+
   // Trigger background sync
   await triggerBackgroundSync();
 }
@@ -187,6 +235,9 @@ export async function addPricingVariable(variable: PricingVariable): Promise<voi
     request.onerror = () => reject(request.error);
     request.onsuccess = () => resolve();
   });
+
+  // Queue for sync
+  await queueForSync('pricingVariables', variable.id, 'create');
 
   // Trigger background sync
   await triggerBackgroundSync();
@@ -246,6 +297,9 @@ export async function addJob(job: Job): Promise<void> {
     request.onsuccess = () => resolve();
   });
 
+  // Queue for sync
+  await queueForSync('jobs', job.id, 'create');
+
   // Trigger background sync
   await triggerBackgroundSync();
 }
@@ -260,6 +314,9 @@ export async function updateJob(job: Job): Promise<void> {
     request.onerror = () => reject(request.error);
     request.onsuccess = () => resolve();
   });
+
+  // Queue for sync
+  await queueForSync('jobs', job.id, 'update');
 
   // Trigger background sync
   await triggerBackgroundSync();
@@ -287,6 +344,9 @@ export async function deleteJob(id: string): Promise<void> {
     };
   });
 
+  // Queue for sync
+  await queueForSync('jobs', id, 'delete');
+
   // Trigger background sync
   await triggerBackgroundSync();
 }
@@ -301,6 +361,9 @@ export async function updateSystem(system: ChipSystem): Promise<void> {
     request.onerror = () => reject(request.error);
     request.onsuccess = () => resolve();
   });
+
+  // Queue for sync
+  await queueForSync('systems', system.id, 'update');
 
   // Trigger background sync
   await triggerBackgroundSync();
@@ -328,6 +391,9 @@ export async function deleteSystem(id: string): Promise<void> {
     };
   });
 
+  // Queue for sync
+  await queueForSync('systems', id, 'delete');
+
   // Trigger background sync
   await triggerBackgroundSync();
 }
@@ -342,6 +408,9 @@ export async function updatePricingVariable(variable: PricingVariable): Promise<
     request.onerror = () => reject(request.error);
     request.onsuccess = () => resolve();
   });
+
+  // Queue for sync
+  await queueForSync('pricingVariables', variable.id, 'update');
 
   // Trigger background sync
   await triggerBackgroundSync();
@@ -368,6 +437,9 @@ export async function deletePricingVariable(id: string): Promise<void> {
       }
     };
   });
+
+  // Queue for sync
+  await queueForSync('pricingVariables', id, 'delete');
 
   // Trigger background sync
   await triggerBackgroundSync();
@@ -396,6 +468,9 @@ export async function saveCosts(costs: Costs): Promise<void> {
     request.onerror = () => reject(request.error);
     request.onsuccess = () => resolve();
   });
+
+  // Queue for sync
+  await queueForSync('costs', 'current', 'update');
 
   // Trigger background sync
   await triggerBackgroundSync();
@@ -445,6 +520,9 @@ export async function savePricing(pricing: Pricing): Promise<void> {
       resolve();
     };
   });
+
+  // Queue for sync
+  await queueForSync('pricing', 'current', 'update');
 
   // Trigger background sync
   console.log('[DB] Triggering background sync...');
@@ -513,6 +591,9 @@ export async function addLaborer(laborer: Laborer): Promise<void> {
     request.onsuccess = () => resolve();
   });
 
+  // Queue for sync
+  await queueForSync('laborers', laborer.id, 'create');
+
   // Trigger background sync
   await triggerBackgroundSync();
 }
@@ -527,6 +608,9 @@ export async function updateLaborer(laborer: Laborer): Promise<void> {
     request.onerror = () => reject(request.error);
     request.onsuccess = () => resolve();
   });
+
+  // Queue for sync
+  await queueForSync('laborers', laborer.id, 'update');
 
   // Trigger background sync
   await triggerBackgroundSync();
@@ -553,6 +637,9 @@ export async function deleteLaborer(id: string): Promise<void> {
       }
     };
   });
+
+  // Queue for sync
+  await queueForSync('laborers', id, 'delete');
 
   // Trigger background sync
   await triggerBackgroundSync();
@@ -604,6 +691,9 @@ export async function addChipBlend(blend: ChipBlend): Promise<void> {
     request.onsuccess = () => resolve();
   });
 
+  // Queue for sync
+  await queueForSync('chipBlends', blend.id, 'create');
+
   // Trigger background sync
   await triggerBackgroundSync();
 }
@@ -648,6 +738,9 @@ export async function saveChipInventory(inventory: ChipInventory): Promise<void>
     request.onsuccess = () => resolve();
   });
 
+  // Queue for sync
+  await queueForSync('chipInventory', inventory.id, 'update');
+
   // Trigger background sync
   await triggerBackgroundSync();
 }
@@ -673,6 +766,9 @@ export async function deleteChipInventory(id: string): Promise<void> {
       }
     };
   });
+
+  // Queue for sync
+  await queueForSync('chipInventory', id, 'delete');
 
   // Trigger background sync
   await triggerBackgroundSync();
@@ -702,6 +798,9 @@ export async function saveTopCoatInventory(inventory: TopCoatInventory): Promise
     request.onsuccess = () => resolve();
   });
 
+  // Queue for sync
+  await queueForSync('topCoatInventory', 'current', 'update');
+
   // Trigger background sync
   await triggerBackgroundSync();
 }
@@ -730,6 +829,9 @@ export async function saveBaseCoatInventory(inventory: BaseCoatInventory): Promi
     request.onsuccess = () => resolve();
   });
 
+  // Queue for sync
+  await queueForSync('baseCoatInventory', 'current', 'update');
+
   // Trigger background sync
   await triggerBackgroundSync();
 }
@@ -757,6 +859,9 @@ export async function saveMiscInventory(inventory: MiscInventory): Promise<void>
     request.onerror = () => reject(request.error);
     request.onsuccess = () => resolve();
   });
+
+  // Queue for sync
+  await queueForSync('miscInventory', 'current', 'update');
 
   // Trigger background sync
   await triggerBackgroundSync();

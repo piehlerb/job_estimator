@@ -4,13 +4,16 @@ import App from './App.tsx';
 import './index.css';
 import { initDB } from './lib/db.ts';
 import { AuthProvider } from './contexts/AuthContext.tsx';
+import { SyncProvider } from './contexts/SyncContext.tsx';
 
 initDB().catch(console.error);
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AuthProvider>
-      <App />
+      <SyncProvider>
+        <App />
+      </SyncProvider>
     </AuthProvider>
   </StrictMode>
 );

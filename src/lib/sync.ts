@@ -28,6 +28,12 @@ import {
   getBaseCoatInventory,
   getMiscInventory,
 } from './db';
+import {
+  getSyncQueue,
+  clearSyncQueue,
+  hasPendingChanges as checkPendingChanges,
+  getPendingChangesCount,
+} from './syncQueue';
 
 // Sync state stored in IndexedDB
 const SYNC_STATE_KEY = 'sync_state';
@@ -77,7 +83,7 @@ async function setLastSyncTimestamp(timestamp: string): Promise<void> {
 }
 
 /**
- * Push local data to Supabase
+ * Push local data to Supabase (incremental - only changed records)
  */
 export async function pushToSupabase(): Promise<{
   recordsPushed: number;
@@ -92,8 +98,140 @@ export async function pushToSupabase(): Promise<{
       throw new Error('User not authenticated');
     }
 
+    // Get pending changes from queue
+    const pendingChanges = await getSyncQueue();
+
+    if (pendingChanges.length === 0) {
+      console.log('[Sync] No pending changes to push');
+      return { recordsPushed: 0, errors: [] };
+    }
+
+    console.log(`[Sync] Pushing ${pendingChanges.length} pending change(s)`);
+
+    // Group changes by store
+    const changesByStore = new Map<string, Set<string>>();
+    for (const change of pendingChanges) {
+      if (!changesByStore.has(change.storeName)) {
+        changesByStore.set(change.storeName, new Set());
+      }
+      changesByStore.get(change.storeName)!.add(change.recordId);
+    }
+
+    // Define getters for each store
+    const storeGetters: Record<string, () => Promise<any[]>> = {
+      systems: getAllSystemsForSync,
+      pricingVariables: getAllPricingVariablesForSync,
+      costs: async () => [await getCosts()].filter(Boolean),
+      pricing: async () => [await getPricing()].filter(Boolean),
+      laborers: getAllLaborersForSync,
+      chipBlends: getAllChipBlendsForSync,
+      chipInventory: getAllChipInventoryForSync,
+      topCoatInventory: async () => [await getTopCoatInventory()].filter(Boolean),
+      baseCoatInventory: async () => [await getBaseCoatInventory()].filter(Boolean),
+      miscInventory: async () => [await getMiscInventory()].filter(Boolean),
+      jobs: getAllJobsForSync,
+    };
+
+    // Process each store with pending changes
+    for (const [storeName, recordIds] of changesByStore.entries()) {
+      try {
+        const getter = storeGetters[storeName];
+        if (!getter) {
+          console.warn(`[Sync] No getter found for store: ${storeName}`);
+          continue;
+        }
+
+        // Get all records from store, then filter to only changed ones
+        const allRecords = await getter();
+        const changedRecords = allRecords.filter((record: any) =>
+          recordIds.has(record.id)
+        );
+
+        if (changedRecords.length === 0) {
+          console.log(`[Sync] No changed records found for ${storeName}`);
+          continue;
+        }
+
+        const tableName = getSupabaseTableName(storeName);
+        console.log(
+          `[Sync] Pushing ${changedRecords.length} changed record(s) to ${tableName}`
+        );
+
+        // Convert to snake_case and add user_id
+        const recordsToSync = changedRecords.map((record: any) => {
+          const converted = objectToSnakeCase(record);
+          // Remove any fields that don't belong (like old chip_size)
+          const { chip_size, ...cleanRecord } = converted;
+          return {
+            ...cleanRecord,
+            user_id: user.id,
+            synced_at: new Date().toISOString(),
+            // Preserve deleted flag if present
+            deleted: record.deleted || false,
+          };
+        });
+
+        // Batch insert/upsert
+        const batches = batchArray(recordsToSync, BATCH_SIZE);
+
+        for (const batch of batches) {
+          const { error } = await supabase.from(tableName).upsert(batch, {
+            onConflict: 'id',
+            ignoreDuplicates: false,
+          });
+
+          if (error) {
+            console.error(`[Sync] Error syncing ${storeName}:`, error);
+            console.error(`[Sync] Failed batch data:`, batch);
+            errors.push(
+              `${storeName}: ${error.message} - ${error.details || ''} - ${
+                error.hint || ''
+              }`
+            );
+          } else {
+            console.log(
+              `[Sync] Successfully synced ${batch.length} record(s) to ${tableName}`
+            );
+            recordsPushed += batch.length;
+          }
+        }
+      } catch (error: any) {
+        errors.push(`${storeName}: ${error.message}`);
+      }
+    }
+
+    // Clear the sync queue after successful push
+    if (errors.length === 0) {
+      await clearSyncQueue();
+      console.log('[Sync] Cleared sync queue after successful push');
+    }
+
+    return { recordsPushed, errors };
+  } catch (error: any) {
+    errors.push(`Push failed: ${error.message}`);
+    return { recordsPushed: 0, errors };
+  }
+}
+
+/**
+ * Push ALL data to Supabase (full sync - use for initial sync or force sync)
+ */
+export async function pushAllToSupabase(): Promise<{
+  recordsPushed: number;
+  errors: string[];
+}> {
+  const errors: string[] = [];
+  let recordsPushed = 0;
+
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    console.log('[Sync] Performing FULL push of all data');
+
     // Define tables to sync in order (respecting dependencies)
-    // Use ForSync versions to include deleted records
     const tablesToSync = [
       { store: 'systems', getter: getAllSystemsForSync },
       { store: 'pricingVariables', getter: getAllPricingVariablesForSync },
@@ -117,43 +255,33 @@ export async function pushToSupabase(): Promise<{
         }
 
         const tableName = getSupabaseTableName(store);
-        console.log(`[Sync] Syncing ${records.length} record(s) to ${tableName}`, store === 'pricing' ? records : '');
+        console.log(`[Sync] Syncing ${records.length} record(s) to ${tableName}`);
 
         // Convert to snake_case and add user_id
         const recordsToSync = records.map((record: any) => {
           const converted = objectToSnakeCase(record);
-          // Remove any fields that don't belong (like old chip_size)
           const { chip_size, ...cleanRecord } = converted;
           return {
             ...cleanRecord,
             user_id: user.id,
             synced_at: new Date().toISOString(),
-            // Preserve deleted flag if present
             deleted: record.deleted || false,
           };
         });
-
-        if (store === 'pricing') {
-          console.log('[Sync] Pricing records to sync:', recordsToSync);
-        }
 
         // Batch insert/upsert
         const batches = batchArray(recordsToSync, BATCH_SIZE);
 
         for (const batch of batches) {
-          const { error } = await supabase
-            .from(tableName)
-            .upsert(batch, {
-              onConflict: 'id',
-              ignoreDuplicates: false,
-            });
+          const { error } = await supabase.from(tableName).upsert(batch, {
+            onConflict: 'id',
+            ignoreDuplicates: false,
+          });
 
           if (error) {
             console.error(`[Sync] Error syncing ${store}:`, error);
-            console.error(`[Sync] Failed batch data:`, batch);
-            errors.push(`${store}: ${error.message} - ${error.details || ''} - ${error.hint || ''}`);
+            errors.push(`${store}: ${error.message}`);
           } else {
-            console.log(`[Sync] Successfully synced ${batch.length} record(s) to ${tableName}`);
             recordsPushed += batch.length;
           }
         }
@@ -343,7 +471,5 @@ export async function syncTable(tableName: string): Promise<void> {
  * Check if sync is needed (has local changes not synced)
  */
 export async function hasPendingChanges(): Promise<boolean> {
-  // Check if any records have been modified since last sync
-  // This would check each table for records where updatedAt > syncedAt
-  return false; // TODO: Implement
+  return checkPendingChanges();
 }

@@ -3,9 +3,10 @@
  * Handles automatic synchronization with Supabase
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { syncWithSupabase } from '../lib/sync';
 import { useAuth } from '../contexts/AuthContext';
+import { useSyncStatus } from '../contexts/SyncContext';
 import type { SyncResult } from '../types';
 
 interface UseAutoSyncOptions {
@@ -24,9 +25,13 @@ export function useAutoSync(options: UseAutoSyncOptions = {}) {
   } = options;
 
   const { user } = useAuth();
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [lastSyncResult, setLastSyncResult] = useState<SyncResult | null>(null);
-  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+  const {
+    isSyncing,
+    setIsSyncing,
+    setSyncResult,
+    setSyncError,
+    refreshPendingCount,
+  } = useSyncStatus();
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   /**
@@ -52,12 +57,14 @@ export function useAutoSync(options: UseAutoSyncOptions = {}) {
 
       const result = await syncWithSupabase();
 
-      setLastSyncResult(result);
-      setLastSyncTime(new Date());
+      setSyncResult(result);
 
       if (!silent) {
         console.log('Sync completed:', result);
       }
+
+      // Refresh pending changes count
+      await refreshPendingCount();
 
       if (onSyncComplete) {
         onSyncComplete(result);
@@ -66,6 +73,8 @@ export function useAutoSync(options: UseAutoSyncOptions = {}) {
       return result;
     } catch (error: any) {
       console.error('Sync failed:', error);
+
+      setSyncError(error.message);
 
       if (onSyncError) {
         onSyncError(error);
@@ -136,9 +145,6 @@ export function useAutoSync(options: UseAutoSyncOptions = {}) {
   }, [user, enabled]);
 
   return {
-    isSyncing,
-    lastSyncResult,
-    lastSyncTime,
     triggerSync,
   };
 }
