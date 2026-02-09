@@ -13,6 +13,7 @@ export interface ChipSystem {
   verticalPricePerSqft?: number; // Price per sqft for vertical surfaces
   floorPriceMin?: number; // Minimum floor price per sqft for suggested pricing
   floorPriceMax?: number; // Maximum floor price per sqft for suggested pricing
+  targetEffectivePricePerSqft?: number; // Target effective price (total job price / floor sqft) for margin optimization
   createdAt: string;
   updatedAt: string;
   deleted?: boolean;

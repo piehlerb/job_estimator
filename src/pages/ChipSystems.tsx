@@ -28,6 +28,7 @@ export default function ChipSystems() {
     verticalPricePerSqft: '',
     floorPriceMin: '',
     floorPriceMax: '',
+    targetEffectivePricePerSqft: '',
   });
 
   useEffect(() => {
@@ -57,6 +58,7 @@ export default function ChipSystems() {
         verticalPricePerSqft: parseFloat(systemForm.verticalPricePerSqft) || 0.75,
         floorPriceMin: parseFloat(systemForm.floorPriceMin) || 6.00,
         floorPriceMax: parseFloat(systemForm.floorPriceMax) || 8.00,
+        targetEffectivePricePerSqft: systemForm.targetEffectivePricePerSqft ? parseFloat(systemForm.targetEffectivePricePerSqft) : undefined,
         createdAt: editingSystem?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -70,7 +72,7 @@ export default function ChipSystems() {
       await loadData();
       setShowSystemForm(false);
       setEditingSystem(null);
-      setSystemForm({ name: '', feetPerLb: '', boxCost: '', baseSpread: '', topSpread: '', cyclo1Spread: '', verticalPricePerSqft: '', floorPriceMin: '', floorPriceMax: '' });
+      setSystemForm({ name: '', feetPerLb: '', boxCost: '', baseSpread: '', topSpread: '', cyclo1Spread: '', verticalPricePerSqft: '', floorPriceMin: '', floorPriceMax: '', targetEffectivePricePerSqft: '' });
     } catch (error) {
       console.error('Error saving system:', error);
     }
@@ -88,6 +90,7 @@ export default function ChipSystems() {
       verticalPricePerSqft: (system.verticalPricePerSqft ?? 0.75).toString(),
       floorPriceMin: (system.floorPriceMin ?? 6.00).toString(),
       floorPriceMax: (system.floorPriceMax ?? 8.00).toString(),
+      targetEffectivePricePerSqft: system.targetEffectivePricePerSqft ? system.targetEffectivePricePerSqft.toString() : '',
     });
     setShowSystemForm(true);
   };
@@ -106,7 +109,7 @@ export default function ChipSystems() {
           <button
             onClick={() => {
               setEditingSystem(null);
-              setSystemForm({ name: '', feetPerLb: '', boxCost: '', baseSpread: '', topSpread: '', cyclo1Spread: '', verticalPricePerSqft: '', floorPriceMin: '', floorPriceMax: '' });
+              setSystemForm({ name: '', feetPerLb: '', boxCost: '', baseSpread: '', topSpread: '', cyclo1Spread: '', verticalPricePerSqft: '', floorPriceMin: '', floorPriceMax: '', targetEffectivePricePerSqft: '' });
               setShowSystemForm(true);
             }}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
@@ -122,7 +125,7 @@ export default function ChipSystems() {
             <button
               onClick={() => {
                 setEditingSystem(null);
-                setSystemForm({ name: '', feetPerLb: '', boxCost: '', baseSpread: '', topSpread: '', cyclo1Spread: '', verticalPricePerSqft: '', floorPriceMin: '', floorPriceMax: '' });
+                setSystemForm({ name: '', feetPerLb: '', boxCost: '', baseSpread: '', topSpread: '', cyclo1Spread: '', verticalPricePerSqft: '', floorPriceMin: '', floorPriceMax: '', targetEffectivePricePerSqft: '' });
                 setShowSystemForm(true);
               }}
               className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
@@ -248,7 +251,7 @@ export default function ChipSystems() {
               </div>
               <div className="border-t border-slate-200 my-4"></div>
               <h5 className="text-md font-semibold text-slate-900 mb-3">Pricing Configuration</h5>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-slate-900 mb-2">Vertical Price per Sqft ($)</label>
                   <input
@@ -261,6 +264,20 @@ export default function ChipSystems() {
                   />
                   <p className="text-xs text-slate-500 mt-1">Price per sqft for vertical surfaces</p>
                 </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-900 mb-2">Target Effective Price per Sqft ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="7.00"
+                    value={systemForm.targetEffectivePricePerSqft}
+                    onChange={(e) => setSystemForm({ ...systemForm, targetEffectivePricePerSqft: e.target.value })}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">Target total price / floor sqft (optional)</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4 mt-4">
                 <div>
                   <label className="block text-sm font-semibold text-slate-900 mb-2">Floor Price Min ($)</label>
                   <input
