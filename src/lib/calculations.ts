@@ -88,9 +88,11 @@ export function calculateJobOutputs(
   const baseCost = baseGallons * baseCostPerGal;
 
   // Top gallons: floor / topSpread + (vertical / topSpread) * 1.25
-  const topGallons = topSpread > 0
+  // If double broadcast, multiply by 2
+  const baseTopGallons = topSpread > 0
     ? (floorFootage / topSpread) + ((verticalFootage / topSpread) * 1.25)
     : 0;
+  const topGallons = system.doubleBroadcast ? baseTopGallons * 2 : baseTopGallons;
 
   // Top cost
   const topCost = topGallons * topCostPerGal;

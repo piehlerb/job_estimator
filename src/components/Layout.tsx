@@ -1,4 +1,4 @@
-import { Menu, X, Wifi, WifiOff, Cog, Users, DollarSign, Cloud, Home, Plus, Package, CalendarDays, LogOut, User, RefreshCw } from 'lucide-react';
+import { Menu, X, Wifi, WifiOff, Cog, Users, DollarSign, Cloud, Home, Plus, Package, CalendarDays, LogOut, User, RefreshCw, Layers } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useSyncStatus } from '../contexts/SyncContext';
 import { SyncStatusIndicator } from './SyncStatusIndicator';
@@ -9,7 +9,7 @@ interface LayoutProps {
   children: React.ReactNode;
   sidebarOpen: boolean;
   onSidebarToggle: () => void;
-  onNavigate: (page: 'dashboard' | 'new-job' | 'edit-job' | 'chip-systems' | 'laborers' | 'costs' | 'pricing' | 'google-drive' | 'inventory' | 'calendar') => void;
+  onNavigate: (page: 'dashboard' | 'new-job' | 'edit-job' | 'chip-systems' | 'chip-blends' | 'laborers' | 'costs' | 'pricing' | 'google-drive' | 'inventory' | 'calendar') => void;
   isOnline: boolean;
   onManualSync?: () => void;
 }
@@ -109,6 +109,14 @@ export default function Layout({
             >
               <Cog size={18} className="md:w-5 md:h-5" />
               <span>Chip Systems</span>
+            </button>
+
+            <button
+              onClick={() => onNavigate('chip-blends')}
+              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors text-sm md:text-base"
+            >
+              <Layers size={18} className="md:w-5 md:h-5" />
+              <span>Chip Blends</span>
             </button>
 
             <button

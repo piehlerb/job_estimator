@@ -649,6 +649,9 @@ export async function deleteLaborer(id: string): Promise<void> {
 export interface ChipBlend {
   id: string;
   name: string;
+  systemIds?: string[]; // IDs of chip systems this blend is available with
+  createdAt?: string;
+  updatedAt?: string;
   deleted?: boolean;
 }
 
@@ -680,6 +683,18 @@ export async function getAllChipBlendsForSync(): Promise<ChipBlend[]> {
   });
 }
 
+export async function getChipBlend(id: string): Promise<ChipBlend | undefined> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['chipBlends'], 'readonly');
+    const store = transaction.objectStore('chipBlends');
+    const request = store.get(id);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result);
+  });
+}
+
 export async function addChipBlend(blend: ChipBlend): Promise<void> {
   const db = await getDB();
   await new Promise<void>((resolve, reject) => {
@@ -693,6 +708,49 @@ export async function addChipBlend(blend: ChipBlend): Promise<void> {
 
   // Queue for sync
   await queueForSync('chipBlends', blend.id, 'create');
+
+  // Trigger background sync
+  await triggerBackgroundSync();
+}
+
+export async function updateChipBlend(blend: ChipBlend): Promise<void> {
+  const db = await getDB();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(['chipBlends'], 'readwrite');
+    const store = transaction.objectStore('chipBlends');
+    const request = store.put(blend);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve();
+  });
+
+  // Queue for sync
+  await queueForSync('chipBlends', blend.id, 'update');
+
+  // Trigger background sync
+  await triggerBackgroundSync();
+}
+
+export async function deleteChipBlend(id: string): Promise<void> {
+  const db = await getDB();
+  const blend = await getChipBlend(id);
+  if (!blend) return;
+
+  // Soft delete
+  blend.deleted = true;
+  blend.updatedAt = new Date().toISOString();
+
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(['chipBlends'], 'readwrite');
+    const store = transaction.objectStore('chipBlends');
+    const request = store.put(blend);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve();
+  });
+
+  // Queue for sync
+  await queueForSync('chipBlends', id, 'delete');
 
   // Trigger background sync
   await triggerBackgroundSync();

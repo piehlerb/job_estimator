@@ -25,10 +25,12 @@ export default function ChipSystems() {
     baseSpread: '',
     topSpread: '',
     cyclo1Spread: '',
+    doubleBroadcast: false,
     verticalPricePerSqft: '',
     floorPriceMin: '',
     floorPriceMax: '',
     targetEffectivePricePerSqft: '',
+    notes: '',
   });
 
   useEffect(() => {
@@ -55,10 +57,12 @@ export default function ChipSystems() {
         baseSpread: parseFloat(systemForm.baseSpread) || 0,
         topSpread: parseFloat(systemForm.topSpread) || 0,
         cyclo1Spread: parseFloat(systemForm.cyclo1Spread) || 0,
+        doubleBroadcast: systemForm.doubleBroadcast,
         verticalPricePerSqft: parseFloat(systemForm.verticalPricePerSqft) || 0.75,
         floorPriceMin: parseFloat(systemForm.floorPriceMin) || 6.00,
         floorPriceMax: parseFloat(systemForm.floorPriceMax) || 8.00,
         targetEffectivePricePerSqft: systemForm.targetEffectivePricePerSqft ? parseFloat(systemForm.targetEffectivePricePerSqft) : undefined,
+        notes: systemForm.notes || undefined,
         createdAt: editingSystem?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -72,7 +76,7 @@ export default function ChipSystems() {
       await loadData();
       setShowSystemForm(false);
       setEditingSystem(null);
-      setSystemForm({ name: '', feetPerLb: '', boxCost: '', baseSpread: '', topSpread: '', cyclo1Spread: '', verticalPricePerSqft: '', floorPriceMin: '', floorPriceMax: '', targetEffectivePricePerSqft: '' });
+      setSystemForm({ name: '', feetPerLb: '', boxCost: '', baseSpread: '', topSpread: '', cyclo1Spread: '', doubleBroadcast: false, verticalPricePerSqft: '', floorPriceMin: '', floorPriceMax: '', targetEffectivePricePerSqft: '', notes: '' });
     } catch (error) {
       console.error('Error saving system:', error);
     }
@@ -87,10 +91,12 @@ export default function ChipSystems() {
       baseSpread: system.baseSpread.toString(),
       topSpread: system.topSpread.toString(),
       cyclo1Spread: (system.cyclo1Spread || 0).toString(),
+      doubleBroadcast: system.doubleBroadcast || false,
       verticalPricePerSqft: (system.verticalPricePerSqft ?? 0.75).toString(),
       floorPriceMin: (system.floorPriceMin ?? 6.00).toString(),
       floorPriceMax: (system.floorPriceMax ?? 8.00).toString(),
       targetEffectivePricePerSqft: system.targetEffectivePricePerSqft ? system.targetEffectivePricePerSqft.toString() : '',
+      notes: system.notes || '',
     });
     setShowSystemForm(true);
   };
@@ -109,7 +115,7 @@ export default function ChipSystems() {
           <button
             onClick={() => {
               setEditingSystem(null);
-              setSystemForm({ name: '', feetPerLb: '', boxCost: '', baseSpread: '', topSpread: '', cyclo1Spread: '', verticalPricePerSqft: '', floorPriceMin: '', floorPriceMax: '', targetEffectivePricePerSqft: '' });
+              setSystemForm({ name: '', feetPerLb: '', boxCost: '', baseSpread: '', topSpread: '', cyclo1Spread: '', doubleBroadcast: false, verticalPricePerSqft: '', floorPriceMin: '', floorPriceMax: '', targetEffectivePricePerSqft: '', notes: '' });
               setShowSystemForm(true);
             }}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
@@ -125,7 +131,7 @@ export default function ChipSystems() {
             <button
               onClick={() => {
                 setEditingSystem(null);
-                setSystemForm({ name: '', feetPerLb: '', boxCost: '', baseSpread: '', topSpread: '', cyclo1Spread: '', verticalPricePerSqft: '', floorPriceMin: '', floorPriceMax: '', targetEffectivePricePerSqft: '' });
+                setSystemForm({ name: '', feetPerLb: '', boxCost: '', baseSpread: '', topSpread: '', cyclo1Spread: '', doubleBroadcast: false, verticalPricePerSqft: '', floorPriceMin: '', floorPriceMax: '', targetEffectivePricePerSqft: '', notes: '' });
                 setShowSystemForm(true);
               }}
               className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
@@ -148,7 +154,13 @@ export default function ChipSystems() {
                   </p>
                   <p className="text-sm text-slate-600">
                     Base: {system.baseSpread} | Top: {system.topSpread} | Cyclo1: {system.cyclo1Spread || 0}
+                    {system.doubleBroadcast && <span className="ml-2 text-blue-600 font-semibold">• Double Broadcast</span>}
                   </p>
+                  {system.notes && (
+                    <p className="text-sm text-slate-500 mt-1 italic">
+                      {system.notes}
+                    </p>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <button
@@ -249,6 +261,20 @@ export default function ChipSystems() {
                   />
                 </div>
               </div>
+              <div className="mt-4">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={systemForm.doubleBroadcast}
+                    onChange={(e) => setSystemForm({ ...systemForm, doubleBroadcast: e.target.checked })}
+                    className="w-5 h-5 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                  />
+                  <div>
+                    <span className="text-sm font-semibold text-slate-900">Double Broadcast</span>
+                    <p className="text-xs text-slate-500 mt-0.5">Topcoat requirements will be doubled for this system</p>
+                  </div>
+                </label>
+              </div>
               <div className="border-t border-slate-200 my-4"></div>
               <h5 className="text-md font-semibold text-slate-900 mb-3">Pricing Configuration</h5>
               <div className="grid grid-cols-2 gap-4">
@@ -302,6 +328,18 @@ export default function ChipSystems() {
                   />
                   <p className="text-xs text-slate-500 mt-1">Maximum suggested floor price/sqft</p>
                 </div>
+              </div>
+              <div className="border-t border-slate-200 my-4"></div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-900 mb-2">Notes</label>
+                <textarea
+                  placeholder="Add any notes about this chip system..."
+                  value={systemForm.notes}
+                  onChange={(e) => setSystemForm({ ...systemForm, notes: e.target.value })}
+                  rows={3}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y"
+                />
+                <p className="text-xs text-slate-500 mt-1">Optional notes or comments about this system</p>
               </div>
               <div className="flex gap-3">
                 <button

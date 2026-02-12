@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard';
 import JobForm from './pages/JobForm';
 import JobSheet from './pages/JobSheet';
 import ChipSystems from './pages/ChipSystems';
+import ChipBlends from './pages/ChipBlends';
 import Laborers from './pages/Laborers';
 import Costs from './pages/Costs';
 import Pricing from './pages/Pricing';
@@ -15,7 +16,7 @@ import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { useAuth } from './contexts/AuthContext';
 import { useAutoSync } from './hooks/useAutoSync';
 
-type Page = 'dashboard' | 'new-job' | 'edit-job' | 'job-sheet' | 'chip-systems' | 'laborers' | 'costs' | 'pricing' | 'google-drive' | 'inventory' | 'calendar';
+type Page = 'dashboard' | 'new-job' | 'edit-job' | 'job-sheet' | 'chip-systems' | 'chip-blends' | 'laborers' | 'costs' | 'pricing' | 'google-drive' | 'inventory' | 'calendar';
 
 function App() {
   const [currentPage, setCurrentPage] = useState<Page>('dashboard');
@@ -106,6 +107,9 @@ function App() {
       )}
       {currentPage === 'chip-systems' && (
         <ChipSystems />
+      )}
+      {currentPage === 'chip-blends' && (
+        <ChipBlends />
       )}
       {currentPage === 'laborers' && (
         <Laborers />

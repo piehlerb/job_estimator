@@ -10,10 +10,12 @@ export interface ChipSystem {
   baseSpread: number;
   topSpread: number;
   cyclo1Spread: number;
+  doubleBroadcast?: boolean; // If true, topcoat requirements are doubled
   verticalPricePerSqft?: number; // Price per sqft for vertical surfaces
   floorPriceMin?: number; // Minimum floor price per sqft for suggested pricing
   floorPriceMax?: number; // Maximum floor price per sqft for suggested pricing
   targetEffectivePricePerSqft?: number; // Target effective price (total job price / floor sqft) for margin optimization
+  notes?: string; // Optional notes about this chip system
   createdAt: string;
   updatedAt: string;
   deleted?: boolean;
@@ -213,6 +215,9 @@ export interface JobCalculation {
 export interface ChipBlend {
   id: string;
   name: string;
+  systemIds?: string[]; // IDs of chip systems this blend is available with
+  createdAt?: string;
+  updatedAt?: string;
   deleted?: boolean;
 }
 

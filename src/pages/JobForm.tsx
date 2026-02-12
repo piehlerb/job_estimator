@@ -100,22 +100,6 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
     calculateCosts();
   }, [formData, systems, costs, pricing, activeLaborers, installSchedule, useCurrentValues, existingJob]);
 
-  // Auto-refresh when sync completes
-  useEffect(() => {
-    const handleSyncComplete = () => {
-      if (jobId) {
-        console.log('Sync completed, refreshing job data...');
-        loadData();
-      }
-    };
-
-    window.addEventListener('syncComplete', handleSyncComplete);
-
-    return () => {
-      window.removeEventListener('syncComplete', handleSyncComplete);
-    };
-  }, [jobId]);
-
   const loadData = async () => {
     console.log('[JobForm] Loading data, jobId:', jobId);
     setLoading(true);
@@ -256,7 +240,15 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
       ? { ...getDefaultPricing(), ...existingJob.pricingSnapshot }
       : pricing;
     setUsedPricing(pricingToUse);
-    const systemToUse = existingJob && !useCurrentValues ? existingJob.systemSnapshot : selectedSystem;
+
+    // For system snapshot, merge new fields from current system if they don't exist in snapshot
+    const systemToUse = existingJob && !useCurrentValues
+      ? {
+          ...existingJob.systemSnapshot,
+          // Merge doubleBroadcast from current system if not in snapshot
+          doubleBroadcast: existingJob.systemSnapshot.doubleBroadcast ?? selectedSystem?.doubleBroadcast,
+        }
+      : selectedSystem;
     const laborersToUse = getSelectedLaborers();
 
     const inputs = {
@@ -1160,10 +1152,6 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                     <p className="text-sm sm:text-base md:text-lg font-semibold">{formatCurrency(calculation.pricePerSqft)}</p>
                   </div>
                   <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
-                    <p className="text-xs text-slate-500">Total Costs</p>
-                    <p className="text-sm sm:text-base md:text-lg font-semibold">{formatCurrency(calculation.totalCosts)}</p>
-                  </div>
-                  <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
                     <p className="text-xs text-slate-500">Cost per Sqft</p>
                     <p className="text-sm sm:text-base md:text-lg font-semibold">{formatCurrency(calculation.totalCostsPerSqft)}</p>
                   </div>
@@ -1178,6 +1166,10 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                     <p className={`text-sm sm:text-base md:text-lg font-semibold ${calculation.marginPerDay >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                       {formatCurrency(calculation.marginPerDay)}
                     </p>
+                  </div>
+                  <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
+                    <p className="text-xs text-slate-500">Total Costs</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold">{formatCurrency(calculation.totalCosts)}</p>
                   </div>
                   <div className={`bg-white p-2 sm:p-3 rounded border ${(() => {
                     const totalPrice = parseFloat(formData.totalPrice) || 0;
