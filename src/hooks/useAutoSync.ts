@@ -66,6 +66,11 @@ export function useAutoSync(options: UseAutoSyncOptions = {}) {
       // Refresh pending changes count
       await refreshPendingCount();
 
+      // Dispatch custom event to notify components
+      window.dispatchEvent(new CustomEvent('syncComplete', {
+        detail: result
+      }));
+
       if (onSyncComplete) {
         onSyncComplete(result);
       }

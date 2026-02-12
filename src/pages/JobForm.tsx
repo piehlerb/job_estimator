@@ -100,6 +100,22 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
     calculateCosts();
   }, [formData, systems, costs, pricing, activeLaborers, installSchedule, useCurrentValues, existingJob]);
 
+  // Auto-refresh when sync completes
+  useEffect(() => {
+    const handleSyncComplete = () => {
+      if (jobId) {
+        console.log('Sync completed, refreshing job data...');
+        loadData();
+      }
+    };
+
+    window.addEventListener('syncComplete', handleSyncComplete);
+
+    return () => {
+      window.removeEventListener('syncComplete', handleSyncComplete);
+    };
+  }, [jobId]);
+
   const loadData = async () => {
     console.log('[JobForm] Loading data, jobId:', jobId);
     setLoading(true);
@@ -1161,6 +1177,24 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                     <p className="text-xs text-slate-500">Margin per Day</p>
                     <p className={`text-sm sm:text-base md:text-lg font-semibold ${calculation.marginPerDay >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                       {formatCurrency(calculation.marginPerDay)}
+                    </p>
+                  </div>
+                  <div className={`bg-white p-2 sm:p-3 rounded border ${(() => {
+                    const totalPrice = parseFloat(formData.totalPrice) || 0;
+                    const marginPct = totalPrice > 0 ? ((totalPrice - calculation.totalCosts) / totalPrice) * 100 : 0;
+                    return marginPct >= 30 ? 'border-green-300' : 'border-orange-300';
+                  })()}`}>
+                    <p className="text-xs text-slate-500">Actual Margin %</p>
+                    <p className={`text-sm sm:text-base md:text-lg font-semibold ${(() => {
+                      const totalPrice = parseFloat(formData.totalPrice) || 0;
+                      const marginPct = totalPrice > 0 ? ((totalPrice - calculation.totalCosts) / totalPrice) * 100 : 0;
+                      return marginPct >= 30 ? 'text-green-600' : 'text-orange-600';
+                    })()}`}>
+                      {(() => {
+                        const totalPrice = parseFloat(formData.totalPrice) || 0;
+                        const marginPct = totalPrice > 0 ? ((totalPrice - calculation.totalCosts) / totalPrice) * 100 : 0;
+                        return marginPct.toFixed(1);
+                      })()}%
                     </p>
                   </div>
                 </div>

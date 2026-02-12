@@ -30,6 +30,20 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
     loadJobs();
   }, []);
 
+  // Auto-refresh when sync completes
+  useEffect(() => {
+    const handleSyncComplete = () => {
+      console.log('Sync completed, refreshing dashboard data...');
+      loadJobs();
+    };
+
+    window.addEventListener('syncComplete', handleSyncComplete);
+
+    return () => {
+      window.removeEventListener('syncComplete', handleSyncComplete);
+    };
+  }, []);
+
   const loadJobs = async () => {
     setLoading(true);
     try {
@@ -319,7 +333,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
                         <p className="font-semibold text-slate-900">${job.totalPrice.toFixed(0)}</p>
                       </div>
                       <div>
-                        <p className="text-slate-500">Margin</p>
+                        <p className="text-slate-500">Actual Margin</p>
                         <p className={`font-semibold ${marginPct >= 30 ? 'text-green-600' : 'text-orange-600'}`}>
                           {marginPct.toFixed(0)}%
                         </p>
@@ -339,7 +353,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
                     <th className="px-4 lg:px-6 py-3 text-center text-sm font-semibold text-slate-700">Status</th>
                     <th className="px-4 lg:px-6 py-3 text-right text-sm font-semibold text-slate-700">Total Cost</th>
                     <th className="px-4 lg:px-6 py-3 text-right text-sm font-semibold text-slate-700">Total Price</th>
-                    <th className="px-4 lg:px-6 py-3 text-right text-sm font-semibold text-slate-700">Margin</th>
+                    <th className="px-4 lg:px-6 py-3 text-right text-sm font-semibold text-slate-700">Actual Margin</th>
                     <th className="px-4 lg:px-6 py-3 text-right text-sm font-semibold text-slate-700">Date</th>
                     <th className="px-4 lg:px-6 py-3 text-right text-sm font-semibold text-slate-700">Action</th>
                   </tr>
