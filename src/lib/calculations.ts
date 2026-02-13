@@ -207,53 +207,16 @@ export function calculateJobOutputs(
     + suggestedAntiSlipPrice + suggestedAbrasionResistancePrice
     + suggestedCoatingRemovalPrice + suggestedMoistureMitigationPrice + suggestedDiscount;
 
-  // APPROACH 1: Current suggested pricing logic
-  // Suggested floor price per sqft: min of ((totalCosts - suggestedDiscount - suggestedCrackPrice + 2000) / floorFootage) and max, with minimum of min
-  const currentFloorPricePerSqft = floorFootage > 0
-    ? Math.max(floorPriceMin, Math.min((totalCosts - suggestedDiscount - suggestedCrackPrice + 2000) / floorFootage, floorPriceMax))
+  // Suggested floor price per sqft: min of ((totalCosts - suggestedDiscount - suggestedCrackPrice + margin) / floorFootage) and max, with minimum of min
+  const minimumMarginBuffer = pricing.minimumMarginBuffer ?? 2000;
+  let suggestedFloorPricePerSqft = floorFootage > 0
+    ? Math.max(floorPriceMin, Math.min((totalCosts - suggestedDiscount - suggestedCrackPrice + minimumMarginBuffer) / floorFootage, floorPriceMax))
     : 0;
-  let currentFloorPrice = currentFloorPricePerSqft * floorFootage;
-  let currentTotal = currentFloorPrice + nonFloorComponents;
+  let suggestedFloorPrice = suggestedFloorPricePerSqft * floorFootage;
+  let suggestedTotalRaw = suggestedFloorPrice + nonFloorComponents;
 
-  // APPROACH 2: Target effective price approach (if target is set)
-  let targetFloorPricePerSqft = 0;
-  let targetFloorPrice = 0;
-  let targetTotal = 0;
-  let targetMarginPct = 0;
-
-  if (system.targetEffectivePricePerSqft && system.targetEffectivePricePerSqft > 0 && floorFootage > 0) {
-    // Clamp target between min and max
-    const clampedTarget = Math.max(floorPriceMin, Math.min(system.targetEffectivePricePerSqft, floorPriceMax));
-
-    // Calculate target total: target effective price * floor footage
-    targetTotal = clampedTarget * floorFootage;
-
-    // Back-calculate floor price from target total
-    targetFloorPrice = targetTotal - nonFloorComponents;
-    targetFloorPricePerSqft = floorFootage > 0 ? targetFloorPrice / floorFootage : 0;
-
-    // Calculate target margin percentage
-    const targetMargin = targetTotal - totalCosts;
-    targetMarginPct = targetTotal > 0 ? (targetMargin / targetTotal) * 100 : 0;
-  }
-
-  // Calculate current margin percentage
-  const currentMargin = currentTotal - totalCosts;
-  const currentMarginPct = currentTotal > 0 ? (currentMargin / currentTotal) * 100 : 0;
-
-  // Choose the approach with higher margin percentage
-  let useTargetPricing = false;
-  if (system.targetEffectivePricePerSqft && system.targetEffectivePricePerSqft > 0 && floorFootage > 0) {
-    useTargetPricing = targetMarginPct > currentMarginPct;
-  }
-
-  // Set initial values based on chosen approach
-  let suggestedFloorPricePerSqft = useTargetPricing ? targetFloorPricePerSqft : currentFloorPricePerSqft;
-  let suggestedFloorPrice = useTargetPricing ? targetFloorPrice : currentFloorPrice;
-  let suggestedTotalRaw = useTargetPricing ? targetTotal : currentTotal;
-
-  // If total is below minimum $2500, adjust floor price to meet minimum
-  const MINIMUM_JOB_PRICE = 2500;
+  // If total is below minimum, adjust floor price to meet minimum
+  const MINIMUM_JOB_PRICE = pricing.minimumJobPrice ?? 2500;
 
   if (suggestedTotalRaw < MINIMUM_JOB_PRICE && floorFootage > 0) {
     // Calculate how much we need to add to floor price to reach minimum
@@ -270,6 +233,9 @@ export function calculateJobOutputs(
 
   // Suggested margin pct
   const suggestedMarginPct = suggestedTotal > 0 ? (suggestedMargin / suggestedTotal) * 100 : 0;
+
+  // Suggested effective price per sqft (total / floor footage)
+  const suggestedEffectivePricePerSqft = floorFootage > 0 ? suggestedTotal / floorFootage : 0;
 
   return {
     pricePerSqft,
@@ -309,5 +275,6 @@ export function calculateJobOutputs(
     suggestedTotal,
     suggestedMargin,
     suggestedMarginPct,
+    suggestedEffectivePricePerSqft,
   };
 }

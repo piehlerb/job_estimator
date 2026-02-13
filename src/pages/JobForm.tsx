@@ -1,5 +1,5 @@
-import { ArrowLeft, Save, Camera, RefreshCw } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { ArrowLeft, Save } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
 import {
   getAllSystems,
   getJob,
@@ -15,15 +15,9 @@ import {
   ChipBlend,
   getAllChipInventory,
 } from '../lib/db';
-import { BaseColor, ChipSystem, Costs, Pricing, Job, JobCalculation, JobStatus, Laborer, JobPhoto, InstallDaySchedule, ChipInventory, CoatingRemovalType } from '../types';
+import { BaseColor, ChipSystem, Costs, Pricing, Job, JobCalculation, JobStatus, Laborer, InstallDaySchedule, ChipInventory, CoatingRemovalType } from '../types';
 import { calculateJobOutputs } from '../lib/calculations';
-import PhotoCapture from '../components/PhotoCapture';
-import PhotoGallery from '../components/PhotoGallery';
 import InstallDayScheduleComponent from '../components/InstallDaySchedule';
-import { uploadPendingPhotos, isDriveAvailable } from '../lib/photoUploadManager';
-import { isOnline } from '../lib/photoStorage';
-import { initGoogleDrive, requestGoogleAuth, setGoogleCredentials } from '../lib/googleDrive';
-import { getGoogleDriveSettings, saveGoogleDriveAuth } from '../lib/db';
 import { convertLegacyJobToSchedule } from '../lib/jobMigration';
 import { compareSnapshots, SnapshotChanges } from '../lib/snapshotComparison';
 import SnapshotChangeBanner from '../components/SnapshotChangeBanner';
@@ -59,12 +53,6 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
   const [showSnapshotBanner, setShowSnapshotBanner] = useState(false);
   const [useCurrentValues, setUseCurrentValues] = useState(false);
 
-  // Photo state
-  const [photos, setPhotos] = useState<JobPhoto[]>([]);
-  const [uploadingPhotos, setUploadingPhotos] = useState(false);
-  const [driveAvailable, setDriveAvailable] = useState(false);
-  const [reconnectingDrive, setReconnectingDrive] = useState(false);
-
   const [formData, setFormData] = useState({
     name: '',
     customerName: '',
@@ -90,7 +78,22 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
     cyclo1Coats: '1',
     coatingRemoval: 'None' as CoatingRemovalType,
     moistureMitigation: false,
+    // Actual pricing breakdown
+    actualDiscount: '',
+    actualCrackPrice: '',
+    actualFloorPricePerSqft: '',
+    actualFloorPrice: '',
+    actualVerticalPrice: '',
+    actualAntiSlipPrice: '',
+    actualAbrasionResistancePrice: '',
+    actualCoatingRemovalPrice: '',
+    actualMoistureMitigationPrice: '',
   });
+
+  // Track whether actual pricing has been initialized (to auto-populate from suggested)
+  const actualPricingInitialized = useRef(false);
+  // Track which field triggered a change to prevent circular updates
+  const updatingFrom = useRef<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -155,16 +158,27 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
             cyclo1Coats: (job.cyclo1Coats || 1).toString(),
             coatingRemoval: job.coatingRemoval || 'None',
             moistureMitigation: job.moistureMitigation || false,
+            // Actual pricing
+            actualDiscount: job.actualDiscount?.toString() || '',
+            actualCrackPrice: job.actualCrackPrice?.toString() || '',
+            actualFloorPricePerSqft: job.actualFloorPricePerSqft?.toString() || '',
+            actualFloorPrice: job.actualFloorPrice?.toString() || '',
+            actualVerticalPrice: job.actualVerticalPrice?.toString() || '',
+            actualAntiSlipPrice: job.actualAntiSlipPrice?.toString() || '',
+            actualAbrasionResistancePrice: job.actualAbrasionResistancePrice?.toString() || '',
+            actualCoatingRemovalPrice: job.actualCoatingRemovalPrice?.toString() || '',
+            actualMoistureMitigationPrice: job.actualMoistureMitigationPrice?.toString() || '',
           });
+          // Mark as initialized if job has actual pricing data
+          if (job.actualFloorPricePerSqft != null) {
+            actualPricingInitialized.current = true;
+          }
           setChipBlendInput(job.chipBlend || '');
           // Load or convert to install schedule
           const schedule = convertLegacyJobToSchedule(job);
           if (schedule) {
             setInstallSchedule(schedule);
           }
-          // Load photos
-          setPhotos(job.photos || []);
-
           // Compare snapshots with current values
           try {
             const currentSystem = allSystems.find(s => s.id === job.systemId);
@@ -189,9 +203,6 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
         }
       }
 
-      // Check Drive availability
-      const available = await isDriveAvailable();
-      setDriveAvailable(available);
       console.log('[JobForm] Data loading complete');
     } catch (error) {
       console.error('Error loading data:', error);
@@ -275,6 +286,85 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
     setCalculation(calc);
   };
 
+  // Auto-populate actual pricing from suggested pricing when calculation first becomes available
+  useEffect(() => {
+    if (!calculation || actualPricingInitialized.current) return;
+    // Initialize actual pricing from suggested values
+    actualPricingInitialized.current = true;
+    setFormData(prev => ({
+      ...prev,
+      actualDiscount: calculation.suggestedDiscount.toFixed(2),
+      actualCrackPrice: calculation.suggestedCrackPrice.toFixed(2),
+      actualFloorPricePerSqft: calculation.suggestedFloorPricePerSqft.toFixed(2),
+      actualFloorPrice: calculation.suggestedFloorPrice.toFixed(2),
+      actualVerticalPrice: calculation.suggestedVerticalPrice.toFixed(2),
+      actualAntiSlipPrice: calculation.suggestedAntiSlipPrice.toFixed(2),
+      actualAbrasionResistancePrice: calculation.suggestedAbrasionResistancePrice.toFixed(2),
+      actualCoatingRemovalPrice: calculation.suggestedCoatingRemovalPrice.toFixed(2),
+      actualMoistureMitigationPrice: calculation.suggestedMoistureMitigationPrice.toFixed(2),
+      totalPrice: calculation.suggestedTotal.toFixed(2),
+    }));
+  }, [calculation]);
+
+  // Recalculate total price from actual pricing components
+  const recalcActualTotal = (updatedField: string, value: string) => {
+    if (updatingFrom.current) return;
+    updatingFrom.current = updatedField;
+
+    const updated = { ...formData, [updatedField]: value };
+    let floorPrice = parseFloat(updated.actualFloorPrice) || 0;
+    let floorPricePerSqft = parseFloat(updated.actualFloorPricePerSqft) || 0;
+    const floorFootage = parseFloat(updated.floorFootage) || 0;
+
+    // Handle floor price / per sqft linkage
+    if (updatedField === 'actualFloorPricePerSqft') {
+      floorPrice = floorPricePerSqft * floorFootage;
+      updated.actualFloorPrice = floorPrice.toFixed(2);
+    } else if (updatedField === 'actualFloorPrice') {
+      floorPricePerSqft = floorFootage > 0 ? floorPrice / floorFootage : 0;
+      updated.actualFloorPricePerSqft = floorPricePerSqft.toFixed(2);
+    }
+
+    const total = (parseFloat(updated.actualDiscount) || 0)
+      + (parseFloat(updated.actualCrackPrice) || 0)
+      + floorPrice
+      + (parseFloat(updated.actualVerticalPrice) || 0)
+      + (parseFloat(updated.actualAntiSlipPrice) || 0)
+      + (parseFloat(updated.actualAbrasionResistancePrice) || 0)
+      + (parseFloat(updated.actualCoatingRemovalPrice) || 0)
+      + (parseFloat(updated.actualMoistureMitigationPrice) || 0);
+
+    updated.totalPrice = total.toFixed(2);
+    setFormData(updated);
+    setTimeout(() => { updatingFrom.current = null; }, 0);
+  };
+
+  // When total price changes, back-calculate floor price
+  const handleTotalPriceChange = (newTotalPrice: string) => {
+    if (updatingFrom.current) return;
+    updatingFrom.current = 'totalPrice';
+
+    const total = parseFloat(newTotalPrice) || 0;
+    const nonFloor = (parseFloat(formData.actualDiscount) || 0)
+      + (parseFloat(formData.actualCrackPrice) || 0)
+      + (parseFloat(formData.actualVerticalPrice) || 0)
+      + (parseFloat(formData.actualAntiSlipPrice) || 0)
+      + (parseFloat(formData.actualAbrasionResistancePrice) || 0)
+      + (parseFloat(formData.actualCoatingRemovalPrice) || 0)
+      + (parseFloat(formData.actualMoistureMitigationPrice) || 0);
+    const newFloorPrice = total - nonFloor;
+    const floorFootage = parseFloat(formData.floorFootage) || 0;
+    const newFloorPerSqft = floorFootage > 0 ? newFloorPrice / floorFootage : 0;
+
+    setFormData({
+      ...formData,
+      totalPrice: newTotalPrice,
+      actualFloorPrice: newFloorPrice.toFixed(2),
+      actualFloorPricePerSqft: newFloorPerSqft.toFixed(2),
+    });
+    setTimeout(() => { updatingFrom.current = null; }, 0);
+  };
+
   const handleChipBlendSelect = (blendName: string) => {
     setChipBlendInput(blendName);
     setFormData({ ...formData, chipBlend: blendName });
@@ -295,100 +385,6 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
   const handleKeepOriginalValues = () => {
     setUseCurrentValues(false);
     setShowSnapshotBanner(false);
-  };
-
-  // Photo handlers
-  const handlePhotoCapture = (photo: JobPhoto) => {
-    console.log('[JobForm] handlePhotoCapture called with photo:', photo.fileName);
-    setPhotos(prev => {
-      console.log('[JobForm] Adding photo to state, current count:', prev.length);
-      return [...prev, photo];
-    });
-  };
-
-  const handleMultiplePhotosCapture = (newPhotos: JobPhoto[]) => {
-    console.log('[JobForm] handleMultiplePhotosCapture called with', newPhotos.length, 'photos');
-    setPhotos(prev => {
-      console.log('[JobForm] Adding multiple photos to state, current count:', prev.length, 'adding:', newPhotos.length);
-      return [...prev, ...newPhotos];
-    });
-  };
-
-  const handleDeletePhoto = (photoId: string) => {
-    if (confirm('Are you sure you want to delete this photo?')) {
-      setPhotos(photos.filter((p) => p.id !== photoId));
-    }
-  };
-
-  const handleRetryUpload = async (photoId: string) => {
-    const photo = photos.find((p) => p.id === photoId);
-    if (!photo || !existingJob) return;
-
-    photo.syncStatus = 'pending';
-    setPhotos([...photos]);
-
-    // Trigger upload
-    await uploadPhotos({ ...existingJob, photos });
-  };
-
-  const uploadPhotos = async (job: Job) => {
-    if (!isOnline() || !driveAvailable) {
-      console.log('Offline or Drive not available, photos will be uploaded later');
-      return;
-    }
-
-    setUploadingPhotos(true);
-    try {
-      await uploadPendingPhotos(job);
-      // Reload job to get updated photos
-      const updatedJob = await getJob(job.id);
-      if (updatedJob) {
-        setPhotos(updatedJob.photos || []);
-      }
-    } catch (error) {
-      console.error('Error uploading photos:', error);
-    } finally {
-      setUploadingPhotos(false);
-    }
-  };
-
-  const handleReconnectDrive = async () => {
-    if (!isOnline()) {
-      alert('You must be online to reconnect to Google Drive.');
-      return;
-    }
-
-    setReconnectingDrive(true);
-    try {
-      // Load settings to get credentials
-      const settings = await getGoogleDriveSettings();
-      if (!settings?.clientId) {
-        alert('Google Drive is not configured. Please set up Google Drive in Settings first.');
-        setReconnectingDrive(false);
-        return;
-      }
-
-      // Set credentials
-      setGoogleCredentials(settings.clientId, settings.apiKey || '');
-
-      // Initialize and request auth
-      await initGoogleDrive();
-      const auth = await requestGoogleAuth(false);
-      await saveGoogleDriveAuth(auth);
-
-      // Update drive availability
-      const available = await isDriveAvailable();
-      setDriveAvailable(available);
-
-      if (available) {
-        alert('Successfully reconnected to Google Drive!');
-      }
-    } catch (error) {
-      console.error('Error reconnecting to Google Drive:', error);
-      alert('Failed to reconnect to Google Drive. Please try again or check Settings.');
-    } finally {
-      setReconnectingDrive(false);
-    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -427,7 +423,6 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
         setChipBlends([...chipBlends, newBlend]);
       }
 
-      console.log('[JobForm] Saving job with', photos.length, 'photos');
       const job: Job = {
         id: jobId || generateId(),
         name: formData.name,
@@ -455,9 +450,16 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
         cyclo1Coats: parseInt(formData.cyclo1Coats) || 1,
         coatingRemoval: formData.coatingRemoval,
         moistureMitigation: formData.moistureMitigation,
-        // Photos and Google Drive
-        googleDriveFolderId: existingJob?.googleDriveFolderId,
-        photos: photos.length > 0 ? photos : undefined,
+        // Actual pricing breakdown
+        actualDiscount: parseFloat(formData.actualDiscount) || undefined,
+        actualCrackPrice: parseFloat(formData.actualCrackPrice) || undefined,
+        actualFloorPricePerSqft: parseFloat(formData.actualFloorPricePerSqft) || undefined,
+        actualFloorPrice: parseFloat(formData.actualFloorPrice) || undefined,
+        actualVerticalPrice: parseFloat(formData.actualVerticalPrice) || undefined,
+        actualAntiSlipPrice: parseFloat(formData.actualAntiSlipPrice) || undefined,
+        actualAbrasionResistancePrice: parseFloat(formData.actualAbrasionResistancePrice) || undefined,
+        actualCoatingRemovalPrice: parseFloat(formData.actualCoatingRemovalPrice) || undefined,
+        actualMoistureMitigationPrice: parseFloat(formData.actualMoistureMitigationPrice) || undefined,
         // Update snapshots if user chose to use current values, otherwise preserve original
         // Laborers can be edited, so always save current selection
         costsSnapshot: existingJob && !useCurrentValues ? existingJob.costsSnapshot : costs,
@@ -473,15 +475,6 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
         await updateJob(job);
       } else {
         await addJob(job);
-      }
-
-      // Upload photos if online and drive available
-      console.log('[JobForm] Job saved. Photos in job:', job.photos?.length || 0);
-      if (photos.length > 0 && isOnline() && driveAvailable) {
-        console.log('[JobForm] Triggering photo upload for', photos.length, 'photos');
-        await uploadPhotos(job);
-      } else {
-        console.log('[JobForm] Not uploading photos. Count:', photos.length, 'Online:', isOnline(), 'Drive available:', driveAvailable);
       }
 
       onBack();
@@ -644,18 +637,6 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                   </option>
                 ))}
               </select>
-            </div>
-
-            <div>
-              <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Total Price ($)</label>
-              <input
-                type="number"
-                step="0.01"
-                placeholder="0.00"
-                value={formData.totalPrice}
-                onChange={(e) => setFormData({ ...formData, totalPrice: e.target.value })}
-                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
             </div>
 
             <div>
@@ -1143,23 +1124,13 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                 </div>
               </div>
 
-              {/* Totals */}
+              {/* Job Totals */}
               <div className="mb-4 sm:mb-6">
                 <h4 className="text-xs sm:text-sm font-semibold text-slate-700 mb-2 sm:mb-3 uppercase tracking-wide">Job Totals</h4>
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 md:gap-4">
+                <div className="grid grid-cols-3 gap-2 sm:gap-3 md:gap-4">
                   <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
-                    <p className="text-xs text-slate-500">Price per Sqft</p>
-                    <p className="text-sm sm:text-base md:text-lg font-semibold">{formatCurrency(calculation.pricePerSqft)}</p>
-                  </div>
-                  <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
-                    <p className="text-xs text-slate-500">Cost per Sqft</p>
-                    <p className="text-sm sm:text-base md:text-lg font-semibold">{formatCurrency(calculation.totalCostsPerSqft)}</p>
-                  </div>
-                  <div className={`bg-white p-2 sm:p-3 rounded border ${calculation.jobMargin >= 0 ? 'border-green-300' : 'border-red-300'}`}>
-                    <p className="text-xs text-slate-500">Job Margin</p>
-                    <p className={`text-sm sm:text-base md:text-lg font-semibold ${calculation.jobMargin >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {formatCurrency(calculation.jobMargin)}
-                    </p>
+                    <p className="text-xs text-slate-500">Total Costs</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold">{formatCurrency(calculation.totalCosts)}</p>
                   </div>
                   <div className={`bg-white p-2 sm:p-3 rounded border ${calculation.marginPerDay >= 0 ? 'border-green-300' : 'border-red-300'}`}>
                     <p className="text-xs text-slate-500">Margin per Day</p>
@@ -1168,27 +1139,109 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                     </p>
                   </div>
                   <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
-                    <p className="text-xs text-slate-500">Total Costs</p>
-                    <p className="text-sm sm:text-base md:text-lg font-semibold">{formatCurrency(calculation.totalCosts)}</p>
+                    <p className="text-xs text-slate-500">Cost per Sqft</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold">{formatCurrency(calculation.totalCostsPerSqft)}</p>
                   </div>
-                  <div className={`bg-white p-2 sm:p-3 rounded border ${(() => {
+                </div>
+              </div>
+
+              {/* Actual Pricing - editable */}
+              <div className="bg-green-50 rounded-lg p-3 sm:p-4 border border-green-200 mb-4 sm:mb-6">
+                <h4 className="text-xs sm:text-sm font-semibold text-green-800 mb-2 sm:mb-3 uppercase tracking-wide">Actual Pricing</h4>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 md:gap-4 mb-3 sm:mb-4">
+                  <div>
+                    <label className="text-xs text-green-600">Discount</label>
+                    <input type="number" step="0.01" value={formData.actualDiscount}
+                      onChange={(e) => recalcActualTotal('actualDiscount', e.target.value)}
+                      className="w-full text-sm sm:text-base font-semibold text-green-900 bg-transparent border-b border-green-300 focus:outline-none focus:border-green-600 p-0" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-green-600">Crack Price</label>
+                    <input type="number" step="0.01" value={formData.actualCrackPrice}
+                      onChange={(e) => recalcActualTotal('actualCrackPrice', e.target.value)}
+                      className="w-full text-sm sm:text-base font-semibold text-green-900 bg-transparent border-b border-green-300 focus:outline-none focus:border-green-600 p-0" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-green-600">Floor $/sqft</label>
+                    <input type="number" step="0.01" value={formData.actualFloorPricePerSqft}
+                      onChange={(e) => recalcActualTotal('actualFloorPricePerSqft', e.target.value)}
+                      className="w-full text-sm sm:text-base font-semibold text-green-900 bg-transparent border-b border-green-300 focus:outline-none focus:border-green-600 p-0" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-green-600">Floor Price</label>
+                    <input type="number" step="0.01" value={formData.actualFloorPrice}
+                      onChange={(e) => recalcActualTotal('actualFloorPrice', e.target.value)}
+                      className="w-full text-sm sm:text-base font-semibold text-green-900 bg-transparent border-b border-green-300 focus:outline-none focus:border-green-600 p-0" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-green-600">Vertical Price</label>
+                    <input type="number" step="0.01" value={formData.actualVerticalPrice}
+                      onChange={(e) => recalcActualTotal('actualVerticalPrice', e.target.value)}
+                      className="w-full text-sm sm:text-base font-semibold text-green-900 bg-transparent border-b border-green-300 focus:outline-none focus:border-green-600 p-0" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-green-600">Anti-Slip Price</label>
+                    <input type="number" step="0.01" value={formData.actualAntiSlipPrice}
+                      onChange={(e) => recalcActualTotal('actualAntiSlipPrice', e.target.value)}
+                      className="w-full text-sm sm:text-base font-semibold text-green-900 bg-transparent border-b border-green-300 focus:outline-none focus:border-green-600 p-0" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-green-600">Abrasion Resistance</label>
+                    <input type="number" step="0.01" value={formData.actualAbrasionResistancePrice}
+                      onChange={(e) => recalcActualTotal('actualAbrasionResistancePrice', e.target.value)}
+                      className="w-full text-sm sm:text-base font-semibold text-green-900 bg-transparent border-b border-green-300 focus:outline-none focus:border-green-600 p-0" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-green-600">Coating Removal</label>
+                    <input type="number" step="0.01" value={formData.actualCoatingRemovalPrice}
+                      onChange={(e) => recalcActualTotal('actualCoatingRemovalPrice', e.target.value)}
+                      className="w-full text-sm sm:text-base font-semibold text-green-900 bg-transparent border-b border-green-300 focus:outline-none focus:border-green-600 p-0" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-green-600">Moisture Mitigation</label>
+                    <input type="number" step="0.01" value={formData.actualMoistureMitigationPrice}
+                      onChange={(e) => recalcActualTotal('actualMoistureMitigationPrice', e.target.value)}
+                      className="w-full text-sm sm:text-base font-semibold text-green-900 bg-transparent border-b border-green-300 focus:outline-none focus:border-green-600 p-0" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 sm:gap-4 pt-3 sm:pt-4 border-t border-green-200">
+                  {(() => {
                     const totalPrice = parseFloat(formData.totalPrice) || 0;
-                    const marginPct = totalPrice > 0 ? ((totalPrice - calculation.totalCosts) / totalPrice) * 100 : 0;
-                    return marginPct >= 30 ? 'border-green-300' : 'border-orange-300';
-                  })()}`}>
-                    <p className="text-xs text-slate-500">Actual Margin %</p>
-                    <p className={`text-sm sm:text-base md:text-lg font-semibold ${(() => {
-                      const totalPrice = parseFloat(formData.totalPrice) || 0;
-                      const marginPct = totalPrice > 0 ? ((totalPrice - calculation.totalCosts) / totalPrice) * 100 : 0;
-                      return marginPct >= 30 ? 'text-green-600' : 'text-orange-600';
-                    })()}`}>
-                      {(() => {
-                        const totalPrice = parseFloat(formData.totalPrice) || 0;
-                        const marginPct = totalPrice > 0 ? ((totalPrice - calculation.totalCosts) / totalPrice) * 100 : 0;
-                        return marginPct.toFixed(1);
-                      })()}%
-                    </p>
-                  </div>
+                    const floorFootage = parseFloat(formData.floorFootage) || 0;
+                    const effectivePricePerSqft = floorFootage > 0 ? totalPrice / floorFootage : 0;
+                    const actualMargin = totalPrice - calculation.totalCosts;
+                    const actualMarginPct = totalPrice > 0 ? (actualMargin / totalPrice) * 100 : 0;
+                    const minimumMarginBuffer = pricing.minimumMarginBuffer ?? 2000;
+                    const selectedSystem = systems.find(s => s.id === formData.system);
+                    const floorPriceMin = selectedSystem?.floorPriceMin ?? 6;
+                    const floorPriceMax = selectedSystem?.floorPriceMax ?? 8;
+                    const actualFloorPerSqft = parseFloat(formData.actualFloorPricePerSqft) || 0;
+                    const floorOutOfRange = actualFloorPerSqft < floorPriceMin || actualFloorPerSqft > floorPriceMax;
+                    const marginBelowMin = actualMargin < minimumMarginBuffer;
+
+                    return (
+                      <>
+                        <div>
+                          <p className="text-xs sm:text-sm text-green-600">Effective $/Sqft</p>
+                          <p className={`text-xl sm:text-2xl font-bold ${floorOutOfRange ? 'text-red-600' : 'text-green-900'}`}>{formatCurrency(effectivePricePerSqft)}</p>
+                        </div>
+                        <div>
+                          <label className="text-xs sm:text-sm text-green-600">Total Price</label>
+                          <input type="number" step="0.01" value={formData.totalPrice}
+                            onChange={(e) => handleTotalPriceChange(e.target.value)}
+                            className="w-full text-xl sm:text-2xl font-bold text-green-900 bg-transparent border-b border-green-300 focus:outline-none focus:border-green-600 p-0" />
+                        </div>
+                        <div>
+                          <p className="text-xs sm:text-sm text-green-600">Actual Margin</p>
+                          <p className={`text-xl sm:text-2xl font-bold ${marginBelowMin ? 'text-red-600' : 'text-green-600'}`}>{formatCurrency(actualMargin)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs sm:text-sm text-green-600">Margin %</p>
+                          <p className={`text-xl sm:text-2xl font-bold ${marginBelowMin ? 'text-red-600' : 'text-green-600'}`}>{actualMarginPct.toFixed(1)}%</p>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -1206,9 +1259,12 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                   </div>
                   <div>
                     <p className="text-xs text-blue-600">Floor $/sqft</p>
-                    <p className={`text-sm sm:text-base md:text-lg font-semibold ${
-                      calculation.suggestedFloorPricePerSqft > 8 ? 'text-red-600' : 'text-blue-900'
-                    }`}>
+                    <p className={`text-sm sm:text-base md:text-lg font-semibold ${(() => {
+                      const selectedSystem = systems.find(s => s.id === formData.system);
+                      const min = selectedSystem?.floorPriceMin ?? 6;
+                      const max = selectedSystem?.floorPriceMax ?? 8;
+                      return (calculation.suggestedFloorPricePerSqft < min || calculation.suggestedFloorPricePerSqft > max) ? 'text-red-600' : 'text-blue-900';
+                    })()}`}>
                       {formatCurrency(calculation.suggestedFloorPricePerSqft)}
                     </p>
                   </div>
@@ -1225,7 +1281,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                     <p className="text-sm sm:text-base md:text-lg font-semibold text-blue-900">{formatCurrency(calculation.suggestedAntiSlipPrice)}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-blue-600">Abrasion Resistance Price - {formatCurrency(usedPricing.abrasionResistancePricePerSqft)}/sqft</p>
+                    <p className="text-xs text-blue-600">Abrasion Resistance - {formatCurrency(usedPricing.abrasionResistancePricePerSqft)}/sqft</p>
                     <p className="text-sm sm:text-base md:text-lg font-semibold text-blue-900">{formatCurrency(calculation.suggestedAbrasionResistancePrice)}</p>
                   </div>
                   <div>
@@ -1241,7 +1297,11 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                     <p className="text-sm sm:text-base md:text-lg font-semibold text-blue-900">{formatCurrency(calculation.suggestedMoistureMitigationPrice)}</p>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 pt-3 sm:pt-4 border-t border-blue-200">
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 sm:gap-4 pt-3 sm:pt-4 border-t border-blue-200">
+                  <div>
+                    <p className="text-xs sm:text-sm text-blue-600">Effective $/Sqft</p>
+                    <p className="text-xl sm:text-2xl font-bold text-blue-900">{formatCurrency(calculation.suggestedEffectivePricePerSqft)}</p>
+                  </div>
                   <div>
                     <p className="text-xs sm:text-sm text-blue-600">Suggested Total</p>
                     <p className="text-xl sm:text-2xl font-bold text-blue-900">{formatCurrency(calculation.suggestedTotal)}</p>
@@ -1255,117 +1315,18 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                     <p className="text-xl sm:text-2xl font-bold text-green-600">{calculation.suggestedMarginPct.toFixed(1)}%</p>
                   </div>
                 </div>
-
-                {/* Effective Price Per Square Foot Analysis */}
-                {parseFloat(formData.floorFootage) > 0 && (
-                  <div className="mt-4 pt-4 border-t border-blue-200">
-                    <h5 className="text-xs sm:text-sm font-semibold text-blue-800 mb-2 uppercase tracking-wide">Effective Price Per Sq Ft</h5>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
-                      {(() => {
-                        const floorFootage = parseFloat(formData.floorFootage);
-                        const baseTotal = calculation.suggestedTotal;
-                        const effectivePricePerSqft = baseTotal / floorFootage;
-
-                        // Calculate price adjustments based on floor price changes
-                        const adjustments = [-0.50, -0.25, 0, 0.25, 0.50];
-
-                        return adjustments.map(adjustment => {
-                          const adjustedTotal = baseTotal + (adjustment * floorFootage);
-                          const adjustedEffectivePrice = adjustedTotal / floorFootage;
-                          const adjustedMargin = adjustedTotal - calculation.totalCosts;
-                          const adjustedMarginPct = adjustedTotal > 0 ? (adjustedMargin / adjustedTotal) * 100 : 0;
-
-                          return (
-                            <div key={adjustment} className={`bg-white p-2 sm:p-3 rounded border ${adjustment === 0 ? 'border-blue-400 border-2' : 'border-slate-200'}`}>
-                              <p className="text-xs text-slate-500">
-                                {adjustment === 0 ? 'Current' : `${adjustment > 0 ? '+' : ''}${formatCurrency(adjustment)}/sqft`}
-                              </p>
-                              <p className={`text-sm sm:text-base font-semibold ${adjustment === 0 ? 'text-blue-900' : 'text-slate-700'}`}>
-                                {formatCurrency(adjustedEffectivePrice)}
-                              </p>
-                              <p className="text-xs text-slate-400 mt-1">
-                                Total: {formatCurrency(adjustedTotal)}
-                              </p>
-                              <p className={`text-xs font-semibold mt-1 ${adjustedMarginPct >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                Margin: {adjustedMarginPct.toFixed(1)}%
-                              </p>
-                            </div>
-                          );
-                        });
-                      })()}
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           )}
 
-          {/* Photos Section */}
-          <div className="border-t border-slate-200 pt-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Camera size={20} className="text-slate-700" />
-              <h3 className="text-base sm:text-lg font-semibold text-slate-900">Job Photos</h3>
-              {uploadingPhotos && (
-                <span className="text-sm text-blue-600">Uploading...</span>
-              )}
-            </div>
-
-            {!driveAvailable && (
-              <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                  <p className="text-sm text-yellow-800">
-                    <strong>Google Drive not connected.</strong> Photos will be saved locally.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={handleReconnectDrive}
-                    disabled={reconnectingDrive || !isOnline()}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-yellow-600 text-white text-sm rounded-lg hover:bg-yellow-700 disabled:bg-yellow-400 disabled:cursor-not-allowed transition-colors"
-                  >
-                    <RefreshCw size={14} className={reconnectingDrive ? 'animate-spin' : ''} />
-                    {reconnectingDrive ? 'Connecting...' : 'Reconnect'}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <div className="space-y-4">
-              <PhotoCapture
-                onPhotoCapture={handlePhotoCapture}
-                onMultiplePhotosCapture={handleMultiplePhotosCapture}
-                disabled={saving || uploadingPhotos}
-              />
-
-              {photos.length > 0 && (
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <p className="text-sm text-slate-600">
-                      {photos.length} photo{photos.length !== 1 ? 's' : ''}
-                      {' '}({photos.filter(p => p.syncStatus === 'uploaded').length} uploaded)
-                    </p>
-                    {!isOnline() && (
-                      <span className="text-xs text-orange-600">Offline - photos will upload when online</span>
-                    )}
-                  </div>
-                  <PhotoGallery
-                    photos={photos}
-                    folderId={existingJob?.googleDriveFolderId}
-                    onDeletePhoto={handleDeletePhoto}
-                    onRetryUpload={handleRetryUpload}
-                  />
-                </div>
-              )}
-            </div>
-          </div>
-
           <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
             <button
               type="submit"
-              disabled={saving || uploadingPhotos}
+              disabled={saving}
               className="flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 active:bg-blue-800 transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed text-sm sm:text-base"
             >
               <Save size={18} className="sm:w-5 sm:h-5" />
-              {saving ? 'Saving...' : uploadingPhotos ? 'Uploading photos...' : jobId ? 'Update Job' : 'Create Job'}
+              {saving ? 'Saving...' : jobId ? 'Update Job' : 'Create Job'}
             </button>
             <button
               type="button"

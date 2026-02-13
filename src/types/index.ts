@@ -14,7 +14,6 @@ export interface ChipSystem {
   verticalPricePerSqft?: number; // Price per sqft for vertical surfaces
   floorPriceMin?: number; // Minimum floor price per sqft for suggested pricing
   floorPriceMax?: number; // Maximum floor price per sqft for suggested pricing
-  targetEffectivePricePerSqft?: number; // Target effective price (total job price / floor sqft) for margin optimization
   notes?: string; // Optional notes about this chip system
   createdAt: string;
   updatedAt: string;
@@ -67,23 +66,13 @@ export interface Pricing {
   moistureMitigationPerSqft: number; // Price per sqft for moisture mitigation
   floorPriceMin?: number; // DEPRECATED: Moved to ChipSystem - kept for backward compatibility
   floorPriceMax?: number; // DEPRECATED: Moved to ChipSystem - kept for backward compatibility
+  minimumMarginBuffer?: number; // Buffer added to costs for suggested pricing (default 2000)
+  minimumJobPrice?: number; // Minimum total suggested job price (default 2500)
   createdAt: string;
   updatedAt: string;
 }
 
 export type CoatingRemovalType = 'None' | 'Paint' | 'Epoxy';
-
-export interface JobPhoto {
-  id: string;
-  category: 'Estimate' | 'Before' | 'During' | 'After';
-  localUri?: string; // Base64 or Blob URL for offline storage
-  driveFileId?: string;
-  fileName: string;
-  uploadedAt?: string;
-  syncStatus: 'pending' | 'uploading' | 'uploaded' | 'failed';
-  capturedAt: string;
-  errorMessage?: string; // For failed uploads
-}
 
 export interface InstallDaySchedule {
   day: number; // Day number (1, 2, 3, etc.)
@@ -122,9 +111,16 @@ export interface Job {
   // Surface preparation
   coatingRemoval?: CoatingRemovalType; // Type of coating removal needed
   moistureMitigation?: boolean; // Whether moisture mitigation is needed
-  // Google Drive integration
-  googleDriveFolderId?: string;
-  photos?: JobPhoto[];
+  // Actual pricing breakdown (editable, persisted)
+  actualDiscount?: number;
+  actualCrackPrice?: number;
+  actualFloorPricePerSqft?: number;
+  actualFloorPrice?: number;
+  actualVerticalPrice?: number;
+  actualAntiSlipPrice?: number;
+  actualAbrasionResistancePrice?: number;
+  actualCoatingRemovalPrice?: number;
+  actualMoistureMitigationPrice?: number;
   // Snapshot of costs at time of job creation (so old jobs don't change)
   costsSnapshot: Costs;
   // Snapshot of pricing at time of job creation
@@ -209,6 +205,7 @@ export interface JobCalculation {
   suggestedTotal: number;
   suggestedMargin: number;
   suggestedMarginPct: number;
+  suggestedEffectivePricePerSqft: number;
 }
 
 // Chip blend type (also defined in db.ts for backwards compatibility)
@@ -219,29 +216,6 @@ export interface ChipBlend {
   createdAt?: string;
   updatedAt?: string;
   deleted?: boolean;
-}
-
-// Google Drive integration types
-export interface GoogleDriveAuth {
-  id: string;
-  accessToken: string;
-  refreshToken?: string;
-  expiresAt: number; // Timestamp
-  userEmail?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface GoogleDriveSettings {
-  id: string;
-  rootFolderName: string; // e.g., "Jobs"
-  rootFolderId?: string; // Created in Google Drive
-  autoUpload: boolean;
-  // API Configuration (stored securely in IndexedDB)
-  clientId?: string;
-  apiKey?: string;
-  createdAt: string;
-  updatedAt: string;
 }
 
 // Backup/Export types

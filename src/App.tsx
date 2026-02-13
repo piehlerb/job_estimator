@@ -8,7 +8,7 @@ import ChipBlends from './pages/ChipBlends';
 import Laborers from './pages/Laborers';
 import Costs from './pages/Costs';
 import Pricing from './pages/Pricing';
-import GoogleDrive from './pages/GoogleDrive';
+import Settings from './pages/Settings';
 import Inventory from './pages/Inventory';
 import Calendar from './pages/Calendar';
 import Login from './pages/Login';
@@ -16,7 +16,7 @@ import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { useAuth } from './contexts/AuthContext';
 import { useAutoSync } from './hooks/useAutoSync';
 
-type Page = 'dashboard' | 'new-job' | 'edit-job' | 'job-sheet' | 'chip-systems' | 'chip-blends' | 'laborers' | 'costs' | 'pricing' | 'google-drive' | 'inventory' | 'calendar';
+type Page = 'dashboard' | 'new-job' | 'edit-job' | 'job-sheet' | 'chip-systems' | 'chip-blends' | 'laborers' | 'costs' | 'pricing' | 'settings' | 'inventory' | 'calendar';
 
 function App() {
   const [currentPage, setCurrentPage] = useState<Page>('dashboard');
@@ -120,8 +120,8 @@ function App() {
       {currentPage === 'pricing' && (
         <Pricing />
       )}
-      {currentPage === 'google-drive' && (
-        <GoogleDrive />
+      {currentPage === 'settings' && (
+        <Settings />
       )}
       {currentPage === 'inventory' && (
         <Inventory />

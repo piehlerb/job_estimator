@@ -29,7 +29,6 @@ export default function ChipSystems() {
     verticalPricePerSqft: '',
     floorPriceMin: '',
     floorPriceMax: '',
-    targetEffectivePricePerSqft: '',
     notes: '',
   });
 
@@ -61,7 +60,6 @@ export default function ChipSystems() {
         verticalPricePerSqft: parseFloat(systemForm.verticalPricePerSqft) || 0.75,
         floorPriceMin: parseFloat(systemForm.floorPriceMin) || 6.00,
         floorPriceMax: parseFloat(systemForm.floorPriceMax) || 8.00,
-        targetEffectivePricePerSqft: systemForm.targetEffectivePricePerSqft ? parseFloat(systemForm.targetEffectivePricePerSqft) : undefined,
         notes: systemForm.notes || undefined,
         createdAt: editingSystem?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -95,7 +93,6 @@ export default function ChipSystems() {
       verticalPricePerSqft: (system.verticalPricePerSqft ?? 0.75).toString(),
       floorPriceMin: (system.floorPriceMin ?? 6.00).toString(),
       floorPriceMax: (system.floorPriceMax ?? 8.00).toString(),
-      targetEffectivePricePerSqft: system.targetEffectivePricePerSqft ? system.targetEffectivePricePerSqft.toString() : '',
       notes: system.notes || '',
     });
     setShowSystemForm(true);
@@ -289,18 +286,6 @@ export default function ChipSystems() {
                     className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                   <p className="text-xs text-slate-500 mt-1">Price per sqft for vertical surfaces</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-900 mb-2">Target Effective Price per Sqft ($)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    placeholder="7.00"
-                    value={systemForm.targetEffectivePricePerSqft}
-                    onChange={(e) => setSystemForm({ ...systemForm, targetEffectivePricePerSqft: e.target.value })}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                  <p className="text-xs text-slate-500 mt-1">Target total price / floor sqft (optional)</p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4 mt-4">
