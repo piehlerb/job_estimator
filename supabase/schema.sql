@@ -86,6 +86,7 @@ CREATE TABLE IF NOT EXISTS jobs (
   job_hours NUMERIC NOT NULL,
   total_price NUMERIC NOT NULL,
   chip_blend TEXT,
+  tags TEXT[],
   base_color TEXT,
   status TEXT NOT NULL CHECK (status IN ('Won', 'Lost', 'Pending')),
   include_basecoat_tint BOOLEAN,
@@ -222,6 +223,7 @@ CREATE INDEX IF NOT EXISTS idx_sync_queue_processed ON sync_queue(processed_at) 
 -- Job filters
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(user_id, status);
 CREATE INDEX IF NOT EXISTS idx_jobs_install_date ON jobs(user_id, install_date);
+CREATE INDEX IF NOT EXISTS idx_jobs_tags_gin ON jobs USING GIN (tags);
 
 -- =====================================================
 -- FUNCTIONS & TRIGGERS

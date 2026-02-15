@@ -97,6 +97,7 @@ export interface Job {
   totalPrice: number;
   // Optional fields
   chipBlend?: string;
+  tags?: string[]; // Optional tags for reporting and filtering
   baseColor?: BaseColor;
   status: JobStatus;
   notes?: string;

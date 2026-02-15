@@ -25,6 +25,8 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
   // Filter state - default to showing Pending and Won
   const [statusFilter, setStatusFilter] = useState<JobStatus[]>(['Pending', 'Won']);
   const [chipBlendFilter, setChipBlendFilter] = useState<string>('');
+  const [selectedTagFilters, setSelectedTagFilters] = useState<string[]>([]);
+  const [tagMatchMode, setTagMatchMode] = useState<'any' | 'all'>('any');
 
   useEffect(() => {
     loadJobs();
@@ -114,6 +116,15 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
     return Array.from(blends).sort();
   }, [jobsWithCalc]);
 
+  // Get unique tags from all jobs
+  const availableTags = useMemo(() => {
+    const tags = new Set<string>();
+    jobsWithCalc.forEach(({ job }) => {
+      (job.tags || []).forEach((tag) => tags.add(tag));
+    });
+    return Array.from(tags).sort((a, b) => a.localeCompare(b));
+  }, [jobsWithCalc]);
+
   const handleDeleteJob = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this job?')) {
       try {
@@ -138,6 +149,14 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
     });
   };
 
+  const handleTagToggle = (tag: string) => {
+    setSelectedTagFilters((prev) => (
+      prev.includes(tag)
+        ? prev.filter((t) => t !== tag)
+        : [...prev, tag]
+    ));
+  };
+
   // Filter and sort jobs
   const filteredAndSortedJobs = useMemo(() => {
     let filtered = jobsWithCalc;
@@ -150,6 +169,17 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
     // Apply chip blend filter
     if (chipBlendFilter) {
       filtered = filtered.filter(({ job }) => job.chipBlend === chipBlendFilter);
+    }
+
+    // Apply tag filters (any/all)
+    if (selectedTagFilters.length > 0) {
+      filtered = filtered.filter(({ job }) => {
+        const jobTags = job.tags || [];
+        if (tagMatchMode === 'all') {
+          return selectedTagFilters.every((tag) => jobTags.includes(tag));
+        }
+        return selectedTagFilters.some((tag) => jobTags.includes(tag));
+      });
     }
 
     // Sort
@@ -166,7 +196,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
           return new Date(b.job.createdAt).getTime() - new Date(a.job.createdAt).getTime();
       }
     });
-  }, [jobsWithCalc, statusFilter, chipBlendFilter, sortBy]);
+  }, [jobsWithCalc, statusFilter, chipBlendFilter, selectedTagFilters, tagMatchMode, sortBy]);
 
   const getStatusColor = (status: JobStatus) => {
     switch (status) {
@@ -254,6 +284,58 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
                   </select>
                 </div>
               )}
+
+              {/* Tag Filter */}
+              {availableTags.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <label className="text-xs sm:text-sm text-slate-600 font-medium">Tags:</label>
+                    <button
+                      type="button"
+                      onClick={() => setTagMatchMode('any')}
+                      className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                        tagMatchMode === 'any' ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-500'
+                      }`}
+                    >
+                      Any
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTagMatchMode('all')}
+                      className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                        tagMatchMode === 'all' ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-500'
+                      }`}
+                    >
+                      All
+                    </button>
+                    {selectedTagFilters.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedTagFilters([])}
+                        className="px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {availableTags.map((tag) => (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => handleTagToggle(tag)}
+                        className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                          selectedTagFilters.includes(tag)
+                            ? 'bg-indigo-100 text-indigo-800'
+                            : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                        }`}
+                      >
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -300,6 +382,18 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
                           </span>
                         </div>
                         <p className="text-xs text-slate-500">{new Date(job.createdAt).toLocaleDateString()}</p>
+                        {(job.tags || []).length > 0 && (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {(job.tags || []).slice(0, 3).map((tag) => (
+                              <span
+                                key={tag}
+                                className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-medium"
+                              >
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                       <div className="flex items-center gap-1 ml-2">
                         <button
@@ -367,7 +461,21 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
                         className="border-b border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer"
                         onClick={() => onEditJob(job.id)}
                       >
-                        <td className="px-4 lg:px-6 py-4 text-sm font-medium text-slate-900">{job.name || 'Untitled Job'}</td>
+                        <td className="px-4 lg:px-6 py-4 text-sm font-medium text-slate-900">
+                          <div>{job.name || 'Untitled Job'}</div>
+                          {(job.tags || []).length > 0 && (
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {(job.tags || []).slice(0, 3).map((tag) => (
+                                <span
+                                  key={tag}
+                                  className="inline-block px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium"
+                                >
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </td>
                         <td className="px-4 lg:px-6 py-4 text-sm text-center">
                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(job.status)}`}>
                             {job.status}

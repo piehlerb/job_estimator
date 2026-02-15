@@ -1,8 +1,9 @@
 import { ArrowLeft, Save } from 'lucide-react';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   getAllSystems,
   getJob,
+  getAllJobs,
   addJob,
   updateJob,
   getCosts,
@@ -27,9 +28,28 @@ function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 }
 
+function parseJobTags(input: string): string[] {
+  const seen = new Set<string>();
+  return input
+    .split(',')
+    .map((tag) => tag.trim())
+    .filter((tag) => tag.length > 0)
+    .filter((tag) => {
+      const normalized = tag.toLowerCase();
+      if (seen.has(normalized)) return false;
+      seen.add(normalized);
+      return true;
+    });
+}
+
 interface JobFormProps {
   jobId?: string;
   onBack: () => void;
+}
+
+interface CustomerOption {
+  name: string;
+  address?: string;
 }
 
 export default function JobForm({ jobId, onBack }: JobFormProps) {
@@ -47,6 +67,10 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
   const [chipBlendInput, setChipBlendInput] = useState('');
   const [showBlendDropdown, setShowBlendDropdown] = useState(false);
   const [chipInventory, setChipInventory] = useState<ChipInventory[]>([]);
+  const [availableTags, setAvailableTags] = useState<string[]>([]);
+  const [showTagDropdown, setShowTagDropdown] = useState(false);
+  const [availableCustomers, setAvailableCustomers] = useState<CustomerOption[]>([]);
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
 
   // Snapshot comparison state
   const [snapshotChanges, setSnapshotChanges] = useState<SnapshotChanges | null>(null);
@@ -67,6 +91,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
     jobHours: '10',
     totalPrice: '0',
     chipBlend: '',
+    tags: '',
     baseColor: '' as BaseColor | '',
     status: 'Pending' as JobStatus,
     notes: '',
@@ -103,6 +128,29 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
     calculateCosts();
   }, [formData, systems, costs, pricing, activeLaborers, installSchedule, useCurrentValues, existingJob]);
 
+  const tagSuggestions = useMemo(() => {
+    const segments = formData.tags.split(',');
+    const query = (segments[segments.length - 1] || '').trim().toLowerCase();
+    const completed = new Set(
+      segments
+        .slice(0, -1)
+        .map((tag) => tag.trim().toLowerCase())
+        .filter(Boolean)
+    );
+
+    return availableTags
+      .filter((tag) => !completed.has(tag.toLowerCase()))
+      .filter((tag) => query.length === 0 || tag.toLowerCase().includes(query))
+      .slice(0, 8);
+  }, [formData.tags, availableTags]);
+
+  const customerSuggestions = useMemo(() => {
+    const query = formData.customerName.trim().toLowerCase();
+    return availableCustomers
+      .filter((customer) => query.length === 0 || customer.name.toLowerCase().includes(query))
+      .slice(0, 8);
+  }, [formData.customerName, availableCustomers]);
+
   const loadData = async () => {
     console.log('[JobForm] Loading data, jobId:', jobId);
     setLoading(true);
@@ -111,6 +159,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
       const storedCosts = await getCosts();
       const storedPricing = await getPricing();
       const laborers = await getActiveLaborers();
+      const allJobs = await getAllJobs();
       const blends = await getAllChipBlends();
       const inventory = await getAllChipInventory();
       console.log('[JobForm] Data loaded:', { systems: allSystems.length, costs: !!storedCosts, pricing: !!storedPricing, laborers: laborers.length });
@@ -118,6 +167,38 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
       setActiveLaborers(laborers);
       setChipBlends(blends);
       setChipInventory(inventory);
+      const tagSet = new Set<string>();
+      const customerMap = new Map<string, { name: string; address?: string; updatedAt: string }>();
+      allJobs.forEach((job) => {
+        (job.tags || []).forEach((tag) => tagSet.add(tag));
+
+        const customerName = job.customerName?.trim();
+        if (!customerName) return;
+
+        const customerAddress = job.customerAddress?.trim() || undefined;
+        const key = customerName.toLowerCase();
+        const updatedAt = job.updatedAt || job.createdAt || '';
+        const existing = customerMap.get(key);
+
+        if (!existing || updatedAt > existing.updatedAt) {
+          customerMap.set(key, {
+            name: customerName,
+            address: customerAddress,
+            updatedAt,
+          });
+        } else if (!existing.address && customerAddress) {
+          customerMap.set(key, {
+            ...existing,
+            address: customerAddress,
+          });
+        }
+      });
+      setAvailableTags(Array.from(tagSet).sort((a, b) => a.localeCompare(b)));
+      setAvailableCustomers(
+        Array.from(customerMap.values())
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .map((customer) => ({ name: customer.name, address: customer.address }))
+      );
       if (storedCosts) {
         // Merge with defaults to ensure new fields have values
         setCosts({ ...getDefaultCosts(), ...storedCosts });
@@ -147,6 +228,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
             jobHours: job.jobHours.toString(),
             totalPrice: job.totalPrice.toString(),
             chipBlend: job.chipBlend || '',
+            tags: (job.tags || []).join(', '),
             baseColor: job.baseColor || '',
             status: job.status || 'Pending',
             notes: job.notes || '',
@@ -377,6 +459,49 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
     setShowBlendDropdown(true);
   };
 
+  const handleTagInputChange = (value: string) => {
+    setFormData({ ...formData, tags: value });
+    setShowTagDropdown(true);
+  };
+
+  const handleCustomerNameInputChange = (value: string) => {
+    const exactMatch = availableCustomers.find(
+      (customer) => customer.name.toLowerCase() === value.trim().toLowerCase()
+    );
+
+    setFormData({
+      ...formData,
+      customerName: value,
+      customerAddress: exactMatch?.address || formData.customerAddress,
+    });
+    setShowCustomerDropdown(true);
+  };
+
+  const handleCustomerSelect = (customer: CustomerOption) => {
+    setFormData({
+      ...formData,
+      customerName: customer.name,
+      customerAddress: customer.address || '',
+    });
+    setShowCustomerDropdown(false);
+  };
+
+  const handleTagSelect = (selectedTag: string) => {
+    const segments = formData.tags.split(',');
+    const completed = segments
+      .slice(0, -1)
+      .map((tag) => tag.trim())
+      .filter(Boolean);
+
+    if (!completed.some((tag) => tag.toLowerCase() === selectedTag.toLowerCase())) {
+      completed.push(selectedTag);
+    }
+
+    const nextValue = completed.length > 0 ? `${completed.join(', ')}, ` : `${selectedTag}, `;
+    setFormData({ ...formData, tags: nextValue });
+    setShowTagDropdown(false);
+  };
+
   const handleUpdateToCurrentValues = () => {
     setUseCurrentValues(true);
     setShowSnapshotBanner(false);
@@ -412,6 +537,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
 
       // Normalize chip blend name before saving (trim whitespace, title case)
       const normalizedChipBlend = normalizeChipBlendName(formData.chipBlend);
+      const normalizedTags = parseJobTags(formData.tags);
 
       // If chip blend is entered and not in the list, add it
       if (normalizedChipBlend && !chipBlends.some((b) => normalizeChipBlendName(b.name) === normalizedChipBlend)) {
@@ -439,6 +565,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
         installSchedule: installSchedule.length > 0 ? installSchedule : undefined,
         totalPrice: parseFloat(formData.totalPrice) || 0,
         chipBlend: normalizedChipBlend || undefined,
+        tags: normalizedTags.length > 0 ? normalizedTags : undefined,
         baseColor: formData.baseColor || undefined,
         status: formData.status,
         notes: formData.notes || undefined,
@@ -590,15 +717,36 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
               />
             </div>
 
-            <div>
+            <div className="relative">
               <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Customer Name</label>
               <input
                 type="text"
                 placeholder="e.g., John Smith"
                 value={formData.customerName}
-                onChange={(e) => setFormData({ ...formData, customerName: e.target.value })}
+                onChange={(e) => handleCustomerNameInputChange(e.target.value)}
+                onFocus={() => setShowCustomerDropdown(true)}
+                onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 200)}
                 className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
+              {showCustomerDropdown && customerSuggestions.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-slate-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                  {customerSuggestions.map((customer) => (
+                    <button
+                      key={customer.name}
+                      type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        handleCustomerSelect(customer);
+                      }}
+                      onClick={() => handleCustomerSelect(customer)}
+                      className="w-full px-3 sm:px-4 py-2 text-left hover:bg-slate-100 text-xs sm:text-sm"
+                    >
+                      <div className="font-medium text-slate-800">{customer.name}</div>
+                      {customer.address && <div className="text-slate-500 truncate">{customer.address}</div>}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="md:col-span-2 lg:col-span-1">
@@ -621,6 +769,34 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                 rows={3}
                 className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y"
               />
+            </div>
+
+            <div className="md:col-span-2 lg:col-span-3 relative">
+              <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Tags</label>
+              <input
+                type="text"
+                placeholder="e.g., Commercial, Warranty, HOA"
+                value={formData.tags}
+                onChange={(e) => handleTagInputChange(e.target.value)}
+                onFocus={() => setShowTagDropdown(true)}
+                onBlur={() => setTimeout(() => setShowTagDropdown(false), 200)}
+                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <p className="mt-1 text-xs text-slate-500">Comma-separated tags used for reporting and filtering.</p>
+              {showTagDropdown && tagSuggestions.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-slate-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                  {tagSuggestions.map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => handleTagSelect(tag)}
+                      className="w-full px-3 sm:px-4 py-2 text-left hover:bg-slate-100 text-xs sm:text-sm"
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div>

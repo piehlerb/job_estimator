@@ -53,6 +53,7 @@ export default function JobSheet({ jobId, onBack }: JobSheetProps) {
             id: 'default',
             verticalPricePerSqft: 0,
             antiSlipPricePerSqft: 0,
+            abrasionResistancePricePerSqft: 0,
             coatingRemovalPaintPerSqft: 0,
             coatingRemovalEpoxyPerSqft: 0,
             moistureMitigationPerSqft: 0,
@@ -157,6 +158,7 @@ export default function JobSheet({ jobId, onBack }: JobSheetProps) {
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <p><span className="text-slate-500">Chip Blend:</span> <span className="font-medium">{job.chipBlend || '-'}</span></p>
                   <p><span className="text-slate-500">Base Color:</span> <span className="font-medium">{job.baseColor || '-'}</span></p>
+                  <p><span className="text-slate-500">Tags:</span> <span className="font-medium">{(job.tags || []).length > 0 ? (job.tags || []).join(', ') : '-'}</span></p>
                   <p><span className="text-slate-500">Floor Sq Ft:</span> <span className="font-medium">{job.floorFootage.toLocaleString()}</span></p>
                   <p><span className="text-slate-500">Vertical Sq Ft:</span> <span className="font-medium">{job.verticalFootage.toLocaleString()}</span></p>
                 </div>
