@@ -72,6 +72,18 @@ export interface Pricing {
   updatedAt: string;
 }
 
+export interface Customer {
+  id: string;
+  name: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+  deleted?: boolean;
+}
+
 export type CoatingRemovalType = 'None' | 'Paint' | 'Epoxy';
 
 export interface InstallDaySchedule {
@@ -233,6 +245,7 @@ export interface ExportData {
   systems: ChipSystem[];
   costs: Costs | null;
   laborers: Laborer[];
+  customers: Customer[];
   jobs: Job[];
   chipBlends: ChipBlend[];
   chipInventory: ChipInventory[];

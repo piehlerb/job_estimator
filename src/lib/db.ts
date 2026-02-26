@@ -1,7 +1,7 @@
-import { ChipSystem, PricingVariable, Job, Costs, Laborer, ChipInventory, TopCoatInventory, BaseCoatInventory, MiscInventory, Pricing } from '../types';
+import { ChipSystem, PricingVariable, Job, Costs, Laborer, ChipInventory, TopCoatInventory, BaseCoatInventory, MiscInventory, Pricing, Customer } from '../types';
 
 const DB_NAME = 'JobEstimator';
-const DB_VERSION = 9; // Incremented for pricing store
+const DB_VERSION = 10; // Incremented for customers store
 
 // Auto-sync flag - can be disabled for batch operations
 let autoSyncEnabled = true;
@@ -137,6 +137,9 @@ export async function initDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains('metadata')) {
         db.createObjectStore('metadata', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('customers')) {
+        db.createObjectStore('customers', { keyPath: 'id' });
       }
     };
   });
@@ -924,6 +927,91 @@ export async function saveMiscInventory(inventory: MiscInventory): Promise<void>
   await queueForSync('miscInventory', 'current', 'update');
 
   // Trigger background sync
+  await triggerBackgroundSync();
+}
+
+// Customers
+export async function getAllCustomers(): Promise<Customer[]> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['customers'], 'readonly');
+    const store = transaction.objectStore('customers');
+    const request = store.getAll();
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const results = request.result || [];
+      resolve(results.filter((c: Customer) => !c.deleted));
+    };
+  });
+}
+
+// Sync version - returns all records including deleted
+export async function getAllCustomersForSync(): Promise<Customer[]> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['customers'], 'readonly');
+    const store = transaction.objectStore('customers');
+    const request = store.getAll();
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result || []);
+  });
+}
+
+export async function addCustomer(customer: Customer): Promise<void> {
+  const db = await getDB();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(['customers'], 'readwrite');
+    const store = transaction.objectStore('customers');
+    const request = store.add(customer);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve();
+  });
+
+  await queueForSync('customers', customer.id, 'create');
+  await triggerBackgroundSync();
+}
+
+export async function updateCustomer(customer: Customer): Promise<void> {
+  const db = await getDB();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(['customers'], 'readwrite');
+    const store = transaction.objectStore('customers');
+    const request = store.put(customer);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve();
+  });
+
+  await queueForSync('customers', customer.id, 'update');
+  await triggerBackgroundSync();
+}
+
+export async function deleteCustomer(id: string): Promise<void> {
+  const db = await getDB();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(['customers'], 'readwrite');
+    const store = transaction.objectStore('customers');
+    const getRequest = store.get(id);
+
+    getRequest.onerror = () => reject(getRequest.error);
+    getRequest.onsuccess = () => {
+      const customer = getRequest.result;
+      if (customer) {
+        customer.deleted = true;
+        customer.updatedAt = new Date().toISOString();
+        const putRequest = store.put(customer);
+        putRequest.onerror = () => reject(putRequest.error);
+        putRequest.onsuccess = () => resolve();
+      } else {
+        resolve();
+      }
+    };
+  });
+
+  await queueForSync('customers', id, 'delete');
   await triggerBackgroundSync();
 }
 

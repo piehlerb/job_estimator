@@ -9,6 +9,7 @@ import {
   getAllSystems,
   getCosts,
   getAllLaborers,
+  getAllCustomers,
   getAllJobs,
   getAllChipBlends,
   getAllChipInventory,
@@ -22,6 +23,9 @@ import {
   addLaborer,
   updateLaborer,
   deleteLaborer,
+  addCustomer,
+  updateCustomer,
+  deleteCustomer,
   addJob,
   updateJob,
   deleteJob,
@@ -39,6 +43,7 @@ export async function exportAllData(): Promise<ExportData> {
     systems,
     costs,
     laborers,
+    customers,
     jobs,
     chipBlends,
     chipInventory,
@@ -49,6 +54,7 @@ export async function exportAllData(): Promise<ExportData> {
     getAllSystems(),
     getCosts(),
     getAllLaborers(),
+    getAllCustomers(),
     getAllJobs(),
     getAllChipBlends(),
     getAllChipInventory(),
@@ -68,6 +74,7 @@ export async function exportAllData(): Promise<ExportData> {
     systems,
     costs,
     laborers,
+    customers,
     jobs,
     chipBlends,
     chipInventory,
@@ -385,6 +392,7 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
     localSystems,
     localCosts,
     localLaborers,
+    localCustomers,
     localJobs,
     localChipBlends,
     localChipInventory,
@@ -395,6 +403,7 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
     getAllSystems(),
     getCosts(),
     getAllLaborers(),
+    getAllCustomers(),
     getAllJobs(),
     getAllChipBlends(),
     getAllChipInventory(),
@@ -406,6 +415,7 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
   // Create lookup maps
   const localSystemsMap = new Map(localSystems.map(s => [s.id, s]));
   const localLaborersMap = new Map(localLaborers.map(l => [l.id, l]));
+  const localCustomersMap = new Map(localCustomers.map(c => [c.id, c]));
   const localJobsMap = new Map(localJobs.map(j => [j.id, j]));
   const localChipBlendsMap = new Map(localChipBlends.map(b => [b.id, b]));
   const localChipInventoryMap = new Map(localChipInventory.map(i => [i.id, i]));
@@ -413,6 +423,7 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
   // Track which IDs are in import for delete detection
   const importSystemIds = new Set(importData.systems.map(s => s.id));
   const importLaborerIds = new Set(importData.laborers.map(l => l.id));
+  const importCustomerIds = new Set((importData.customers || []).map(c => c.id));
   const importJobIds = new Set(importData.jobs.map(j => j.id));
   const importChipBlendIds = new Set(importData.chipBlends.map(b => b.id));
   const importChipInventoryIds = new Set(importData.chipInventory.map(i => i.id));
@@ -474,6 +485,27 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
       preview.toSkip.push({
         entityType: 'Laborer',
         entityName: importLaborer.name,
+        reason: 'Local version is same or newer',
+      });
+    }
+  }
+
+  // Compare customers
+  for (const importCustomer of (importData.customers || [])) {
+    const local = localCustomersMap.get(importCustomer.id);
+    if (!local) {
+      preview.toAdd.push({ entityType: 'Customer', entityName: importCustomer.name });
+    } else if (isNewer(importCustomer.updatedAt, local.updatedAt)) {
+      preview.toUpdate.push({
+        entityType: 'Customer',
+        entityName: importCustomer.name,
+        localUpdatedAt: local.updatedAt,
+        importUpdatedAt: importCustomer.updatedAt,
+      });
+    } else {
+      preview.toSkip.push({
+        entityType: 'Customer',
+        entityName: importCustomer.name,
         reason: 'Local version is same or newer',
       });
     }
@@ -607,6 +639,11 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
         preview.toDelete.push({ entityType: 'Laborer', entityName: local.name });
       }
     }
+    for (const local of localCustomers) {
+      if (!importCustomerIds.has(local.id)) {
+        preview.toDelete.push({ entityType: 'Customer', entityName: local.name });
+      }
+    }
     for (const local of localJobs) {
       if (!importJobIds.has(local.id)) {
         preview.toDelete.push({ entityType: 'Job', entityName: local.name });
@@ -636,6 +673,7 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
     localSystems,
     localCosts,
     localLaborers,
+    localCustomers,
     localJobs,
     localChipBlends,
     localChipInventory,
@@ -646,6 +684,7 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
     getAllSystems(),
     getCosts(),
     getAllLaborers(),
+    getAllCustomers(),
     getAllJobs(),
     getAllChipBlends(),
     getAllChipInventory(),
@@ -657,6 +696,7 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
   // Create lookup maps
   const localSystemsMap = new Map(localSystems.map(s => [s.id, s]));
   const localLaborersMap = new Map(localLaborers.map(l => [l.id, l]));
+  const localCustomersMap = new Map(localCustomers.map(c => [c.id, c]));
   const localJobsMap = new Map(localJobs.map(j => [j.id, j]));
   const localChipBlendsMap = new Map(localChipBlends.map(b => [b.id, b]));
   const localChipInventoryMap = new Map(localChipInventory.map(i => [i.id, i]));
@@ -664,6 +704,7 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
   // Track import IDs for deletion
   const importSystemIds = new Set(importData.systems.map(s => s.id));
   const importLaborerIds = new Set(importData.laborers.map(l => l.id));
+  const importCustomerIds = new Set((importData.customers || []).map(c => c.id));
   const importJobIds = new Set(importData.jobs.map(j => j.id));
   const importChipInventoryIds = new Set(importData.chipInventory.map(i => i.id));
 
@@ -705,6 +746,20 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
       log.push({ entityType: 'Laborer', entityName: importLaborer.name, action: 'update', reason: 'Import is newer' });
     } else {
       log.push({ entityType: 'Laborer', entityName: importLaborer.name, action: 'skip', reason: 'Local is same or newer' });
+    }
+  }
+
+  // Import customers
+  for (const importCustomer of (importData.customers || [])) {
+    const local = localCustomersMap.get(importCustomer.id);
+    if (!local) {
+      await addCustomer(importCustomer);
+      log.push({ entityType: 'Customer', entityName: importCustomer.name, action: 'add', reason: 'New record' });
+    } else if (isNewer(importCustomer.updatedAt, local.updatedAt)) {
+      await updateCustomer(importCustomer);
+      log.push({ entityType: 'Customer', entityName: importCustomer.name, action: 'update', reason: 'Import is newer' });
+    } else {
+      log.push({ entityType: 'Customer', entityName: importCustomer.name, action: 'skip', reason: 'Local is same or newer' });
     }
   }
 
@@ -798,6 +853,12 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
       if (!importLaborerIds.has(local.id)) {
         await deleteLaborer(local.id);
         log.push({ entityType: 'Laborer', entityName: local.name, action: 'delete', reason: 'Not in import file' });
+      }
+    }
+    for (const local of localCustomers) {
+      if (!importCustomerIds.has(local.id)) {
+        await deleteCustomer(local.id);
+        log.push({ entityType: 'Customer', entityName: local.name, action: 'delete', reason: 'Not in import file' });
       }
     }
     for (const local of localJobs) {

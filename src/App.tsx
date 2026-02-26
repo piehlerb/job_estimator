@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import JobForm from './pages/JobForm';
@@ -17,6 +17,7 @@ import Login from './pages/Login';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { useAuth } from './contexts/AuthContext';
 import { useAutoSync } from './hooks/useAutoSync';
+import { migrateCustomersFromJobs } from './lib/jobMigration';
 
 type Page = 'dashboard' | 'new-job' | 'edit-job' | 'job-sheet' | 'chip-systems' | 'chip-blends' | 'laborers' | 'costs' | 'pricing' | 'settings' | 'inventory' | 'calendar' | 'reporting' | 'customers';
 
@@ -41,6 +42,18 @@ function App() {
       console.error('Sync error:', error);
     },
   });
+
+  // One-time migration: seed customers store from existing job data
+  useEffect(() => {
+    if (!user && !offlineMode) return;
+    migrateCustomersFromJobs().then((count) => {
+      if (count > 0) {
+        console.log(`[Migration] Seeded ${count} customer(s) from job history`);
+      }
+    }).catch((err) => {
+      console.warn('[Migration] Customer seed failed:', err);
+    });
+  }, [user, offlineMode]);
 
   const handleNavigation = (page: Page, jobId?: string) => {
     setCurrentPage(page);

@@ -4,6 +4,7 @@ import {
   getAllSystems,
   getJob,
   getAllJobs,
+  getAllCustomers,
   addJob,
   updateJob,
   getCosts,
@@ -160,6 +161,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
       const storedPricing = await getPricing();
       const laborers = await getActiveLaborers();
       const allJobs = await getAllJobs();
+      const allCustomers = await getAllCustomers();
       const blends = await getAllChipBlends();
       const inventory = await getAllChipInventory();
       console.log('[JobForm] Data loaded:', { systems: allSystems.length, costs: !!storedCosts, pricing: !!storedPricing, laborers: laborers.length });
@@ -169,6 +171,18 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
       setChipInventory(inventory);
       const tagSet = new Set<string>();
       const customerMap = new Map<string, { name: string; address?: string; updatedAt: string }>();
+
+      // Seed customer map from the customer store first
+      allCustomers.forEach((customer) => {
+        const key = customer.name.trim().toLowerCase();
+        customerMap.set(key, {
+          name: customer.name.trim(),
+          address: customer.address?.trim() || undefined,
+          updatedAt: customer.updatedAt,
+        });
+      });
+
+      // Merge in job-derived customer info (fills in addresses from jobs if missing in customer store)
       allJobs.forEach((job) => {
         (job.tags || []).forEach((tag) => tagSet.add(tag));
 
@@ -180,7 +194,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
         const updatedAt = job.updatedAt || job.createdAt || '';
         const existing = customerMap.get(key);
 
-        if (!existing || updatedAt > existing.updatedAt) {
+        if (!existing) {
           customerMap.set(key, {
             name: customerName,
             address: customerAddress,
@@ -692,7 +706,18 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
       </button>
 
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4 sm:p-6 md:p-8">
-        <h2 className="text-xl sm:text-2xl font-bold text-slate-900 mb-4 sm:mb-6">{jobId ? 'Edit Job' : 'Create New Job'}</h2>
+        <div className="flex items-center justify-between mb-4 sm:mb-6">
+          <h2 className="text-xl sm:text-2xl font-bold text-slate-900">{jobId ? 'Edit Job' : 'Create New Job'}</h2>
+          <button
+            type="submit"
+            form="job-form"
+            disabled={saving}
+            className="flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-2.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 active:bg-blue-800 transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed text-sm sm:text-base"
+          >
+            <Save size={16} className="sm:w-[18px] sm:h-[18px]" />
+            {saving ? 'Saving...' : jobId ? 'Update Job' : 'Create Job'}
+          </button>
+        </div>
 
         {/* Snapshot Change Banner */}
         {showSnapshotBanner && snapshotChanges && (
@@ -703,7 +728,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
           />
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
+        <form id="job-form" onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
           {/* Job Inputs */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             <div className="md:col-span-2 lg:col-span-1">
@@ -717,47 +742,71 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
               />
             </div>
 
-            <div className="relative">
-              <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Customer Name</label>
-              <input
-                type="text"
-                placeholder="e.g., John Smith"
-                value={formData.customerName}
-                onChange={(e) => handleCustomerNameInputChange(e.target.value)}
-                onFocus={() => setShowCustomerDropdown(true)}
-                onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 200)}
-                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-              {showCustomerDropdown && customerSuggestions.length > 0 && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-slate-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                  {customerSuggestions.map((customer) => (
-                    <button
-                      key={customer.name}
-                      type="button"
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        handleCustomerSelect(customer);
-                      }}
-                      onClick={() => handleCustomerSelect(customer)}
-                      className="w-full px-3 sm:px-4 py-2 text-left hover:bg-slate-100 text-xs sm:text-sm"
-                    >
-                      <div className="font-medium text-slate-800">{customer.name}</div>
-                      {customer.address && <div className="text-slate-500 truncate">{customer.address}</div>}
-                    </button>
-                  ))}
-                </div>
-              )}
+            <div>
+              <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Status</label>
+              <div className="flex flex-wrap gap-3 sm:gap-4">
+                {(['Pending', 'Won', 'Lost'] as JobStatus[]).map((status) => (
+                  <label key={status} className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="status"
+                      value={status}
+                      checked={formData.status === status}
+                      onChange={(e) => setFormData({ ...formData, status: e.target.value as JobStatus })}
+                      className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                    />
+                    <span className={`text-xs sm:text-sm ${
+                      status === 'Won' ? 'text-green-700' :
+                      status === 'Lost' ? 'text-red-700' :
+                      'text-slate-700'
+                    }`}>{status}</span>
+                  </label>
+                ))}
+              </div>
             </div>
 
-            <div className="md:col-span-2 lg:col-span-1">
-              <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Customer Address</label>
-              <input
-                type="text"
-                placeholder="e.g., 123 Main St, City, State 12345"
-                value={formData.customerAddress}
-                onChange={(e) => setFormData({ ...formData, customerAddress: e.target.value })}
-                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
+            <div className="md:col-span-2 lg:col-span-2 flex gap-3">
+              <div className="relative w-2/5 min-w-0">
+                <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Customer Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g., John Smith"
+                  value={formData.customerName}
+                  onChange={(e) => handleCustomerNameInputChange(e.target.value)}
+                  onFocus={() => setShowCustomerDropdown(true)}
+                  onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 200)}
+                  className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                {showCustomerDropdown && customerSuggestions.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-slate-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    {customerSuggestions.map((customer) => (
+                      <button
+                        key={customer.name}
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          handleCustomerSelect(customer);
+                        }}
+                        onClick={() => handleCustomerSelect(customer)}
+                        className="w-full px-3 sm:px-4 py-2 text-left hover:bg-slate-100 text-xs sm:text-sm"
+                      >
+                        <div className="font-medium text-slate-800">{customer.name}</div>
+                        {customer.address && <div className="text-slate-500 truncate">{customer.address}</div>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Customer Address</label>
+                <input
+                  type="text"
+                  placeholder="e.g., 123 Main St, City, State 12345"
+                  value={formData.customerAddress}
+                  onChange={(e) => setFormData({ ...formData, customerAddress: e.target.value })}
+                  className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
             </div>
 
             <div className="md:col-span-2 lg:col-span-3">
@@ -925,29 +974,6 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                       className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
                     />
                     <span className="text-xs sm:text-sm text-slate-700">{color}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Status</label>
-              <div className="flex flex-wrap gap-3 sm:gap-4">
-                {(['Pending', 'Won', 'Lost'] as JobStatus[]).map((status) => (
-                  <label key={status} className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="status"
-                      value={status}
-                      checked={formData.status === status}
-                      onChange={(e) => setFormData({ ...formData, status: e.target.value as JobStatus })}
-                      className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
-                    />
-                    <span className={`text-xs sm:text-sm ${
-                      status === 'Won' ? 'text-green-700' :
-                      status === 'Lost' ? 'text-red-700' :
-                      'text-slate-700'
-                    }`}>{status}</span>
                   </label>
                 ))}
               </div>
