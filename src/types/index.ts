@@ -112,6 +112,8 @@ export interface Job {
   tags?: string[]; // Optional tags for reporting and filtering
   baseColor?: BaseColor;
   status: JobStatus;
+  estimateDate?: string; // Date the estimate was created/sent (defaults to createdAt date)
+  decisionDate?: string; // Date the customer made a decision (Won/Lost)
   notes?: string;
   // Tint options
   includeBasecoatTint?: boolean;

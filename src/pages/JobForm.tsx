@@ -95,6 +95,8 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
     tags: '',
     baseColor: '' as BaseColor | '',
     status: 'Pending' as JobStatus,
+    estimateDate: new Date().toISOString().split('T')[0],
+    decisionDate: '',
     notes: '',
     includeBasecoatTint: false,
     includeTopcoatTint: false,
@@ -245,6 +247,8 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
             tags: (job.tags || []).join(', '),
             baseColor: job.baseColor || '',
             status: job.status || 'Pending',
+            estimateDate: job.estimateDate || job.createdAt.split('T')[0],
+            decisionDate: job.decisionDate || '',
             notes: job.notes || '',
             includeBasecoatTint: job.includeBasecoatTint || false,
             includeTopcoatTint: job.includeTopcoatTint || false,
@@ -582,6 +586,8 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
         tags: normalizedTags.length > 0 ? normalizedTags : undefined,
         baseColor: formData.baseColor || undefined,
         status: formData.status,
+        estimateDate: formData.estimateDate || undefined,
+        decisionDate: formData.decisionDate || undefined,
         notes: formData.notes || undefined,
         includeBasecoatTint: formData.includeBasecoatTint,
         includeTopcoatTint: formData.includeTopcoatTint,
@@ -742,27 +748,48 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
               />
             </div>
 
-            <div>
-              <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Status</label>
-              <div className="flex flex-wrap gap-3 sm:gap-4">
-                {(['Pending', 'Won', 'Lost'] as JobStatus[]).map((status) => (
-                  <label key={status} className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="status"
-                      value={status}
-                      checked={formData.status === status}
-                      onChange={(e) => setFormData({ ...formData, status: e.target.value as JobStatus })}
-                      className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
-                    />
-                    <span className={`text-xs sm:text-sm ${
-                      status === 'Won' ? 'text-green-700' :
-                      status === 'Lost' ? 'text-red-700' :
-                      'text-slate-700'
-                    }`}>{status}</span>
-                  </label>
-                ))}
+            <div className="flex flex-col gap-3">
+              <div>
+                <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Status</label>
+                <div className="flex flex-wrap gap-3 sm:gap-4">
+                  {(['Pending', 'Won', 'Lost'] as JobStatus[]).map((status) => (
+                    <label key={status} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="status"
+                        value={status}
+                        checked={formData.status === status}
+                        onChange={(e) => setFormData({ ...formData, status: e.target.value as JobStatus })}
+                        className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                      />
+                      <span className={`text-xs sm:text-sm ${
+                        status === 'Won' ? 'text-green-700' :
+                        status === 'Lost' ? 'text-red-700' :
+                        'text-slate-700'
+                      }`}>{status}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
+              <div>
+                <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Decision Date</label>
+                <input
+                  type="date"
+                  value={formData.decisionDate}
+                  onChange={(e) => setFormData({ ...formData, decisionDate: e.target.value })}
+                  className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Estimate Date</label>
+              <input
+                type="date"
+                value={formData.estimateDate}
+                onChange={(e) => setFormData({ ...formData, estimateDate: e.target.value })}
+                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
             </div>
 
             <div className="md:col-span-2 lg:col-span-2 flex gap-3">

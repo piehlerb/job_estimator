@@ -1,4 +1,4 @@
-import { Plus, Trash2, FileText } from 'lucide-react';
+import { Plus, Trash2, FileText, Search } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { getAllJobs, deleteJob, getDefaultCosts, getCosts, getPricing, getDefaultPricing } from '../lib/db';
 import { Job, JobCalculation, Costs, Pricing, JobStatus } from '../types';
@@ -27,6 +27,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
   const [chipBlendFilter, setChipBlendFilter] = useState<string>('');
   const [selectedTagFilters, setSelectedTagFilters] = useState<string[]>([]);
   const [tagMatchMode, setTagMatchMode] = useState<'any' | 'all'>('any');
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     loadJobs();
@@ -161,6 +162,15 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
   const filteredAndSortedJobs = useMemo(() => {
     let filtered = jobsWithCalc;
 
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.trim().toLowerCase();
+      filtered = filtered.filter(({ job }) =>
+        (job.name || '').toLowerCase().includes(query) ||
+        (job.customerName || '').toLowerCase().includes(query)
+      );
+    }
+
     // Apply status filter
     if (statusFilter.length > 0) {
       filtered = filtered.filter(({ job }) => statusFilter.includes(job.status));
@@ -196,7 +206,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
           return new Date(b.job.createdAt).getTime() - new Date(a.job.createdAt).getTime();
       }
     });
-  }, [jobsWithCalc, statusFilter, chipBlendFilter, selectedTagFilters, tagMatchMode, sortBy]);
+  }, [jobsWithCalc, searchQuery, statusFilter, chipBlendFilter, selectedTagFilters, tagMatchMode, sortBy]);
 
   const getStatusColor = (status: JobStatus) => {
     switch (status) {
@@ -229,10 +239,20 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
         {/* Filters and Sort Section */}
         <div className="p-3 sm:p-4 md:p-6 border-b border-slate-200">
           <div className="flex flex-col gap-3">
-            {/* Title and Sort */}
+            {/* Title, Search, and Sort */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-2">
               <h3 className="text-base sm:text-lg font-semibold text-slate-900">Jobs</h3>
               <div className="flex items-center gap-2 w-full sm:w-auto">
+                <div className="relative flex-1 sm:w-56">
+                  <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="Search jobs..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-8 pr-3 py-1.5 sm:py-2 border border-slate-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
                 <label className="text-xs sm:text-sm text-slate-600 font-medium">Sort:</label>
                 <select
                   value={sortBy}
