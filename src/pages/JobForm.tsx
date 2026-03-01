@@ -1,4 +1,4 @@
-import { ArrowLeft, Save } from 'lucide-react';
+import { ArrowLeft, Save, ChevronDown, ChevronUp, X, Plus } from 'lucide-react';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   getAllSystems,
@@ -16,8 +16,9 @@ import {
   addChipBlend,
   ChipBlend,
   getAllChipInventory,
+  getAllProducts,
 } from '../lib/db';
-import { BaseColor, ChipSystem, Costs, Pricing, Job, JobCalculation, JobStatus, Laborer, InstallDaySchedule, ChipInventory, CoatingRemovalType } from '../types';
+import { BaseColor, ChipSystem, Costs, Pricing, Job, JobCalculation, JobStatus, Laborer, InstallDaySchedule, ChipInventory, CoatingRemovalType, Product, JobProduct } from '../types';
 import { calculateJobOutputs } from '../lib/calculations';
 import InstallDayScheduleComponent from '../components/InstallDaySchedule';
 import { convertLegacyJobToSchedule } from '../lib/jobMigration';
@@ -72,6 +73,12 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
   const [showTagDropdown, setShowTagDropdown] = useState(false);
   const [availableCustomers, setAvailableCustomers] = useState<CustomerOption[]>([]);
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+
+  // Products state
+  const [jobProducts, setJobProducts] = useState<JobProduct[]>([]);
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [showProductsSection, setShowProductsSection] = useState(false);
+  const [selectedProductId, setSelectedProductId] = useState('');
 
   // Snapshot comparison state
   const [snapshotChanges, setSnapshotChanges] = useState<SnapshotChanges | null>(null);
@@ -131,6 +138,15 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
     calculateCosts();
   }, [formData, systems, costs, pricing, activeLaborers, installSchedule, useCurrentValues, existingJob]);
 
+  const productsTotalPrice = useMemo(
+    () => jobProducts.reduce((sum, p) => sum + p.quantity * p.unitPrice, 0),
+    [jobProducts]
+  );
+  const productsTotalCost = useMemo(
+    () => jobProducts.reduce((sum, p) => sum + p.quantity * p.unitCost, 0),
+    [jobProducts]
+  );
+
   const tagSuggestions = useMemo(() => {
     const segments = formData.tags.split(',');
     const query = (segments[segments.length - 1] || '').trim().toLowerCase();
@@ -166,11 +182,13 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
       const allCustomers = await getAllCustomers();
       const blends = await getAllChipBlends();
       const inventory = await getAllChipInventory();
+      const productCatalog = await getAllProducts();
       console.log('[JobForm] Data loaded:', { systems: allSystems.length, costs: !!storedCosts, pricing: !!storedPricing, laborers: laborers.length });
       setSystems(allSystems);
       setActiveLaborers(laborers);
       setChipBlends(blends);
       setChipInventory(inventory);
+      setAllProducts(productCatalog);
       const tagSet = new Set<string>();
       const customerMap = new Map<string, { name: string; address?: string; updatedAt: string }>();
 
@@ -278,6 +296,11 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
           const schedule = convertLegacyJobToSchedule(job);
           if (schedule) {
             setInstallSchedule(schedule);
+          }
+          // Load products from existing job
+          if (job.products && job.products.length > 0) {
+            setJobProducts(job.products);
+            setShowProductsSection(true);
           }
           // Compare snapshots with current values
           try {
@@ -432,12 +455,33 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
       + (parseFloat(updated.actualAntiSlipPrice) || 0)
       + (parseFloat(updated.actualAbrasionResistancePrice) || 0)
       + (parseFloat(updated.actualCoatingRemovalPrice) || 0)
-      + (parseFloat(updated.actualMoistureMitigationPrice) || 0);
+      + (parseFloat(updated.actualMoistureMitigationPrice) || 0)
+      + productsTotalPrice;
 
     updated.totalPrice = total.toFixed(2);
     setFormData(updated);
     setTimeout(() => { updatingFrom.current = null; }, 0);
   };
+
+  // Recalculate total when products change
+  const recalcTotalWithProducts = () => {
+    const total = (parseFloat(formData.actualDiscount) || 0)
+      + (parseFloat(formData.actualCrackPrice) || 0)
+      + (parseFloat(formData.actualFloorPrice) || 0)
+      + (parseFloat(formData.actualVerticalPrice) || 0)
+      + (parseFloat(formData.actualAntiSlipPrice) || 0)
+      + (parseFloat(formData.actualAbrasionResistancePrice) || 0)
+      + (parseFloat(formData.actualCoatingRemovalPrice) || 0)
+      + (parseFloat(formData.actualMoistureMitigationPrice) || 0)
+      + productsTotalPrice;
+    setFormData(prev => ({ ...prev, totalPrice: total.toFixed(2) }));
+  };
+
+  useEffect(() => {
+    if (actualPricingInitialized.current) {
+      recalcTotalWithProducts();
+    }
+  }, [productsTotalPrice]);
 
   // When total price changes, back-calculate floor price
   const handleTotalPriceChange = (newTotalPrice: string) => {
@@ -451,7 +495,8 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
       + (parseFloat(formData.actualAntiSlipPrice) || 0)
       + (parseFloat(formData.actualAbrasionResistancePrice) || 0)
       + (parseFloat(formData.actualCoatingRemovalPrice) || 0)
-      + (parseFloat(formData.actualMoistureMitigationPrice) || 0);
+      + (parseFloat(formData.actualMoistureMitigationPrice) || 0)
+      + productsTotalPrice;
     const newFloorPrice = total - nonFloor;
     const floorFootage = parseFloat(formData.floorFootage) || 0;
     const newFloorPerSqft = floorFootage > 0 ? newFloorPrice / floorFootage : 0;
@@ -607,6 +652,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
         actualAbrasionResistancePrice: parseFloat(formData.actualAbrasionResistancePrice) || undefined,
         actualCoatingRemovalPrice: parseFloat(formData.actualCoatingRemovalPrice) || undefined,
         actualMoistureMitigationPrice: parseFloat(formData.actualMoistureMitigationPrice) || undefined,
+        products: jobProducts.length > 0 ? jobProducts : undefined,
         // Update snapshots if user chose to use current values, otherwise preserve original
         // Laborers can be edited, so always save current selection
         costsSnapshot: existingJob && !useCurrentValues ? existingJob.costsSnapshot : costs,
@@ -1438,7 +1484,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                     const totalPrice = parseFloat(formData.totalPrice) || 0;
                     const floorFootage = parseFloat(formData.floorFootage) || 0;
                     const effectivePricePerSqft = floorFootage > 0 ? totalPrice / floorFootage : 0;
-                    const actualMargin = totalPrice - calculation.totalCosts;
+                    const actualMargin = totalPrice - calculation.totalCosts - productsTotalCost;
                     const actualMarginPct = totalPrice > 0 ? (actualMargin / totalPrice) * 100 : 0;
                     const minimumMarginBuffer = pricing.minimumMarginBuffer ?? 2000;
                     const selectedSystem = systems.find(s => s.id === formData.system);
@@ -1472,6 +1518,154 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                     );
                   })()}
                 </div>
+              </div>
+
+              {/* Products (collapsible) */}
+              <div className="rounded-lg border border-slate-200 mb-4 sm:mb-6">
+                <button
+                  type="button"
+                  onClick={() => setShowProductsSection(!showProductsSection)}
+                  className="w-full flex items-center justify-between px-3 sm:px-4 py-3 text-left hover:bg-slate-50 transition-colors rounded-lg"
+                >
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-xs sm:text-sm font-semibold text-slate-700 uppercase tracking-wide">Products</h4>
+                    {jobProducts.length > 0 && (
+                      <span className="px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-700 rounded-full">
+                        {jobProducts.length}
+                      </span>
+                    )}
+                  </div>
+                  {showProductsSection ? <ChevronUp size={16} className="text-slate-400" /> : <ChevronDown size={16} className="text-slate-400" />}
+                </button>
+
+                {showProductsSection && (
+                  <div className="px-3 sm:px-4 pb-3 sm:pb-4 border-t border-slate-200">
+                    {/* Product selector */}
+                    <div className="flex items-center gap-2 mt-3 mb-3">
+                      <select
+                        value={selectedProductId}
+                        onChange={(e) => setSelectedProductId(e.target.value)}
+                        className="flex-1 px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="">Select a product...</option>
+                        {allProducts.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name} — {formatCurrency(p.price)}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!selectedProductId) return;
+                          const product = allProducts.find((p) => p.id === selectedProductId);
+                          if (!product) return;
+                          const existing = jobProducts.find((jp) => jp.productId === product.id);
+                          if (existing) {
+                            setJobProducts(jobProducts.map((jp) =>
+                              jp.productId === product.id ? { ...jp, quantity: jp.quantity + 1 } : jp
+                            ));
+                          } else {
+                            setJobProducts([...jobProducts, {
+                              productId: product.id,
+                              productName: product.name,
+                              quantity: 1,
+                              unitCost: product.cost,
+                              unitPrice: product.price,
+                            }]);
+                          }
+                          setSelectedProductId('');
+                        }}
+                        disabled={!selectedProductId}
+                        className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Plus size={14} />
+                        Add
+                      </button>
+                    </div>
+
+                    {allProducts.length === 0 && (
+                      <p className="text-sm text-slate-500 py-2">No products in catalog. Add products from the Products page first.</p>
+                    )}
+
+                    {/* Products table */}
+                    {jobProducts.length > 0 && (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-slate-200 text-xs text-slate-500">
+                              <th className="text-left py-2 font-medium">Product</th>
+                              <th className="text-right py-2 font-medium w-20">Qty</th>
+                              <th className="text-right py-2 font-medium">Unit Cost</th>
+                              <th className="text-right py-2 font-medium w-28">Unit Price</th>
+                              <th className="text-right py-2 font-medium">Line Total</th>
+                              <th className="text-right py-2 font-medium w-10"></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {jobProducts.map((jp, idx) => (
+                              <tr key={jp.productId} className="border-b border-slate-100">
+                                <td className="py-2 text-slate-900">{jp.productName}</td>
+                                <td className="py-2 text-right">
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    step="1"
+                                    value={jp.quantity}
+                                    onChange={(e) => {
+                                      const qty = parseInt(e.target.value) || 1;
+                                      setJobProducts(jobProducts.map((p, i) =>
+                                        i === idx ? { ...p, quantity: qty } : p
+                                      ));
+                                    }}
+                                    className="w-16 text-right text-sm bg-transparent border-b border-slate-300 focus:outline-none focus:border-blue-600 p-0"
+                                  />
+                                </td>
+                                <td className="py-2 text-right text-slate-500">{formatCurrency(jp.unitCost)}</td>
+                                <td className="py-2 text-right">
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value={jp.unitPrice}
+                                    onChange={(e) => {
+                                      const price = parseFloat(e.target.value) || 0;
+                                      setJobProducts(jobProducts.map((p, i) =>
+                                        i === idx ? { ...p, unitPrice: price } : p
+                                      ));
+                                    }}
+                                    className="w-24 text-right text-sm bg-transparent border-b border-slate-300 focus:outline-none focus:border-blue-600 p-0"
+                                  />
+                                </td>
+                                <td className="py-2 text-right text-slate-900 font-medium">
+                                  {formatCurrency(jp.quantity * jp.unitPrice)}
+                                </td>
+                                <td className="py-2 text-right">
+                                  <button
+                                    type="button"
+                                    onClick={() => setJobProducts(jobProducts.filter((_, i) => i !== idx))}
+                                    className="p-1 rounded text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                                  >
+                                    <X size={14} />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr className="border-t border-slate-200">
+                              <td colSpan={2} className="py-2 text-xs text-slate-500 font-medium">Totals</td>
+                              <td className="py-2 text-right text-xs text-slate-500 font-medium">{formatCurrency(productsTotalCost)}</td>
+                              <td></td>
+                              <td className="py-2 text-right text-sm text-slate-900 font-semibold">{formatCurrency(productsTotalPrice)}</td>
+                              <td></td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Suggested Pricing */}

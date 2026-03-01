@@ -13,13 +13,14 @@ import Inventory from './pages/Inventory';
 import Calendar from './pages/Calendar';
 import Reporting from './pages/Reporting';
 import Customers from './pages/Customers';
+import Products from './pages/Products';
 import Login from './pages/Login';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { useAuth } from './contexts/AuthContext';
 import { useAutoSync } from './hooks/useAutoSync';
 import { migrateCustomersFromJobs } from './lib/jobMigration';
 
-type Page = 'dashboard' | 'new-job' | 'edit-job' | 'job-sheet' | 'chip-systems' | 'chip-blends' | 'laborers' | 'costs' | 'pricing' | 'settings' | 'inventory' | 'calendar' | 'reporting' | 'customers';
+type Page = 'dashboard' | 'new-job' | 'edit-job' | 'job-sheet' | 'chip-systems' | 'chip-blends' | 'laborers' | 'costs' | 'pricing' | 'settings' | 'inventory' | 'calendar' | 'reporting' | 'customers' | 'products';
 
 function App() {
   const [currentPage, setCurrentPage] = useState<Page>('dashboard');
@@ -149,6 +150,9 @@ function App() {
       )}
       {currentPage === 'customers' && (
         <Customers />
+      )}
+      {currentPage === 'products' && (
+        <Products />
       )}
     </Layout>
   );

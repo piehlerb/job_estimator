@@ -26,6 +26,10 @@ import {
   addCustomer,
   updateCustomer,
   deleteCustomer,
+  getAllProducts,
+  addProduct,
+  updateProduct,
+  deleteProduct,
   addJob,
   updateJob,
   deleteJob,
@@ -44,6 +48,7 @@ export async function exportAllData(): Promise<ExportData> {
     costs,
     laborers,
     customers,
+    products,
     jobs,
     chipBlends,
     chipInventory,
@@ -55,6 +60,7 @@ export async function exportAllData(): Promise<ExportData> {
     getCosts(),
     getAllLaborers(),
     getAllCustomers(),
+    getAllProducts(),
     getAllJobs(),
     getAllChipBlends(),
     getAllChipInventory(),
@@ -75,6 +81,7 @@ export async function exportAllData(): Promise<ExportData> {
     costs,
     laborers,
     customers,
+    products,
     jobs,
     chipBlends,
     chipInventory,
@@ -393,6 +400,7 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
     localCosts,
     localLaborers,
     localCustomers,
+    localProducts,
     localJobs,
     localChipBlends,
     localChipInventory,
@@ -404,6 +412,7 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
     getCosts(),
     getAllLaborers(),
     getAllCustomers(),
+    getAllProducts(),
     getAllJobs(),
     getAllChipBlends(),
     getAllChipInventory(),
@@ -416,6 +425,7 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
   const localSystemsMap = new Map(localSystems.map(s => [s.id, s]));
   const localLaborersMap = new Map(localLaborers.map(l => [l.id, l]));
   const localCustomersMap = new Map(localCustomers.map(c => [c.id, c]));
+  const localProductsMap = new Map(localProducts.map(p => [p.id, p]));
   const localJobsMap = new Map(localJobs.map(j => [j.id, j]));
   const localChipBlendsMap = new Map(localChipBlends.map(b => [b.id, b]));
   const localChipInventoryMap = new Map(localChipInventory.map(i => [i.id, i]));
@@ -424,6 +434,7 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
   const importSystemIds = new Set(importData.systems.map(s => s.id));
   const importLaborerIds = new Set(importData.laborers.map(l => l.id));
   const importCustomerIds = new Set((importData.customers || []).map(c => c.id));
+  const importProductIds = new Set((importData.products || []).map(p => p.id));
   const importJobIds = new Set(importData.jobs.map(j => j.id));
   const importChipBlendIds = new Set(importData.chipBlends.map(b => b.id));
   const importChipInventoryIds = new Set(importData.chipInventory.map(i => i.id));
@@ -506,6 +517,27 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
       preview.toSkip.push({
         entityType: 'Customer',
         entityName: importCustomer.name,
+        reason: 'Local version is same or newer',
+      });
+    }
+  }
+
+  // Compare products
+  for (const importProduct of (importData.products || [])) {
+    const local = localProductsMap.get(importProduct.id);
+    if (!local) {
+      preview.toAdd.push({ entityType: 'Product', entityName: importProduct.name });
+    } else if (isNewer(importProduct.updatedAt, local.updatedAt)) {
+      preview.toUpdate.push({
+        entityType: 'Product',
+        entityName: importProduct.name,
+        localUpdatedAt: local.updatedAt,
+        importUpdatedAt: importProduct.updatedAt,
+      });
+    } else {
+      preview.toSkip.push({
+        entityType: 'Product',
+        entityName: importProduct.name,
         reason: 'Local version is same or newer',
       });
     }
@@ -644,6 +676,11 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
         preview.toDelete.push({ entityType: 'Customer', entityName: local.name });
       }
     }
+    for (const local of localProducts) {
+      if (!importProductIds.has(local.id)) {
+        preview.toDelete.push({ entityType: 'Product', entityName: local.name });
+      }
+    }
     for (const local of localJobs) {
       if (!importJobIds.has(local.id)) {
         preview.toDelete.push({ entityType: 'Job', entityName: local.name });
@@ -674,6 +711,7 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
     localCosts,
     localLaborers,
     localCustomers,
+    localProducts,
     localJobs,
     localChipBlends,
     localChipInventory,
@@ -685,6 +723,7 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
     getCosts(),
     getAllLaborers(),
     getAllCustomers(),
+    getAllProducts(),
     getAllJobs(),
     getAllChipBlends(),
     getAllChipInventory(),
@@ -697,6 +736,7 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
   const localSystemsMap = new Map(localSystems.map(s => [s.id, s]));
   const localLaborersMap = new Map(localLaborers.map(l => [l.id, l]));
   const localCustomersMap = new Map(localCustomers.map(c => [c.id, c]));
+  const localProductsMap = new Map(localProducts.map(p => [p.id, p]));
   const localJobsMap = new Map(localJobs.map(j => [j.id, j]));
   const localChipBlendsMap = new Map(localChipBlends.map(b => [b.id, b]));
   const localChipInventoryMap = new Map(localChipInventory.map(i => [i.id, i]));
@@ -705,6 +745,7 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
   const importSystemIds = new Set(importData.systems.map(s => s.id));
   const importLaborerIds = new Set(importData.laborers.map(l => l.id));
   const importCustomerIds = new Set((importData.customers || []).map(c => c.id));
+  const importProductIds = new Set((importData.products || []).map(p => p.id));
   const importJobIds = new Set(importData.jobs.map(j => j.id));
   const importChipInventoryIds = new Set(importData.chipInventory.map(i => i.id));
 
@@ -760,6 +801,20 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
       log.push({ entityType: 'Customer', entityName: importCustomer.name, action: 'update', reason: 'Import is newer' });
     } else {
       log.push({ entityType: 'Customer', entityName: importCustomer.name, action: 'skip', reason: 'Local is same or newer' });
+    }
+  }
+
+  // Import products
+  for (const importProduct of (importData.products || [])) {
+    const local = localProductsMap.get(importProduct.id);
+    if (!local) {
+      await addProduct(importProduct);
+      log.push({ entityType: 'Product', entityName: importProduct.name, action: 'add', reason: 'New record' });
+    } else if (isNewer(importProduct.updatedAt, local.updatedAt)) {
+      await updateProduct(importProduct);
+      log.push({ entityType: 'Product', entityName: importProduct.name, action: 'update', reason: 'Import is newer' });
+    } else {
+      log.push({ entityType: 'Product', entityName: importProduct.name, action: 'skip', reason: 'Local is same or newer' });
     }
   }
 
@@ -859,6 +914,12 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
       if (!importCustomerIds.has(local.id)) {
         await deleteCustomer(local.id);
         log.push({ entityType: 'Customer', entityName: local.name, action: 'delete', reason: 'Not in import file' });
+      }
+    }
+    for (const local of localProducts) {
+      if (!importProductIds.has(local.id)) {
+        await deleteProduct(local.id);
+        log.push({ entityType: 'Product', entityName: local.name, action: 'delete', reason: 'Not in import file' });
       }
     }
     for (const local of localJobs) {

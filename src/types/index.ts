@@ -84,6 +84,25 @@ export interface Customer {
   deleted?: boolean;
 }
 
+export interface Product {
+  id: string;
+  name: string;
+  cost: number; // unit cost (what you pay)
+  price: number; // standard unit price (what you charge)
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+  deleted?: boolean;
+}
+
+export interface JobProduct {
+  productId: string;
+  productName: string; // snapshot of name at time of adding
+  quantity: number;
+  unitCost: number; // snapshot of product cost
+  unitPrice: number; // actual price charged (editable, initialized from standard price)
+}
+
 export type CoatingRemovalType = 'None' | 'Paint' | 'Epoxy';
 
 export interface InstallDaySchedule {
@@ -136,6 +155,8 @@ export interface Job {
   actualAbrasionResistancePrice?: number;
   actualCoatingRemovalPrice?: number;
   actualMoistureMitigationPrice?: number;
+  // Products added to this job
+  products?: JobProduct[];
   // Snapshot of costs at time of job creation (so old jobs don't change)
   costsSnapshot: Costs;
   // Snapshot of pricing at time of job creation
@@ -248,6 +269,7 @@ export interface ExportData {
   costs: Costs | null;
   laborers: Laborer[];
   customers: Customer[];
+  products: Product[];
   jobs: Job[];
   chipBlends: ChipBlend[];
   chipInventory: ChipInventory[];
