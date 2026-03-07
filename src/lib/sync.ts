@@ -23,6 +23,7 @@ import {
   getAllLaborersForSync,
   getAllCustomersForSync,
   getAllProductsForSync,
+  getAllBaseCoatColorsForSync,
   getAllChipBlendsForSync,
   getAllJobsForSync,
   getAllChipInventoryForSync,
@@ -128,6 +129,7 @@ export async function pushToSupabase(): Promise<{
       laborers: getAllLaborersForSync,
       customers: getAllCustomersForSync,
       products: getAllProductsForSync,
+      baseCoatColors: getAllBaseCoatColorsForSync,
       chipBlends: getAllChipBlendsForSync,
       chipInventory: getAllChipInventoryForSync,
       topCoatInventory: async () => [await getTopCoatInventory()].filter(Boolean),
@@ -244,6 +246,7 @@ export async function pushAllToSupabase(): Promise<{
       { store: 'customers', getter: getAllCustomersForSync },
       { store: 'products', getter: getAllProductsForSync },
       { store: 'laborers', getter: getAllLaborersForSync },
+      { store: 'baseCoatColors', getter: getAllBaseCoatColorsForSync },
       { store: 'chipBlends', getter: getAllChipBlendsForSync },
       { store: 'chipInventory', getter: getAllChipInventoryForSync },
       { store: 'topCoatInventory', getter: async () => [await getTopCoatInventory()].filter(Boolean) },
@@ -332,6 +335,7 @@ export async function pullFromSupabase(): Promise<{
       'laborers',
       'customers',
       'products',
+      'base_coat_colors',
       'chip_blends',
       'chip_inventory',
       'topcoat_inventory',
@@ -481,3 +485,4 @@ export async function syncTable(tableName: string): Promise<void> {
 export async function hasPendingChanges(): Promise<boolean> {
   return checkPendingChanges();
 }
+

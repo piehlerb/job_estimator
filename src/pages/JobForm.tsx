@@ -1,4 +1,4 @@
-import { ArrowLeft, Save, ChevronDown, ChevronUp, X, Plus } from 'lucide-react';
+import { ArrowLeft, Save, ChevronDown, ChevronUp, X, Plus, Trash2 } from 'lucide-react';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   getAllSystems,
@@ -17,8 +17,9 @@ import {
   ChipBlend,
   getAllChipInventory,
   getAllProducts,
+  getAllBaseCoatColors,
 } from '../lib/db';
-import { BaseColor, ChipSystem, Costs, Pricing, Job, JobCalculation, JobStatus, Laborer, InstallDaySchedule, ChipInventory, CoatingRemovalType, Product, JobProduct } from '../types';
+import { BaseColor, ChipSystem, Costs, Pricing, Job, JobCalculation, JobStatus, Laborer, InstallDaySchedule, ChipInventory, CoatingRemovalType, Product, JobProduct, BaseCoatColor, JobReminder } from '../types';
 import { calculateJobOutputs } from '../lib/calculations';
 import InstallDayScheduleComponent from '../components/InstallDaySchedule';
 import { convertLegacyJobToSchedule } from '../lib/jobMigration';
@@ -69,6 +70,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
   const [chipBlendInput, setChipBlendInput] = useState('');
   const [showBlendDropdown, setShowBlendDropdown] = useState(false);
   const [chipInventory, setChipInventory] = useState<ChipInventory[]>([]);
+  const [baseCoatColors, setBaseCoatColors] = useState<BaseCoatColor[]>([]);
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [showTagDropdown, setShowTagDropdown] = useState(false);
   const [availableCustomers, setAvailableCustomers] = useState<CustomerOption[]>([]);
@@ -79,6 +81,19 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
   const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [showProductsSection, setShowProductsSection] = useState(false);
   const [selectedProductId, setSelectedProductId] = useState('');
+  const [activeTab, setActiveTab] = useState<'details' | 'reminders'>('details');
+
+  // Reminders state
+  const [reminders, setReminders] = useState<JobReminder[]>([]);
+  const [showReminderModal, setShowReminderModal] = useState(false);
+  const [editingReminderId, setEditingReminderId] = useState<string | null>(null);
+  const [savingReminder, setSavingReminder] = useState(false);
+  const [reminderForm, setReminderForm] = useState({
+    subject: '',
+    details: '',
+    dueDate: '',
+    dueTime: '',
+  });
 
   // Snapshot comparison state
   const [snapshotChanges, setSnapshotChanges] = useState<SnapshotChanges | null>(null);
@@ -138,6 +153,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
     calculateCosts();
   }, [formData, systems, costs, pricing, activeLaborers, installSchedule, useCurrentValues, existingJob]);
 
+
   const productsTotalPrice = useMemo(
     () => jobProducts.reduce((sum, p) => sum + p.quantity * p.unitPrice, 0),
     [jobProducts]
@@ -163,12 +179,80 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
       .slice(0, 8);
   }, [formData.tags, availableTags]);
 
-  const customerSuggestions = useMemo(() => {
+    const customerSuggestions = useMemo(() => {
     const query = formData.customerName.trim().toLowerCase();
     return availableCustomers
       .filter((customer) => query.length === 0 || customer.name.toLowerCase().includes(query))
       .slice(0, 8);
   }, [formData.customerName, availableCustomers]);
+
+  const applicableChipBlends = useMemo(() => {
+    if (!formData.system) {
+      return chipBlends;
+    }
+
+    return chipBlends.filter((blend) => {
+      if (!blend.systemIds || blend.systemIds.length === 0) {
+        return true;
+      }
+      return blend.systemIds.includes(formData.system);
+    });
+  }, [chipBlends, formData.system]);
+
+  const selectedBlend = useMemo(() => {
+    const normalized = normalizeChipBlendName(formData.chipBlend);
+    if (!normalized) return null;
+    return applicableChipBlends.find((blend) => normalizeChipBlendName(blend.name) === normalized) || null;
+  }, [formData.chipBlend, applicableChipBlends]);
+
+  const availableBaseCoatColors = useMemo(() => {
+    if (!selectedBlend || !selectedBlend.baseCoatColorIds || selectedBlend.baseCoatColorIds.length === 0) {
+      return baseCoatColors;
+    }
+
+    const allowedIds = new Set(selectedBlend.baseCoatColorIds);
+    return baseCoatColors.filter((color) => allowedIds.has(color.id));
+  }, [selectedBlend, baseCoatColors]);
+
+  useEffect(() => {
+    if (!formData.chipBlend) return;
+
+    const normalized = normalizeChipBlendName(formData.chipBlend);
+    const isApplicable = applicableChipBlends.some(
+      (blend) => normalizeChipBlendName(blend.name) === normalized
+    );
+
+    if (!isApplicable) {
+      setChipBlendInput('');
+      setFormData((prev) => ({ ...prev, chipBlend: '', baseColor: '' }));
+    }
+  }, [applicableChipBlends, formData.chipBlend]);
+
+  useEffect(() => {
+    if (!selectedBlend?.baseCoatColorIds || selectedBlend.baseCoatColorIds.length === 0) return;
+
+    const mappedColors = baseCoatColors.filter((color) => selectedBlend.baseCoatColorIds!.includes(color.id));
+    if (mappedColors.length === 0) return;
+
+    setFormData((prev) => {
+      if (mappedColors.some((color) => color.name === prev.baseColor)) {
+        return prev;
+      }
+      return { ...prev, baseColor: mappedColors[0].name as BaseColor };
+    });
+  }, [selectedBlend, baseCoatColors]);
+
+  useEffect(() => {
+    if (!formData.baseColor) return;
+
+    const isAvailable = availableBaseCoatColors.some((color) => color.name === formData.baseColor);
+    if (!isAvailable) {
+      setFormData((prev) => ({ ...prev, baseColor: '' }));
+    }
+  }, [availableBaseCoatColors, formData.baseColor]);
+
+  
+
 
   const loadData = async () => {
     console.log('[JobForm] Loading data, jobId:', jobId);
@@ -183,12 +267,14 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
       const blends = await getAllChipBlends();
       const inventory = await getAllChipInventory();
       const productCatalog = await getAllProducts();
+      const baseCoatColorList = await getAllBaseCoatColors();
       console.log('[JobForm] Data loaded:', { systems: allSystems.length, costs: !!storedCosts, pricing: !!storedPricing, laborers: laborers.length });
       setSystems(allSystems);
       setActiveLaborers(laborers);
       setChipBlends(blends);
       setChipInventory(inventory);
       setAllProducts(productCatalog);
+      setBaseCoatColors(baseCoatColorList);
       const tagSet = new Set<string>();
       const customerMap = new Map<string, { name: string; address?: string; updatedAt: string }>();
 
@@ -301,6 +387,9 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
           if (job.products && job.products.length > 0) {
             setJobProducts(job.products);
             setShowProductsSection(true);
+          }
+          if (job.reminders && job.reminders.length > 0) {
+            setReminders(job.reminders);
           }
           // Compare snapshots with current values
           try {
@@ -510,15 +599,20 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
     setTimeout(() => { updatingFrom.current = null; }, 0);
   };
 
-  const handleChipBlendSelect = (blendName: string) => {
-    setChipBlendInput(blendName);
-    setFormData({ ...formData, chipBlend: blendName });
+  const handleSystemChange = (systemId: string) => {
+    setFormData((prev) => ({ ...prev, system: systemId }));
+    setShowBlendDropdown(true);
+  };
+
+  const handleChipBlendSelect = (blend: ChipBlend) => {
+    setChipBlendInput(blend.name);
+    setFormData((prev) => ({ ...prev, chipBlend: blend.name }));
     setShowBlendDropdown(false);
   };
 
   const handleChipBlendInputChange = (value: string) => {
     setChipBlendInput(value);
-    setFormData({ ...formData, chipBlend: value });
+    setFormData((prev) => ({ ...prev, chipBlend: value }));
     setShowBlendDropdown(true);
   };
 
@@ -565,6 +659,126 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
     setShowTagDropdown(false);
   };
 
+  
+  const openAddReminder = () => {
+    setActiveTab('reminders');
+    setEditingReminderId(null);
+    setReminderForm({
+      subject: '',
+      details: '',
+      dueDate: new Date().toISOString().split('T')[0],
+      dueTime: '09:00',
+    });
+    setShowReminderModal(true);
+  };
+
+  const openEditReminder = (reminder: JobReminder) => {
+    setEditingReminderId(reminder.id);
+    setReminderForm({
+      subject: reminder.subject,
+      details: reminder.details || '',
+      dueDate: reminder.dueDate,
+      dueTime: reminder.dueTime,
+    });
+    setShowReminderModal(true);
+  };
+
+  const closeReminderModal = () => {
+    setShowReminderModal(false);
+    setEditingReminderId(null);
+    setReminderForm({ subject: '', details: '', dueDate: '', dueTime: '' });
+  };
+
+  const requestReminderNotificationPermission = async () => {
+    if (typeof window === 'undefined' || !('Notification' in window)) return;
+    if (Notification.permission === 'default') {
+      try {
+        await Notification.requestPermission();
+      } catch (error) {
+        console.warn('Notification permission request failed:', error);
+      }
+    }
+  };
+
+  const persistReminderChanges = async (nextReminders: JobReminder[]) => {
+    setReminders(nextReminders);
+
+    if (!jobId || !existingJob) {
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const nextJob: Job = {
+      ...existingJob,
+      reminders: nextReminders.length > 0
+        ? [...nextReminders].sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime())
+        : undefined,
+      updatedAt: now,
+      synced: false,
+    };
+
+    await updateJob(nextJob);
+    setExistingJob(nextJob);
+  };
+
+  const handleSaveReminder = async () => {
+    if (!reminderForm.subject.trim() || !reminderForm.dueDate || !reminderForm.dueTime) {
+      alert('Please enter subject, date, and time for the reminder.');
+      return;
+    }
+
+    const dueAt = new Date(`${reminderForm.dueDate}T${reminderForm.dueTime}`).toISOString();
+    const now = new Date().toISOString();
+    const nextReminders = editingReminderId
+      ? reminders.map((reminder) => {
+          if (reminder.id !== editingReminderId) return reminder;
+          return {
+            ...reminder,
+            subject: reminderForm.subject.trim(),
+            details: reminderForm.details.trim() || undefined,
+            dueDate: reminderForm.dueDate,
+            dueTime: reminderForm.dueTime,
+            dueAt,
+            updatedAt: now,
+          };
+        })
+      : [
+          ...reminders,
+          {
+            id: generateId(),
+            subject: reminderForm.subject.trim(),
+            details: reminderForm.details.trim() || undefined,
+            dueDate: reminderForm.dueDate,
+            dueTime: reminderForm.dueTime,
+            dueAt,
+            completed: false,
+            createdAt: now,
+            updatedAt: now,
+          },
+        ];
+
+    setSavingReminder(true);
+    try {
+      await persistReminderChanges(nextReminders);
+      await requestReminderNotificationPermission();
+      closeReminderModal();
+    } catch (error) {
+      console.error('Error saving reminder:', error);
+      alert('Error saving reminder. Please try again.');
+    } finally {
+      setSavingReminder(false);
+    }
+  };
+
+  const handleDeleteReminder = async (id: string) => {
+    const nextReminders = reminders.filter((reminder) => reminder.id !== id);
+    try {
+      await persistReminderChanges(nextReminders);
+    } catch (error) {
+      console.error('Error deleting reminder:', error);
+      alert('Error deleting reminder. Please try again.');
+    }
+  };
   const handleUpdateToCurrentValues = () => {
     setUseCurrentValues(true);
     setShowSnapshotBanner(false);
@@ -653,6 +867,9 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
         actualCoatingRemovalPrice: parseFloat(formData.actualCoatingRemovalPrice) || undefined,
         actualMoistureMitigationPrice: parseFloat(formData.actualMoistureMitigationPrice) || undefined,
         products: jobProducts.length > 0 ? jobProducts : undefined,
+        reminders: reminders.length > 0
+          ? [...reminders].sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime())
+          : undefined,
         // Update snapshots if user chose to use current values, otherwise preserve original
         // Laborers can be edited, so always save current selection
         costsSnapshot: existingJob && !useCurrentValues ? existingJob.costsSnapshot : costs,
@@ -760,15 +977,25 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4 sm:p-6 md:p-8">
         <div className="flex items-center justify-between mb-4 sm:mb-6">
           <h2 className="text-xl sm:text-2xl font-bold text-slate-900">{jobId ? 'Edit Job' : 'Create New Job'}</h2>
-          <button
-            type="submit"
-            form="job-form"
-            disabled={saving}
-            className="flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-2.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 active:bg-blue-800 transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed text-sm sm:text-base"
-          >
-            <Save size={16} className="sm:w-[18px] sm:h-[18px]" />
-            {saving ? 'Saving...' : jobId ? 'Update Job' : 'Create Job'}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={openAddReminder}
+              className="flex items-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 bg-slate-100 text-slate-800 rounded-lg font-semibold hover:bg-slate-200 active:bg-slate-300 transition-colors text-sm sm:text-base"
+            >
+              <Plus size={16} className="sm:w-[18px] sm:h-[18px]" />
+              Add Reminder
+            </button>
+            <button
+              type="submit"
+              form="job-form"
+              disabled={saving}
+              className="flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-2.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 active:bg-blue-800 transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed text-sm sm:text-base"
+            >
+              <Save size={16} className="sm:w-[18px] sm:h-[18px]" />
+              {saving ? 'Saving...' : jobId ? 'Update Job' : 'Create Job'}
+            </button>
+          </div>
         </div>
 
         {/* Snapshot Change Banner */}
@@ -781,6 +1008,38 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
         )}
 
         <form id="job-form" onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
+          <div className="flex items-center gap-2 border-b border-slate-200 pb-3">
+            <button
+              type="button"
+              onClick={() => setActiveTab('details')}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                activeTab === 'details'
+                  ? 'bg-blue-100 text-blue-800'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              Details
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('reminders')}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                activeTab === 'reminders'
+                  ? 'bg-blue-100 text-blue-800'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              Reminders
+              {reminders.length > 0 && (
+                <span className="ml-1.5 inline-flex items-center justify-center min-w-5 h-5 px-1 text-xs font-semibold rounded-full bg-blue-600 text-white">
+                  {reminders.length}
+                </span>
+              )}
+            </button>
+          </div>
+
+          {activeTab === 'details' && (
+            <>
           {/* Job Inputs */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             <div className="md:col-span-2 lg:col-span-1">
@@ -925,7 +1184,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
               <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Chip System *</label>
               <select
                 value={formData.system}
-                onChange={(e) => setFormData({ ...formData, system: e.target.value })}
+                onChange={(e) => handleSystemChange(e.target.value)}
                 className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
               >
                 <option value="">Select a system...</option>
@@ -1015,41 +1274,46 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                 onBlur={() => setTimeout(() => setShowBlendDropdown(false), 200)}
                 className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
-              {showBlendDropdown && chipBlends.length > 0 && (
+              {showBlendDropdown && (
                 <div className="absolute z-10 w-full mt-1 bg-white border border-slate-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                  {chipBlends
+                  {applicableChipBlends
                     .filter((b) => b.name.toLowerCase().includes(chipBlendInput.toLowerCase()))
                     .map((blend) => (
                       <button
                         key={blend.id}
                         type="button"
-                        onClick={() => handleChipBlendSelect(blend.name)}
+                        onClick={() => handleChipBlendSelect(blend)}
                         className="w-full px-3 sm:px-4 py-2 text-left hover:bg-slate-100 text-xs sm:text-sm"
                       >
                         {blend.name}
                       </button>
                     ))}
+                  {applicableChipBlends.filter((b) => b.name.toLowerCase().includes(chipBlendInput.toLowerCase())).length === 0 && (
+                    <p className="px-3 sm:px-4 py-2 text-xs sm:text-sm text-slate-500 italic">
+                      No applicable chip blends for this system.
+                    </p>
+                  )}
                 </div>
               )}
             </div>
 
             <div>
-              <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Base Color</label>
-              <div className="flex flex-wrap gap-3 sm:gap-4">
-                {(['Grey', 'Tan', 'Clear'] as BaseColor[]).map((color) => (
-                  <label key={color} className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="baseColor"
-                      value={color}
-                      checked={formData.baseColor === color}
-                      onChange={(e) => setFormData({ ...formData, baseColor: e.target.value as BaseColor })}
-                      className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
-                    />
-                    <span className="text-xs sm:text-sm text-slate-700">{color}</span>
-                  </label>
+              <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Base Coat Color</label>
+              <select
+                value={formData.baseColor}
+                onChange={(e) => setFormData({ ...formData, baseColor: e.target.value as BaseColor })}
+                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="">Select a base coat color...</option>
+                {availableBaseCoatColors.map((color) => (
+                  <option key={color.id} value={color.name}>
+                    {color.name}
+                  </option>
                 ))}
-              </div>
+              </select>
+              {selectedBlend && selectedBlend.baseCoatColorIds && selectedBlend.baseCoatColorIds.length > 0 && availableBaseCoatColors.length === 0 && (
+                <p className="text-xs text-amber-600 mt-1">This blend has no active base coat colors assigned.</p>
+              )}
             </div>
 
             <div>
@@ -1742,6 +2006,60 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
             </div>
           )}
 
+            </>
+          )}
+
+          {activeTab === 'reminders' && (
+            <div className="rounded-lg border border-slate-200 p-4 sm:p-5 bg-slate-50">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h3 className="text-sm sm:text-base font-semibold text-slate-900">Reminders</h3>
+                  <p className="text-xs text-slate-500 mt-1">Task reminders related to this job.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={openAddReminder}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  <Plus size={14} />
+                  Add Reminder
+                </button>
+              </div>
+
+              {reminders.length === 0 ? (
+                <p className="text-sm text-slate-500 italic">No reminders added.</p>
+              ) : (
+                <div className="space-y-2">
+                  {[...reminders]
+                    .sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime())
+                    .map((reminder) => (
+                      <div key={reminder.id} className="flex items-start justify-between gap-3 p-3 bg-white border border-slate-200 rounded-lg">
+                        <button
+                          type="button"
+                          onClick={() => openEditReminder(reminder)}
+                          className="text-left flex-1"
+                        >
+                          <p className="text-sm font-semibold text-slate-900">{reminder.subject}</p>
+                          <p className="text-xs text-slate-600">Due {new Date(reminder.dueAt).toLocaleString()}</p>
+                          {reminder.details && (
+                            <p className="text-xs text-slate-500 mt-1 whitespace-pre-wrap">{reminder.details}</p>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteReminder(reminder.id)}
+                          className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Delete reminder"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
             <button
               type="submit"
@@ -1762,6 +2080,100 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
           </div>
         </form>
       </div>
+      {showReminderModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+              <h2 className="text-lg font-semibold text-slate-900">
+                {editingReminderId ? 'Edit Reminder' : 'Add Reminder'}
+              </h2>
+              <button
+                type="button"
+                onClick={closeReminderModal}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Subject *</label>
+                <input
+                  type="text"
+                  value={reminderForm.subject}
+                  onChange={(e) => setReminderForm({ ...reminderForm, subject: e.target.value })}
+                  placeholder="Reminder subject"
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Details</label>
+                <textarea
+                  value={reminderForm.details}
+                  onChange={(e) => setReminderForm({ ...reminderForm, details: e.target.value })}
+                  placeholder="Optional details"
+                  rows={3}
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Date *</label>
+                  <input
+                    type="date"
+                    value={reminderForm.dueDate}
+                    onChange={(e) => setReminderForm({ ...reminderForm, dueDate: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Time *</label>
+                  <input
+                    type="time"
+                    value={reminderForm.dueTime}
+                    onChange={(e) => setReminderForm({ ...reminderForm, dueTime: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={closeReminderModal}
+                  disabled={savingReminder}
+                  className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveReminder}
+                  disabled={savingReminder}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed"
+                >
+                  {savingReminder ? 'Saving...' : editingReminderId ? 'Save Reminder' : 'Add Reminder'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

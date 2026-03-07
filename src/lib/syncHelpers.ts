@@ -94,6 +94,7 @@ export function getSupabaseTableName(storeName: string): string {
     laborers: 'laborers',
     customers: 'customers',
     products: 'products',
+    baseCoatColors: 'base_coat_colors',
     chipBlends: 'chip_blends',
     jobs: 'jobs',
     chipInventory: 'chip_inventory',
@@ -116,6 +117,7 @@ export function getIndexedDBStoreName(tableName: string): string {
     laborers: 'laborers',
     customers: 'customers',
     products: 'products',
+    base_coat_colors: 'baseCoatColors',
     chip_blends: 'chipBlends',
     jobs: 'jobs',
     chip_inventory: 'chipInventory',
@@ -183,3 +185,4 @@ export function normalizeChipBlendName(name: string): string {
   // Trim whitespace and convert to title case
   return name.trim().toLowerCase().replace(/\b\w/g, char => char.toUpperCase());
 }
+

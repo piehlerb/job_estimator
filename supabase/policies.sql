@@ -11,6 +11,7 @@ ALTER TABLE pricing_variables ENABLE ROW LEVEL SECURITY;
 ALTER TABLE costs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE laborers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE chip_blends ENABLE ROW LEVEL SECURITY;
+ALTER TABLE base_coat_colors ENABLE ROW LEVEL SECURITY;
 ALTER TABLE jobs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE chip_inventory ENABLE ROW LEVEL SECURITY;
 ALTER TABLE topcoat_inventory ENABLE ROW LEVEL SECURITY;
@@ -19,6 +20,41 @@ ALTER TABLE misc_inventory ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sync_queue ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sync_log ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_preferences ENABLE ROW LEVEL SECURITY;
+
+-- Make this script idempotent: drop existing policies before re-creating them
+DO $$
+DECLARE
+  p RECORD;
+BEGIN
+  FOR p IN
+    SELECT schemaname, tablename, policyname
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename IN (
+        'systems',
+        'pricing_variables',
+        'costs',
+        'laborers',
+        'chip_blends',
+        'base_coat_colors',
+        'jobs',
+        'chip_inventory',
+        'topcoat_inventory',
+        'basecoat_inventory',
+        'misc_inventory',
+        'sync_queue',
+        'sync_log',
+        'user_preferences'
+      )
+  LOOP
+    EXECUTE format(
+      'DROP POLICY IF EXISTS %I ON %I.%I',
+      p.policyname,
+      p.schemaname,
+      p.tablename
+    );
+  END LOOP;
+END $$;
 
 -- =====================================================
 -- POLICY HELPER FUNCTION
@@ -136,6 +172,26 @@ CREATE POLICY "Users can delete own chip blends"
   ON chip_blends FOR DELETE
   USING (auth.uid() = user_id);
 
+-- =====================================================
+-- BASE COAT COLORS TABLE POLICIES
+-- =====================================================
+
+CREATE POLICY "Users can view own base coat colors"
+  ON base_coat_colors FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own base coat colors"
+  ON base_coat_colors FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own base coat colors"
+  ON base_coat_colors FOR UPDATE
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own base coat colors"
+  ON base_coat_colors FOR DELETE
+  USING (auth.uid() = user_id);
 -- =====================================================
 -- JOBS TABLE POLICIES
 -- =====================================================
@@ -307,3 +363,5 @@ CREATE POLICY "Users can delete own preferences"
 -- FROM pg_tables
 -- WHERE schemaname = 'public'
 -- ORDER BY tablename;
+
+

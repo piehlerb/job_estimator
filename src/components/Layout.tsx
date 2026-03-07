@@ -68,6 +68,9 @@ export default function Layout({
           <div className="p-4 md:p-6 border-b border-slate-800">
             <h1 className="text-xl md:text-2xl font-bold">Job Est</h1>
             <p className="text-slate-400 text-xs md:text-sm mt-1">Estimation App</p>
+            <div className="mt-3 inline-flex items-center rounded-md bg-blue-600/20 px-2.5 py-1 text-xs font-semibold text-blue-200 border border-blue-500/40">
+              Version {APP_VERSION}
+            </div>
           </div>
 
           <nav className="flex-1 p-2 md:p-4 space-y-1 md:space-y-2">

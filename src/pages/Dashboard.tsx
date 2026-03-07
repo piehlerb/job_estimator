@@ -1,4 +1,4 @@
-import { Plus, Trash2, FileText, Search } from 'lucide-react';
+import { Plus, Trash2, FileText, Search, Bell } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { getAllJobs, deleteJob, getDefaultCosts, getCosts, getPricing, getDefaultPricing } from '../lib/db';
 import { Job, JobCalculation, Costs, Pricing, JobStatus } from '../types';
@@ -15,6 +15,14 @@ interface JobWithCalc {
   calc: JobCalculation;
 }
 
+interface ReminderItem {
+  jobId: string;
+  jobName: string;
+  subject: string;
+  details?: string;
+  dueAt: string;
+}
+
 const ALL_STATUSES: JobStatus[] = ['Pending', 'Won', 'Lost'];
 
 export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: DashboardProps) {
@@ -28,6 +36,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
   const [selectedTagFilters, setSelectedTagFilters] = useState<string[]>([]);
   const [tagMatchMode, setTagMatchMode] = useState<'any' | 'all'>('any');
   const [searchQuery, setSearchQuery] = useState('');
+  const [showReminders, setShowReminders] = useState(false);
 
   useEffect(() => {
     loadJobs();
@@ -208,6 +217,26 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
     });
   }, [jobsWithCalc, searchQuery, statusFilter, chipBlendFilter, selectedTagFilters, tagMatchMode, sortBy]);
 
+  
+  const remindersByDue = useMemo((): ReminderItem[] => {
+    const allReminders: ReminderItem[] = [];
+
+    jobsWithCalc.forEach(({ job }) => {
+      (job.reminders || [])
+        .filter((reminder) => !reminder.completed)
+        .forEach((reminder) => {
+          allReminders.push({
+            jobId: job.id,
+            jobName: job.name || 'Untitled Job',
+            subject: reminder.subject,
+            details: reminder.details,
+            dueAt: reminder.dueAt,
+          });
+        });
+    });
+
+    return allReminders.sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime());
+  }, [jobsWithCalc]);
   const getStatusColor = (status: JobStatus) => {
     switch (status) {
       case 'Won': return 'bg-green-100 text-green-800';
@@ -263,6 +292,18 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
                   <option value="price">Price (High to Low)</option>
                   <option value="margin">Margin (High to Low)</option>
                 </select>
+                <button
+                  type="button"
+                  onClick={() => setShowReminders((prev) => !prev)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
+                    showReminders
+                      ? 'bg-blue-100 text-blue-800'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  <Bell size={14} />
+                  {showReminders ? 'Hide Reminders' : 'Show Reminders'}
+                </button>
               </div>
             </div>
 
@@ -359,6 +400,46 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
             </div>
           </div>
         </div>
+        {showReminders && (
+          <div className="p-3 sm:p-4 md:p-6 border-b border-slate-200 bg-slate-50">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-sm sm:text-base font-semibold text-slate-900">Reminders (First Due)</h4>
+              <span className="text-xs text-slate-500">{remindersByDue.length} total</span>
+            </div>
+            {remindersByDue.length === 0 ? (
+              <p className="text-sm text-slate-500 italic">No reminders found.</p>
+            ) : (
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                {remindersByDue.map((reminder) => {
+                  const isOverdue = new Date(reminder.dueAt).getTime() < Date.now();
+                  return (
+                    <button
+                      key={`${reminder.jobId}-${reminder.subject}-${reminder.dueAt}`}
+                      type="button"
+                      onClick={() => onEditJob(reminder.jobId)}
+                      className={`w-full text-left p-3 border rounded-lg transition-colors hover:bg-white ${
+                        isOverdue ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-white'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">{reminder.subject}</p>
+                          <p className="text-xs text-slate-600 mt-0.5">{reminder.jobName}</p>
+                          {reminder.details && (
+                            <p className="text-xs text-slate-500 mt-1 line-clamp-2">{reminder.details}</p>
+                          )}
+                        </div>
+                        <p className={`text-xs font-medium whitespace-nowrap ${isOverdue ? 'text-red-700' : 'text-slate-600'}`}>
+                          {new Date(reminder.dueAt).toLocaleString()}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         {loading ? (
           <div className="p-6 sm:p-8 text-center">
@@ -547,3 +628,5 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
     </div>
   );
 }
+
+

@@ -27,6 +27,7 @@ import {
   updateCustomer,
   deleteCustomer,
   getAllProducts,
+  getAllBaseCoatColors,
   addProduct,
   updateProduct,
   deleteProduct,
@@ -49,6 +50,7 @@ export async function exportAllData(): Promise<ExportData> {
     laborers,
     customers,
     products,
+    baseCoatColors,
     jobs,
     chipBlends,
     chipInventory,
@@ -61,6 +63,7 @@ export async function exportAllData(): Promise<ExportData> {
     getAllLaborers(),
     getAllCustomers(),
     getAllProducts(),
+    getAllBaseCoatColors(),
     getAllJobs(),
     getAllChipBlends(),
     getAllChipInventory(),
@@ -82,6 +85,7 @@ export async function exportAllData(): Promise<ExportData> {
     laborers,
     customers,
     products,
+    baseCoatColors,
     jobs,
     chipBlends,
     chipInventory,
@@ -957,3 +961,7 @@ export function parseImportFile(file: File): Promise<unknown> {
     reader.readAsText(file);
   });
 }
+
+
+
+

@@ -1,7 +1,7 @@
-import { ChipSystem, PricingVariable, Job, Costs, Laborer, ChipInventory, TopCoatInventory, BaseCoatInventory, MiscInventory, Pricing, Customer, Product } from '../types';
+import { ChipSystem, PricingVariable, Job, Costs, Laborer, ChipInventory, TopCoatInventory, BaseCoatInventory, MiscInventory, Pricing, Customer, Product, BaseCoatColor } from '../types';
 
 const DB_NAME = 'JobEstimator';
-const DB_VERSION = 11; // Incremented for products store
+const DB_VERSION = 12; // Incremented for base coat colors store
 
 // Auto-sync flag - can be disabled for batch operations
 let autoSyncEnabled = true;
@@ -143,6 +143,9 @@ export async function initDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains('products')) {
         db.createObjectStore('products', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('baseCoatColors')) {
+        db.createObjectStore('baseCoatColors', { keyPath: 'id' });
       }
     };
   });
@@ -658,6 +661,7 @@ export interface ChipBlend {
   id: string;
   name: string;
   systemIds?: string[]; // IDs of chip systems this blend is available with
+  baseCoatColorIds?: string[]; // IDs of base coat colors this blend is available with
   createdAt?: string;
   updatedAt?: string;
   deleted?: boolean;
@@ -764,6 +768,103 @@ export async function deleteChipBlend(id: string): Promise<void> {
   await triggerBackgroundSync();
 }
 
+
+// Base Coat Colors
+export async function getAllBaseCoatColors(): Promise<BaseCoatColor[]> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['baseCoatColors'], 'readonly');
+    const store = transaction.objectStore('baseCoatColors');
+    const request = store.getAll();
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const results = request.result || [];
+      resolve(results.filter((color: BaseCoatColor) => !color.deleted));
+    };
+  });
+}
+
+// Sync version - returns all records including deleted
+export async function getAllBaseCoatColorsForSync(): Promise<BaseCoatColor[]> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['baseCoatColors'], 'readonly');
+    const store = transaction.objectStore('baseCoatColors');
+    const request = store.getAll();
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result || []);
+  });
+}
+
+export async function getBaseCoatColor(id: string): Promise<BaseCoatColor | undefined> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['baseCoatColors'], 'readonly');
+    const store = transaction.objectStore('baseCoatColors');
+    const request = store.get(id);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result || undefined);
+  });
+}
+
+export async function addBaseCoatColor(color: BaseCoatColor): Promise<void> {
+  const db = await getDB();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(['baseCoatColors'], 'readwrite');
+    const store = transaction.objectStore('baseCoatColors');
+    const request = store.add(color);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve();
+  });
+
+  await queueForSync('baseCoatColors', color.id, 'create');
+  await triggerBackgroundSync();
+}
+
+export async function updateBaseCoatColor(color: BaseCoatColor): Promise<void> {
+  const db = await getDB();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(['baseCoatColors'], 'readwrite');
+    const store = transaction.objectStore('baseCoatColors');
+    const request = store.put(color);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve();
+  });
+
+  await queueForSync('baseCoatColors', color.id, 'update');
+  await triggerBackgroundSync();
+}
+
+export async function deleteBaseCoatColor(id: string): Promise<void> {
+  const db = await getDB();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(['baseCoatColors'], 'readwrite');
+    const store = transaction.objectStore('baseCoatColors');
+    const getRequest = store.get(id);
+
+    getRequest.onerror = () => reject(getRequest.error);
+    getRequest.onsuccess = () => {
+      const color = getRequest.result;
+      if (color) {
+        color.deleted = true;
+        color.updatedAt = new Date().toISOString();
+        const putRequest = store.put(color);
+        putRequest.onerror = () => reject(putRequest.error);
+        putRequest.onsuccess = () => resolve();
+      } else {
+        resolve();
+      }
+    };
+  });
+
+  await queueForSync('baseCoatColors', id, 'delete');
+  await triggerBackgroundSync();
+}
 // Chip Inventory
 export async function getAllChipInventory(): Promise<ChipInventory[]> {
   const db = await getDB();
@@ -1117,4 +1218,5 @@ export async function deleteProduct(id: string): Promise<void> {
   await queueForSync('products', id, 'delete');
   await triggerBackgroundSync();
 }
+
 

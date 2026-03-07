@@ -1,12 +1,17 @@
 import { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { getAllJobs } from '../lib/db';
-import { Job, JobStatus } from '../types';
+import { Job, JobStatus, JobReminder } from '../types';
 
 type FilterType = 'All' | 'Won' | 'Pending';
 
 interface CalendarProps {
   onEditJob: (id: string) => void;
+}
+
+interface ReminderCalendarItem {
+  job: Job;
+  reminder: JobReminder;
 }
 
 export default function Calendar({ onEditJob }: CalendarProps) {
@@ -51,6 +56,21 @@ export default function Calendar({ onEditJob }: CalendarProps) {
   const getJobsForDate = (day: number): Job[] => {
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     return filteredJobs.filter((job) => job.installDate === dateStr);
+  };
+
+  const getRemindersForDate = (day: number): ReminderCalendarItem[] => {
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const items: ReminderCalendarItem[] = [];
+
+    filteredJobs.forEach((job) => {
+      (job.reminders || [])
+        .filter((reminder) => !reminder.completed && reminder.dueDate === dateStr)
+        .forEach((reminder) => {
+          items.push({ job, reminder });
+        });
+    });
+
+    return items.sort((a, b) => new Date(a.reminder.dueAt).getTime() - new Date(b.reminder.dueAt).getTime());
   };
 
   // Navigate months
@@ -187,6 +207,7 @@ export default function Calendar({ onEditJob }: CalendarProps) {
                 }
 
                 const dayJobs = getJobsForDate(day);
+                const dayReminders = getRemindersForDate(day);
 
                 return (
                   <div
@@ -209,14 +230,19 @@ export default function Calendar({ onEditJob }: CalendarProps) {
                           onClick={() => onEditJob(job.id)}
                           className={`w-full text-left p-1.5 rounded border text-xs transition-colors hover:opacity-80 ${getStatusColor(job.status)}`}
                         >
-                          <div className="font-medium truncate">
-                            {job.name || 'Untitled Job'}
+                          <div className="font-medium truncate">{job.name || 'Untitled Job'}</div>
+                        </button>
+                      ))}
+                      {dayReminders.map(({ job, reminder }) => (
+                        <button
+                          key={`${job.id}-${reminder.id}`}
+                          onClick={() => onEditJob(job.id)}
+                          className="w-full text-left p-1.5 rounded border text-xs transition-colors hover:opacity-80 bg-blue-100 text-blue-800 border-blue-200"
+                        >
+                          <div className="font-medium truncate">{reminder.subject}</div>
+                          <div className="text-[10px] opacity-75 truncate">
+                            {reminder.dueTime} - {job.name || 'Untitled Job'}
                           </div>
-                          {job.laborersSnapshot && job.laborersSnapshot.length > 0 && (
-                            <div className="text-[10px] opacity-75 truncate">
-                              {job.laborersSnapshot.map((l) => l.name).join(', ')}
-                            </div>
-                          )}
                         </button>
                       ))}
                     </div>

@@ -1,4 +1,4 @@
-import { Plus, Trash2, Edit2 } from 'lucide-react';
+import { Plus, Trash2, Edit2, X } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import {
   getAllLaborers,
@@ -17,6 +17,7 @@ export default function Laborers() {
   const [loading, setLoading] = useState(true);
   const [showLaborerForm, setShowLaborerForm] = useState(false);
   const [editingLaborer, setEditingLaborer] = useState<Laborer | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const [laborerForm, setLaborerForm] = useState({
     name: '',
@@ -35,14 +36,27 @@ export default function Laborers() {
     setLoading(false);
   };
 
+  const resetForm = () => {
+    setShowLaborerForm(false);
+    setEditingLaborer(null);
+    setLaborerForm({ name: '', fullyLoadedRate: '', isActive: true });
+  };
+
+  const openAddForm = () => {
+    setEditingLaborer(null);
+    setLaborerForm({ name: '', fullyLoadedRate: '', isActive: true });
+    setShowLaborerForm(true);
+  };
+
   const handleSaveLaborer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!laborerForm.name.trim()) return;
 
+    setSaving(true);
     try {
       const laborer: Laborer = {
         id: editingLaborer?.id || generateId(),
-        name: laborerForm.name,
+        name: laborerForm.name.trim(),
         fullyLoadedRate: parseFloat(laborerForm.fullyLoadedRate) || 0,
         isActive: laborerForm.isActive,
         createdAt: editingLaborer?.createdAt || new Date().toISOString(),
@@ -56,11 +70,11 @@ export default function Laborers() {
       }
 
       await loadData();
-      setShowLaborerForm(false);
-      setEditingLaborer(null);
-      setLaborerForm({ name: '', fullyLoadedRate: '', isActive: true });
+      resetForm();
     } catch (error) {
       console.error('Error saving laborer:', error);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -92,11 +106,7 @@ export default function Laborers() {
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-semibold text-slate-900">Your Laborers</h3>
           <button
-            onClick={() => {
-              setEditingLaborer(null);
-              setLaborerForm({ name: '', fullyLoadedRate: '', isActive: true });
-              setShowLaborerForm(true);
-            }}
+            onClick={openAddForm}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
           >
             <Plus size={18} />
@@ -108,11 +118,7 @@ export default function Laborers() {
           <div className="text-center py-8">
             <p className="text-slate-600 mb-4">No laborers created yet</p>
             <button
-              onClick={() => {
-                setEditingLaborer(null);
-                setLaborerForm({ name: '', fullyLoadedRate: '', isActive: true });
-                setShowLaborerForm(true);
-              }}
+              onClick={openAddForm}
               className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
             >
               <Plus size={18} />
@@ -154,6 +160,7 @@ export default function Laborers() {
                   <button
                     onClick={() => handleEditLaborer(laborer)}
                     className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                    title="Edit"
                   >
                     <Edit2 size={18} />
                   </button>
@@ -163,6 +170,7 @@ export default function Laborers() {
                       await loadData();
                     }}
                     className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    title="Delete"
                   >
                     <Trash2 size={18} />
                   </button>
@@ -171,14 +179,25 @@ export default function Laborers() {
             ))}
           </div>
         )}
+      </div>
 
-        {showLaborerForm && (
-          <div className="mt-6 p-6 bg-slate-50 border border-slate-200 rounded-lg">
-            <h4 className="font-semibold text-slate-900 mb-4">
-              {editingLaborer ? 'Edit Laborer' : 'New Laborer'}
-            </h4>
-            <form onSubmit={handleSaveLaborer} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+      {showLaborerForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-xl">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+              <h2 className="text-lg font-semibold text-slate-900">
+                {editingLaborer ? 'Edit Laborer' : 'Add Laborer'}
+              </h2>
+              <button
+                type="button"
+                onClick={resetForm}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleSaveLaborer} className="px-6 py-5 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-slate-900 mb-2">Name</label>
                   <input
@@ -187,6 +206,7 @@ export default function Laborers() {
                     value={laborerForm.name}
                     onChange={(e) => setLaborerForm({ ...laborerForm, name: e.target.value })}
                     className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required
                   />
                 </div>
                 <div>
@@ -212,28 +232,26 @@ export default function Laborers() {
                   <span className="text-sm font-medium text-slate-900">Active</span>
                 </label>
               </div>
-              <div className="flex gap-3">
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
-                >
-                  Save
-                </button>
+              <div className="flex items-center justify-end gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowLaborerForm(false);
-                    setEditingLaborer(null);
-                  }}
-                  className="px-4 py-2 bg-slate-300 text-slate-900 rounded-lg font-semibold hover:bg-slate-400 transition-colors"
+                  onClick={resetForm}
+                  className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
                 >
                   Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving || !laborerForm.name.trim()}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {saving ? 'Saving...' : editingLaborer ? 'Save Changes' : 'Add Laborer'}
                 </button>
               </div>
             </form>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

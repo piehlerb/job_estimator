@@ -1,4 +1,4 @@
-export type BaseColor = 'Grey' | 'Tan' | 'Clear';
+export type BaseColor = string;
 
 export type JobStatus = 'Won' | 'Lost' | 'Pending';
 
@@ -95,6 +95,8 @@ export interface Product {
   deleted?: boolean;
 }
 
+
+
 export interface JobProduct {
   productId: string;
   productName: string; // snapshot of name at time of adding
@@ -103,12 +105,34 @@ export interface JobProduct {
   unitPrice: number; // actual price charged (editable, initialized from standard price)
 }
 
+export interface BaseCoatColor {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  deleted?: boolean;
+}
+
 export type CoatingRemovalType = 'None' | 'Paint' | 'Epoxy';
 
+
+export interface JobReminder {
+  id: string;
+  subject: string;
+  details?: string;
+  dueDate: string; // YYYY-MM-DD
+  dueTime: string; // HH:mm
+  dueAt: string; // ISO timestamp
+  notifiedAt?: string;
+  completed?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface InstallDaySchedule {
-  day: number; // Day number (1, 2, 3, etc.)
-  hours: number; // Hours for this specific day
-  laborerIds: string[]; // Laborers assigned to this day
+  day: number;
+  hours: number;
+  laborerIds: string[];
 }
 
 export interface Job {
@@ -157,6 +181,7 @@ export interface Job {
   actualMoistureMitigationPrice?: number;
   // Products added to this job
   products?: JobProduct[];
+  reminders?: JobReminder[];
   // Snapshot of costs at time of job creation (so old jobs don't change)
   costsSnapshot: Costs;
   // Snapshot of pricing at time of job creation
@@ -249,6 +274,7 @@ export interface ChipBlend {
   id: string;
   name: string;
   systemIds?: string[]; // IDs of chip systems this blend is available with
+  baseCoatColorIds?: string[]; // IDs of base coat colors this blend is available with
   createdAt?: string;
   updatedAt?: string;
   deleted?: boolean;
@@ -270,6 +296,7 @@ export interface ExportData {
   laborers: Laborer[];
   customers: Customer[];
   products: Product[];
+  baseCoatColors: BaseCoatColor[];
   jobs: Job[];
   chipBlends: ChipBlend[];
   chipInventory: ChipInventory[];
@@ -326,3 +353,6 @@ export interface SyncQueueItem {
   retries: number;
   error?: string;
 }
+
+
+

@@ -66,6 +66,17 @@ CREATE TABLE IF NOT EXISTS chip_blends (
   id TEXT PRIMARY KEY,
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
+  base_coat_color_ids JSONB DEFAULT '[]'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  synced_at TIMESTAMPTZ
+);
+
+-- Base Coat Colors (user-managed options)
+CREATE TABLE IF NOT EXISTS base_coat_colors (
+  id TEXT PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   synced_at TIMESTAMPTZ
@@ -100,6 +111,7 @@ CREATE TABLE IF NOT EXISTS jobs (
 
   -- Photos array stored as JSONB
   photos JSONB,
+  reminders JSONB DEFAULT '[]'::jsonb,
 
   synced BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -207,6 +219,7 @@ CREATE INDEX IF NOT EXISTS idx_pricing_variables_user_id ON pricing_variables(us
 CREATE INDEX IF NOT EXISTS idx_costs_user_id ON costs(user_id);
 CREATE INDEX IF NOT EXISTS idx_laborers_user_id ON laborers(user_id);
 CREATE INDEX IF NOT EXISTS idx_chip_blends_user_id ON chip_blends(user_id);
+CREATE INDEX IF NOT EXISTS idx_base_coat_colors_user_id ON base_coat_colors(user_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_user_id ON jobs(user_id);
 CREATE INDEX IF NOT EXISTS idx_chip_inventory_user_id ON chip_inventory(user_id);
 CREATE INDEX IF NOT EXISTS idx_topcoat_inventory_user_id ON topcoat_inventory(user_id);
@@ -254,6 +267,9 @@ CREATE TRIGGER update_laborers_updated_at BEFORE UPDATE ON laborers
 CREATE TRIGGER update_chip_blends_updated_at BEFORE UPDATE ON chip_blends
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+CREATE TRIGGER update_base_coat_colors_updated_at BEFORE UPDATE ON base_coat_colors
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
 CREATE TRIGGER update_jobs_updated_at BEFORE UPDATE ON jobs
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
@@ -281,6 +297,7 @@ COMMENT ON TABLE pricing_variables IS 'Dynamic pricing variables';
 COMMENT ON TABLE costs IS 'Material cost structure (singleton per user)';
 COMMENT ON TABLE laborers IS 'Labor rates and worker information';
 COMMENT ON TABLE chip_blends IS 'Available chip blend names';
+COMMENT ON TABLE base_coat_colors IS 'User-managed base coat color options';
 COMMENT ON TABLE jobs IS 'Job estimation records with historical snapshots';
 COMMENT ON TABLE chip_inventory IS 'Chip inventory by blend';
 COMMENT ON TABLE topcoat_inventory IS 'Top coat inventory levels (singleton per user)';
@@ -289,3 +306,5 @@ COMMENT ON TABLE misc_inventory IS 'Miscellaneous inventory (crack repair, silic
 COMMENT ON TABLE sync_queue IS 'Pending sync operations for offline support';
 COMMENT ON TABLE sync_log IS 'Audit trail of sync operations';
 COMMENT ON TABLE user_preferences IS 'User-specific preferences and settings';
+
+

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import JobForm from './pages/JobForm';
@@ -19,6 +19,7 @@ import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { useAuth } from './contexts/AuthContext';
 import { useAutoSync } from './hooks/useAutoSync';
 import { migrateCustomersFromJobs } from './lib/jobMigration';
+import { getAllJobs, updateJob } from './lib/db';
 
 type Page = 'dashboard' | 'new-job' | 'edit-job' | 'job-sheet' | 'chip-systems' | 'chip-blends' | 'laborers' | 'costs' | 'pricing' | 'settings' | 'inventory' | 'calendar' | 'reporting' | 'customers' | 'products';
 
@@ -29,6 +30,90 @@ function App() {
   const [offlineMode, setOfflineMode] = useState(false);
   const isOnline = useOnlineStatus();
   const { user, loading } = useAuth();
+  const notifiedThisSessionRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    let intervalId: number | null = null;
+
+    const checkDueReminders = async () => {
+      try {
+        if (typeof window === 'undefined' || !('Notification' in window)) return;
+        if (Notification.permission !== 'granted') return;
+
+        const notifyReminder = async (title: string, body: string, tag: string) => {
+          if ('serviceWorker' in navigator) {
+            try {
+              const reg = await navigator.serviceWorker.ready;
+              if (reg?.showNotification) {
+                await reg.showNotification(title, { body, tag });
+                return;
+              }
+            } catch (error) {
+              console.warn('Service worker notification failed, falling back to Notification API:', error);
+            }
+          }
+
+          new Notification(title, { body, tag });
+        };
+
+        const allJobs = await getAllJobs();
+        const now = new Date();
+
+        for (const job of allJobs) {
+          const reminders = job.reminders || [];
+          let changed = false;
+
+          const updatedReminders = reminders.map((reminder) => {
+            if (reminder.completed || reminder.notifiedAt) {
+              return reminder;
+            }
+
+            const due = reminder.dueAt
+              ? new Date(reminder.dueAt)
+              : new Date(`${reminder.dueDate}T${reminder.dueTime}`);
+            const key = `${job.id}:${reminder.id}`;
+            if (isNaN(due.getTime()) || due.getTime() > now.getTime() || notifiedThisSessionRef.current.has(key)) {
+              return reminder;
+            }
+
+            void notifyReminder(
+              reminder.subject,
+              reminder.details || `${job.name || 'Untitled Job'} reminder is due`,
+              key
+            );
+
+            notifiedThisSessionRef.current.add(key);
+            changed = true;
+            return {
+              ...reminder,
+              notifiedAt: now.toISOString(),
+              updatedAt: now.toISOString(),
+            };
+          });
+
+          if (changed) {
+            await updateJob({
+              ...job,
+              reminders: updatedReminders,
+              updatedAt: now.toISOString(),
+              synced: false,
+            });
+          }
+        }
+      } catch (error) {
+        console.warn('Reminder notification check failed:', error);
+      }
+    };
+
+    checkDueReminders();
+    intervalId = window.setInterval(checkDueReminders, 60000);
+
+    return () => {
+      if (intervalId) {
+        window.clearInterval(intervalId);
+      }
+    };
+  }, []);
 
   // Auto sync - enabled only when user is authenticated and online
   const { triggerSync } = useAutoSync({
@@ -159,3 +244,4 @@ function App() {
 }
 
 export default App;
+
