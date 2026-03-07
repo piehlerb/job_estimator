@@ -14,8 +14,11 @@ CREATE TABLE IF NOT EXISTS systems (
   feet_per_lb NUMERIC NOT NULL,
   box_cost NUMERIC NOT NULL,
   base_spread NUMERIC NOT NULL,
+  base_coats INTEGER NOT NULL DEFAULT 1,
   top_spread NUMERIC NOT NULL,
+  top_coats INTEGER NOT NULL DEFAULT 1,
   cyclo1_spread NUMERIC NOT NULL,
+  cyclo1_coats INTEGER NOT NULL DEFAULT 1,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   synced_at TIMESTAMPTZ

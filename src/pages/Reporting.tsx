@@ -74,7 +74,7 @@ export default function Reporting() {
             antiSlip: job.antiSlip || false,
             abrasionResistance: job.abrasionResistance || false,
             cyclo1Topcoat: job.cyclo1Topcoat || false,
-            cyclo1Coats: job.cyclo1Coats || 1,
+            cyclo1Coats: job.cyclo1Coats || 0,
             coatingRemoval: job.coatingRemoval || 'None',
             moistureMitigation: job.moistureMitigation || false,
             installSchedule: job.installSchedule,

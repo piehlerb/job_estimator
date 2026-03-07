@@ -41,7 +41,7 @@ export default function JobSheet({ jobId, onBack }: JobSheetProps) {
             antiSlip: loadedJob.antiSlip || false,
             abrasionResistance: loadedJob.abrasionResistance || false,
             cyclo1Topcoat: loadedJob.cyclo1Topcoat || false,
-            cyclo1Coats: loadedJob.cyclo1Coats || 1,
+            cyclo1Coats: loadedJob.cyclo1Coats || 0,
             coatingRemoval: loadedJob.coatingRemoval || 'None',
             moistureMitigation: loadedJob.moistureMitigation || false,
             installSchedule: loadedJob.installSchedule,

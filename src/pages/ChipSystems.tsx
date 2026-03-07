@@ -12,25 +12,28 @@ function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 }
 
+const defaultSystemForm = {
+  name: '',
+  feetPerLb: '',
+  boxCost: '',
+  baseSpread: '',
+  baseCoats: '1',
+  topSpread: '',
+  topCoats: '1',
+  cyclo1Spread: '',
+  cyclo1Coats: '1',
+  verticalPricePerSqft: '',
+  floorPriceMin: '',
+  floorPriceMax: '',
+  notes: '',
+};
+
 export default function ChipSystems() {
   const [systems, setSystems] = useState<ChipSystem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showSystemForm, setShowSystemForm] = useState(false);
   const [editingSystem, setEditingSystem] = useState<ChipSystem | null>(null);
-
-  const [systemForm, setSystemForm] = useState({
-    name: '',
-    feetPerLb: '',
-    boxCost: '',
-    baseSpread: '',
-    topSpread: '',
-    cyclo1Spread: '',
-    doubleBroadcast: false,
-    verticalPricePerSqft: '',
-    floorPriceMin: '',
-    floorPriceMax: '',
-    notes: '',
-  });
+  const [systemForm, setSystemForm] = useState(defaultSystemForm);
 
   useEffect(() => {
     loadData();
@@ -54,12 +57,14 @@ export default function ChipSystems() {
         feetPerLb: parseFloat(systemForm.feetPerLb) || 0,
         boxCost: parseFloat(systemForm.boxCost) || 0,
         baseSpread: parseFloat(systemForm.baseSpread) || 0,
+        baseCoats: Math.max(parseInt(systemForm.baseCoats, 10) || 0, 0),
         topSpread: parseFloat(systemForm.topSpread) || 0,
+        topCoats: Math.max(parseInt(systemForm.topCoats, 10) || 0, 0),
         cyclo1Spread: parseFloat(systemForm.cyclo1Spread) || 0,
-        doubleBroadcast: systemForm.doubleBroadcast,
+        cyclo1Coats: Math.max(parseInt(systemForm.cyclo1Coats, 10) || 0, 0),
         verticalPricePerSqft: parseFloat(systemForm.verticalPricePerSqft) || 0.75,
-        floorPriceMin: parseFloat(systemForm.floorPriceMin) || 6.00,
-        floorPriceMax: parseFloat(systemForm.floorPriceMax) || 8.00,
+        floorPriceMin: parseFloat(systemForm.floorPriceMin) || 6.0,
+        floorPriceMax: parseFloat(systemForm.floorPriceMax) || 8.0,
         notes: systemForm.notes || undefined,
         createdAt: editingSystem?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -74,7 +79,7 @@ export default function ChipSystems() {
       await loadData();
       setShowSystemForm(false);
       setEditingSystem(null);
-      setSystemForm({ name: '', feetPerLb: '', boxCost: '', baseSpread: '', topSpread: '', cyclo1Spread: '', doubleBroadcast: false, verticalPricePerSqft: '', floorPriceMin: '', floorPriceMax: '', targetEffectivePricePerSqft: '', notes: '' });
+      setSystemForm(defaultSystemForm);
     } catch (error) {
       console.error('Error saving system:', error);
     }
@@ -82,17 +87,20 @@ export default function ChipSystems() {
 
   const handleEditSystem = (system: ChipSystem) => {
     setEditingSystem(system);
+    const fallbackTopCoats = (system as unknown as { doubleBroadcast?: boolean }).doubleBroadcast ? 2 : 1;
     setSystemForm({
       name: system.name,
       feetPerLb: system.feetPerLb.toString(),
       boxCost: system.boxCost.toString(),
       baseSpread: system.baseSpread.toString(),
+      baseCoats: (system.baseCoats ?? 1).toString(),
       topSpread: system.topSpread.toString(),
+      topCoats: (system.topCoats ?? fallbackTopCoats).toString(),
       cyclo1Spread: (system.cyclo1Spread || 0).toString(),
-      doubleBroadcast: system.doubleBroadcast || false,
+      cyclo1Coats: (system.cyclo1Coats ?? 1).toString(),
       verticalPricePerSqft: (system.verticalPricePerSqft ?? 0.75).toString(),
-      floorPriceMin: (system.floorPriceMin ?? 6.00).toString(),
-      floorPriceMax: (system.floorPriceMax ?? 8.00).toString(),
+      floorPriceMin: (system.floorPriceMin ?? 6.0).toString(),
+      floorPriceMax: (system.floorPriceMax ?? 8.0).toString(),
       notes: system.notes || '',
     });
     setShowSystemForm(true);
@@ -112,7 +120,7 @@ export default function ChipSystems() {
           <button
             onClick={() => {
               setEditingSystem(null);
-              setSystemForm({ name: '', feetPerLb: '', boxCost: '', baseSpread: '', topSpread: '', cyclo1Spread: '', doubleBroadcast: false, verticalPricePerSqft: '', floorPriceMin: '', floorPriceMax: '', targetEffectivePricePerSqft: '', notes: '' });
+              setSystemForm(defaultSystemForm);
               setShowSystemForm(true);
             }}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
@@ -128,7 +136,7 @@ export default function ChipSystems() {
             <button
               onClick={() => {
                 setEditingSystem(null);
-                setSystemForm({ name: '', feetPerLb: '', boxCost: '', baseSpread: '', topSpread: '', cyclo1Spread: '', doubleBroadcast: false, verticalPricePerSqft: '', floorPriceMin: '', floorPriceMax: '', targetEffectivePricePerSqft: '', notes: '' });
+                setSystemForm(defaultSystemForm);
                 setShowSystemForm(true);
               }}
               className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
@@ -150,8 +158,7 @@ export default function ChipSystems() {
                     {system.feetPerLb} ft/lb | ${system.boxCost}/box
                   </p>
                   <p className="text-sm text-slate-600">
-                    Base: {system.baseSpread} | Top: {system.topSpread} | Cyclo1: {system.cyclo1Spread || 0}
-                    {system.doubleBroadcast && <span className="ml-2 text-blue-600 font-semibold">• Double Broadcast</span>}
+                    Base: {system.baseSpread} @ {system.baseCoats ?? 1} coats | Top: {system.topSpread} @ {system.topCoats ?? 1} coats | Cyclo1: {system.cyclo1Spread || 0} @ {system.cyclo1Coats ?? 1} coats
                   </p>
                   {system.notes && (
                     <p className="text-sm text-slate-500 mt-1 italic">
@@ -181,12 +188,26 @@ export default function ChipSystems() {
           </div>
         )}
 
-        {showSystemForm && (
-          <div className="mt-6 p-6 bg-slate-50 border border-slate-200 rounded-lg">
-            <h4 className="font-semibold text-slate-900 mb-4">
-              {editingSystem ? 'Edit System' : 'New System'}
-            </h4>
-            <form onSubmit={handleSaveSystem} className="space-y-4">
+      </div>
+      {showSystemForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-3xl max-h-[90vh] overflow-y-auto bg-white rounded-xl shadow-xl border border-slate-200">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+              <h4 className="font-semibold text-slate-900">
+                {editingSystem ? 'Edit System' : 'New System'}
+              </h4>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSystemForm(false);
+                  setEditingSystem(null);
+                }}
+                className="text-slate-500 hover:text-slate-700 text-sm font-medium"
+              >
+                Close
+              </button>
+            </div>
+            <form onSubmit={handleSaveSystem} className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-slate-900 mb-2">System Name</label>
@@ -208,6 +229,7 @@ export default function ChipSystems() {
                     onChange={(e) => setSystemForm({ ...systemForm, feetPerLb: e.target.value })}
                     className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
+                  <p className="text-xs text-slate-500 mt-1">Enter coverage in square feet per pound (not per 40 lb box).</p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -236,6 +258,18 @@ export default function ChipSystems() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
+                  <label className="block text-sm font-semibold text-slate-900 mb-2">Base Coats</label>
+                  <input
+                    type="number"
+                    step="1"
+                    min="0"
+                    placeholder="1"
+                    value={systemForm.baseCoats}
+                    onChange={(e) => setSystemForm({ ...systemForm, baseCoats: e.target.value })}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
                   <label className="block text-sm font-semibold text-slate-900 mb-2">Top Spread</label>
                   <input
                     type="number"
@@ -243,6 +277,20 @@ export default function ChipSystems() {
                     placeholder="0.00"
                     value={systemForm.topSpread}
                     onChange={(e) => setSystemForm({ ...systemForm, topSpread: e.target.value })}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-900 mb-2">Top Coats</label>
+                  <input
+                    type="number"
+                    step="1"
+                    min="0"
+                    placeholder="1"
+                    value={systemForm.topCoats}
+                    onChange={(e) => setSystemForm({ ...systemForm, topCoats: e.target.value })}
                     className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
@@ -258,19 +306,19 @@ export default function ChipSystems() {
                   />
                 </div>
               </div>
-              <div className="mt-4">
-                <label className="flex items-center gap-3 cursor-pointer">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-900 mb-2">Cyclo1 Coats</label>
                   <input
-                    type="checkbox"
-                    checked={systemForm.doubleBroadcast}
-                    onChange={(e) => setSystemForm({ ...systemForm, doubleBroadcast: e.target.checked })}
-                    className="w-5 h-5 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                    type="number"
+                    step="1"
+                    min="0"
+                    placeholder="1"
+                    value={systemForm.cyclo1Coats}
+                    onChange={(e) => setSystemForm({ ...systemForm, cyclo1Coats: e.target.value })}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
-                  <div>
-                    <span className="text-sm font-semibold text-slate-900">Double Broadcast</span>
-                    <p className="text-xs text-slate-500 mt-0.5">Topcoat requirements will be doubled for this system</p>
-                  </div>
-                </label>
+                </div>
               </div>
               <div className="border-t border-slate-200 my-4"></div>
               <h5 className="text-md font-semibold text-slate-900 mb-3">Pricing Configuration</h5>
@@ -346,8 +394,8 @@ export default function ChipSystems() {
               </div>
             </form>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

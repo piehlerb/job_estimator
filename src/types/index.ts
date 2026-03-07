@@ -8,9 +8,11 @@ export interface ChipSystem {
   feetPerLb: number;
   boxCost: number;
   baseSpread: number;
+  baseCoats: number;
   topSpread: number;
+  topCoats: number;
   cyclo1Spread: number;
-  doubleBroadcast?: boolean; // If true, topcoat requirements are doubled
+  cyclo1Coats: number;
   verticalPricePerSqft?: number; // Price per sqft for vertical surfaces
   floorPriceMin?: number; // Minimum floor price per sqft for suggested pricing
   floorPriceMax?: number; // Maximum floor price per sqft for suggested pricing
@@ -173,7 +175,7 @@ export interface Job {
   antiSlip?: boolean;
   abrasionResistance?: boolean;
   cyclo1Topcoat?: boolean;
-  cyclo1Coats?: number; // 1 or 2 coats (only used if cyclo1Topcoat is true)
+  cyclo1Coats?: number; // Additional job-level coats added to system cyclo1 coats
   // Surface preparation
   coatingRemoval?: CoatingRemovalType; // Type of coating removal needed
   moistureMitigation?: boolean; // Whether moisture mitigation is needed

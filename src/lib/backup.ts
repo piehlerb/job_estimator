@@ -144,9 +144,12 @@ function validateChipSystem(system: unknown): string[] {
   if (!isValidNumber(s.feetPerLb)) errors.push('System missing valid feetPerLb');
   if (!isValidNumber(s.boxCost)) errors.push('System missing valid boxCost');
   if (!isValidNumber(s.baseSpread)) errors.push('System missing valid baseSpread');
+  if (s.baseCoats !== undefined && !isValidNumber(s.baseCoats)) errors.push('System has invalid baseCoats');
   if (!isValidNumber(s.topSpread)) errors.push('System missing valid topSpread');
+  if (s.topCoats !== undefined && !isValidNumber(s.topCoats)) errors.push('System has invalid topCoats');
   // cyclo1Spread is optional for backwards compatibility
   if (s.cyclo1Spread !== undefined && !isValidNumber(s.cyclo1Spread)) errors.push('System has invalid cyclo1Spread');
+  if (s.cyclo1Coats !== undefined && !isValidNumber(s.cyclo1Coats)) errors.push('System has invalid cyclo1Coats');
   if (!isValidISODate(s.createdAt)) errors.push('System missing valid createdAt');
   if (!isValidISODate(s.updatedAt)) errors.push('System missing valid updatedAt');
 

@@ -14,7 +14,7 @@ interface JobInputs {
   antiSlip: boolean;
   abrasionResistance: boolean;
   cyclo1Topcoat: boolean;
-  cyclo1Coats: number;
+  cyclo1Coats?: number; // Additional job-level cyclo1 coats
   coatingRemoval: CoatingRemovalType;
   moistureMitigation: boolean;
   installSchedule?: InstallDaySchedule[]; // Optional per-day schedule
@@ -41,7 +41,6 @@ export function calculateJobOutputs(
     antiSlip,
     abrasionResistance,
     cyclo1Topcoat,
-    cyclo1Coats,
     coatingRemoval,
     moistureMitigation,
     installSchedule,
@@ -51,8 +50,11 @@ export function calculateJobOutputs(
     feetPerLb,
     boxCost,
     baseSpread,
+    baseCoats,
     topSpread,
+    topCoats,
     cyclo1Spread,
+    cyclo1Coats,
   } = system;
 
   const {
@@ -70,12 +72,17 @@ export function calculateJobOutputs(
   // Price per sqft
   const pricePerSqft = floorFootage > 0 ? totalPrice / floorFootage : 0;
 
-  // Chip needed: apply vertical usage factor, then convert using system feetPerLb and 40lb boxes
+  // Chip needed:
+  // 1) Compute pounds from total adjusted sqft / feetPerLb
+  // 2) Round pounds up to the nearest 40 lbs (full box)
+  // Backward compatibility: older data may have stored feet-per-box instead of feet-per-lb.
   const chipVerticalUsageFactor = pricing.chipVerticalUsageFactor ?? 1.1;
-  const chipNeededRaw = feetPerLb > 0
-    ? (floorFootage + (verticalFootage * chipVerticalUsageFactor)) / feetPerLb / 40
+  const adjustedChipSqft = floorFootage + (verticalFootage * chipVerticalUsageFactor);
+  const normalizedFeetPerLb = feetPerLb > 25 ? feetPerLb / 40 : feetPerLb;
+  const chipPoundsNeeded = normalizedFeetPerLb > 0
+    ? adjustedChipSqft / normalizedFeetPerLb
     : 0;
-  const chipNeeded = Math.ceil(chipNeededRaw);
+  const chipNeeded = Math.ceil(chipPoundsNeeded / 40);
 
   // Chip cost
   const chipCost = chipNeeded * boxCost;
@@ -83,19 +90,20 @@ export function calculateJobOutputs(
   const verticalSpreadUsageMultiplier = pricing.verticalSpreadUsageMultiplier ?? 1.25;
 
   // Base gallons: floor / baseSpread + (vertical / baseSpread) * vertical spread usage multiplier
+  const normalizedBaseCoats = Math.max(baseCoats ?? 1, 0);
   const baseGallons = baseSpread > 0
-    ? (floorFootage / baseSpread) + ((verticalFootage / baseSpread) * verticalSpreadUsageMultiplier)
+    ? ((floorFootage / baseSpread) + ((verticalFootage / baseSpread) * verticalSpreadUsageMultiplier)) * normalizedBaseCoats
     : 0;
 
   // Base cost
   const baseCost = baseGallons * baseCostPerGal;
 
-  // Top gallons: floor / topSpread + (vertical / topSpread) * vertical spread usage multiplier
-  // If double broadcast, multiply by 2
-  const baseTopGallons = topSpread > 0
-    ? (floorFootage / topSpread) + ((verticalFootage / topSpread) * verticalSpreadUsageMultiplier)
+  // Top gallons: spread-based gallons multiplied by configured top coats
+  const legacyDoubleBroadcast = (system as unknown as { doubleBroadcast?: boolean }).doubleBroadcast;
+  const normalizedTopCoats = Math.max(topCoats ?? (legacyDoubleBroadcast ? 2 : 1), 0);
+  const topGallons = topSpread > 0
+    ? ((floorFootage / topSpread) + ((verticalFootage / topSpread) * verticalSpreadUsageMultiplier)) * normalizedTopCoats
     : 0;
-  const topGallons = system.doubleBroadcast ? baseTopGallons * 2 : baseTopGallons;
 
   // Top cost
   const topCost = topGallons * topCostPerGal;
@@ -109,9 +117,14 @@ export function calculateJobOutputs(
   // Crack fill cost
   const crackFillCost = crackFillGallons * crackFillCostPerGal;
 
-  // Cyclo1 needed: floorFootage / cyclo1Spread * cyclo1Coats (only if cyclo1Topcoat is enabled)
-  const coats = cyclo1Coats || 1; // Default to 1 coat if not specified
-  const cyclo1Needed = cyclo1Topcoat && cyclo1Spread > 0 ? (floorFootage / cyclo1Spread) * coats : 0;
+  // Cyclo1 needed:
+  // - System coats always apply (set system cyclo1Coats to 0 to disable by default)
+  // - Job-level coats are additive only when cyclo1Topcoat is explicitly enabled on the job
+  const additionalCyclo1Coats = cyclo1Topcoat ? Math.max(inputs.cyclo1Coats ?? 0, 0) : 0;
+  const normalizedCyclo1Coats = Math.max((cyclo1Coats ?? 1) + additionalCyclo1Coats, 0);
+  const cyclo1Needed = cyclo1Spread > 0 && normalizedCyclo1Coats > 0
+    ? (floorFootage / cyclo1Spread) * normalizedCyclo1Coats
+    : 0;
 
   // Cyclo1 cost: cyclo1Needed * cyclo1CostPerGal (only calculate if cyclo1 is needed)
   const cyclo1Cost = cyclo1Needed > 0 ? cyclo1Needed * cyclo1CostPerGal : 0;

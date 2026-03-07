@@ -125,7 +125,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
     antiSlip: false,
     abrasionResistance: false,
     cyclo1Topcoat: false,
-    cyclo1Coats: '1',
+    cyclo1Coats: '0',
     coatingRemoval: 'None' as CoatingRemovalType,
     moistureMitigation: false,
     // Actual pricing breakdown
@@ -359,7 +359,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
             antiSlip: job.antiSlip || false,
             abrasionResistance: job.abrasionResistance || false,
             cyclo1Topcoat: job.cyclo1Topcoat || false,
-            cyclo1Coats: (job.cyclo1Coats || 1).toString(),
+            cyclo1Coats: (job.cyclo1Coats ?? 0).toString(),
             coatingRemoval: job.coatingRemoval || 'None',
             moistureMitigation: job.moistureMitigation || false,
             // Actual pricing
@@ -464,12 +464,16 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
       : pricing;
     setUsedPricing(pricingToUse);
 
-    // For system snapshot, merge new fields from current system if they don't exist in snapshot
+    // For system snapshot, merge current defaults for fields added after the snapshot was taken
     const systemToUse = existingJob && !useCurrentValues
       ? {
           ...existingJob.systemSnapshot,
-          // Merge doubleBroadcast from current system if not in snapshot
-          doubleBroadcast: existingJob.systemSnapshot.doubleBroadcast ?? selectedSystem?.doubleBroadcast,
+          baseCoats: existingJob.systemSnapshot.baseCoats ?? selectedSystem?.baseCoats ?? 1,
+          topCoats: existingJob.systemSnapshot.topCoats
+            ?? (((existingJob.systemSnapshot as unknown as { doubleBroadcast?: boolean }).doubleBroadcast ? 2 : undefined)
+            ?? selectedSystem?.topCoats
+            ?? 1),
+          cyclo1Coats: existingJob.systemSnapshot.cyclo1Coats ?? selectedSystem?.cyclo1Coats ?? 1,
         }
       : selectedSystem;
     const laborersToUse = getSelectedLaborers();
@@ -488,7 +492,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
       antiSlip: formData.antiSlip,
       abrasionResistance: formData.abrasionResistance,
       cyclo1Topcoat: formData.cyclo1Topcoat,
-      cyclo1Coats: parseInt(formData.cyclo1Coats) || 1,
+      cyclo1Coats: parseInt(formData.cyclo1Coats) || 0,
       coatingRemoval: formData.coatingRemoval,
       moistureMitigation: formData.moistureMitigation,
       installSchedule: installSchedule.length > 0 ? installSchedule : undefined,
@@ -853,7 +857,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
         antiSlip: formData.antiSlip,
         abrasionResistance: formData.abrasionResistance,
         cyclo1Topcoat: formData.cyclo1Topcoat,
-        cyclo1Coats: parseInt(formData.cyclo1Coats) || 1,
+        cyclo1Coats: parseInt(formData.cyclo1Coats) || 0,
         coatingRemoval: formData.coatingRemoval,
         moistureMitigation: formData.moistureMitigation,
         // Actual pricing breakdown
@@ -1448,8 +1452,18 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
 
             {formData.cyclo1Topcoat && (
               <div>
-                <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Cyclo1 Coats</label>
+                <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Additional Cyclo1 Coats (Job)</label>
                 <div className="flex gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="cyclo1Coats"
+                      checked={formData.cyclo1Coats === '0'}
+                      onChange={() => setFormData({ ...formData, cyclo1Coats: '0' })}
+                      className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                    />
+                    <span className="text-xs sm:text-sm text-slate-700">0</span>
+                  </label>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="radio"
@@ -1458,7 +1472,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                       onChange={() => setFormData({ ...formData, cyclo1Coats: '1' })}
                       className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
                     />
-                    <span className="text-xs sm:text-sm text-slate-700">1 Coat</span>
+                    <span className="text-xs sm:text-sm text-slate-700">1</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
@@ -1468,7 +1482,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                       onChange={() => setFormData({ ...formData, cyclo1Coats: '2' })}
                       className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
                     />
-                    <span className="text-xs sm:text-sm text-slate-700">2 Coats</span>
+                    <span className="text-xs sm:text-sm text-slate-700">2</span>
                   </label>
                 </div>
               </div>

@@ -10,8 +10,11 @@ const SYSTEM_FIELDS: Array<keyof ChipSystem> = [
   'feetPerLb',
   'boxCost',
   'baseSpread',
+  'baseCoats',
   'topSpread',
+  'topCoats',
   'cyclo1Spread',
+  'cyclo1Coats',
 ];
 
 const COST_FIELDS: Array<keyof Costs> = [
@@ -30,8 +33,11 @@ const FIELD_LABELS: Record<string, string> = {
   feetPerLb: 'Feet per Lb',
   boxCost: 'Box Cost',
   baseSpread: 'Base Spread',
+  baseCoats: 'Base Coats',
   topSpread: 'Top Spread',
+  topCoats: 'Top Coats',
   cyclo1Spread: 'Cyclo1 Spread',
+  cyclo1Coats: 'Cyclo1 Coats',
   baseCostPerGal: 'Base Cost/Gal',
   topCostPerGal: 'Top Cost/Gal',
   crackFillCost: 'Crack Fill Cost',
