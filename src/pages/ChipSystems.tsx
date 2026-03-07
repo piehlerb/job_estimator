@@ -123,7 +123,7 @@ export default function ChipSystems() {
               setSystemForm(defaultSystemForm);
               setShowSystemForm(true);
             }}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors"
           >
             <Plus size={18} />
             New System
@@ -139,7 +139,7 @@ export default function ChipSystems() {
                 setSystemForm(defaultSystemForm);
                 setShowSystemForm(true);
               }}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors"
             >
               <Plus size={18} />
               Create System
@@ -169,7 +169,7 @@ export default function ChipSystems() {
                 <div className="flex gap-2">
                   <button
                     onClick={() => handleEditSystem(system)}
-                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                    className="p-2 text-gf-dark-green hover:bg-green-50 rounded-lg transition-colors"
                   >
                     <Edit2 size={18} />
                   </button>
@@ -216,7 +216,7 @@ export default function ChipSystems() {
                     placeholder="e.g., Diamond, Silver"
                     value={systemForm.name}
                     onChange={(e) => setSystemForm({ ...systemForm, name: e.target.value })}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
                   />
                 </div>
                 <div>
@@ -227,7 +227,7 @@ export default function ChipSystems() {
                     placeholder="0.00"
                     value={systemForm.feetPerLb}
                     onChange={(e) => setSystemForm({ ...systemForm, feetPerLb: e.target.value })}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
                   />
                   <p className="text-xs text-slate-500 mt-1">Enter coverage in square feet per pound (not per 40 lb box).</p>
                 </div>
@@ -241,7 +241,7 @@ export default function ChipSystems() {
                     placeholder="0.00"
                     value={systemForm.boxCost}
                     onChange={(e) => setSystemForm({ ...systemForm, boxCost: e.target.value })}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
                   />
                 </div>
                 <div>
@@ -252,7 +252,7 @@ export default function ChipSystems() {
                     placeholder="0.00"
                     value={systemForm.baseSpread}
                     onChange={(e) => setSystemForm({ ...systemForm, baseSpread: e.target.value })}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
                   />
                 </div>
               </div>
@@ -266,7 +266,7 @@ export default function ChipSystems() {
                     placeholder="1"
                     value={systemForm.baseCoats}
                     onChange={(e) => setSystemForm({ ...systemForm, baseCoats: e.target.value })}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
                   />
                 </div>
                 <div>
@@ -277,7 +277,7 @@ export default function ChipSystems() {
                     placeholder="0.00"
                     value={systemForm.topSpread}
                     onChange={(e) => setSystemForm({ ...systemForm, topSpread: e.target.value })}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
                   />
                 </div>
               </div>
@@ -291,7 +291,7 @@ export default function ChipSystems() {
                     placeholder="1"
                     value={systemForm.topCoats}
                     onChange={(e) => setSystemForm({ ...systemForm, topCoats: e.target.value })}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
                   />
                 </div>
                 <div>
@@ -302,7 +302,7 @@ export default function ChipSystems() {
                     placeholder="0.00"
                     value={systemForm.cyclo1Spread}
                     onChange={(e) => setSystemForm({ ...systemForm, cyclo1Spread: e.target.value })}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
                   />
                 </div>
               </div>
@@ -316,7 +316,7 @@ export default function ChipSystems() {
                     placeholder="1"
                     value={systemForm.cyclo1Coats}
                     onChange={(e) => setSystemForm({ ...systemForm, cyclo1Coats: e.target.value })}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
                   />
                 </div>
               </div>
@@ -331,7 +331,7 @@ export default function ChipSystems() {
                     placeholder="0.75"
                     value={systemForm.verticalPricePerSqft}
                     onChange={(e) => setSystemForm({ ...systemForm, verticalPricePerSqft: e.target.value })}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
                   />
                   <p className="text-xs text-slate-500 mt-1">Price per sqft for vertical surfaces</p>
                 </div>
@@ -345,7 +345,7 @@ export default function ChipSystems() {
                     placeholder="6.00"
                     value={systemForm.floorPriceMin}
                     onChange={(e) => setSystemForm({ ...systemForm, floorPriceMin: e.target.value })}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
                   />
                   <p className="text-xs text-slate-500 mt-1">Minimum suggested floor price/sqft</p>
                 </div>
@@ -357,7 +357,7 @@ export default function ChipSystems() {
                     placeholder="8.00"
                     value={systemForm.floorPriceMax}
                     onChange={(e) => setSystemForm({ ...systemForm, floorPriceMax: e.target.value })}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
                   />
                   <p className="text-xs text-slate-500 mt-1">Maximum suggested floor price/sqft</p>
                 </div>
@@ -370,14 +370,14 @@ export default function ChipSystems() {
                   value={systemForm.notes}
                   onChange={(e) => setSystemForm({ ...systemForm, notes: e.target.value })}
                   rows={3}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y"
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent resize-y"
                 />
                 <p className="text-xs text-slate-500 mt-1">Optional notes or comments about this system</p>
               </div>
               <div className="flex gap-3">
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+                  className="px-4 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors"
                 >
                   Save
                 </button>

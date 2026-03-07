@@ -189,7 +189,7 @@ export default function ChipBlends() {
         <button
           onClick={openAddModal}
           disabled={isAdding || editingId !== null}
-          className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed"
+          className="flex items-center justify-center gap-2 px-4 py-2.5 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed"
         >
           <Plus size={20} />
           <span>Add Blend</span>
@@ -238,7 +238,7 @@ export default function ChipBlends() {
                         <button
                           onClick={() => openEditModal(blend)}
                           disabled={isAdding || editingId !== null}
-                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:text-slate-400 disabled:hover:bg-transparent"
+                          className="p-2 text-gf-dark-green hover:bg-green-50 rounded-lg transition-colors disabled:text-slate-400 disabled:hover:bg-transparent"
                           title="Edit"
                         >
                           <Edit2 size={18} />
@@ -291,7 +291,7 @@ export default function ChipBlends() {
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   placeholder="e.g., Mocha Java"
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime"
                   autoFocus
                 />
               </div>
@@ -311,7 +311,7 @@ export default function ChipBlends() {
                         type="checkbox"
                         checked={formData.systemIds.includes(system.id)}
                         onChange={() => handleSystemToggle(system.id)}
-                        className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                        className="w-4 h-4 text-gf-dark-green border-slate-300 rounded focus:ring-gf-lime"
                       />
                       <span className="text-sm text-slate-700">{system.name}</span>
                     </label>
@@ -337,7 +337,7 @@ export default function ChipBlends() {
                         type="checkbox"
                         checked={formData.baseCoatColorIds.includes(color.id)}
                         onChange={() => handleBaseCoatColorToggle(color.id)}
-                        className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                        className="w-4 h-4 text-gf-dark-green border-slate-300 rounded focus:ring-gf-lime"
                       />
                       <span className="text-sm text-slate-700">{color.name}</span>
                     </label>
@@ -359,7 +359,7 @@ export default function ChipBlends() {
                 <button
                   type="button"
                   onClick={handleSave}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+                  className="px-4 py-2 text-sm font-medium text-white bg-gf-lime rounded-lg hover:bg-gf-dark-green transition-colors"
                 >
                   <span className="inline-flex items-center gap-2">
                     <Save size={14} />

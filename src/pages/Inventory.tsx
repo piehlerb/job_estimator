@@ -502,7 +502,7 @@ export default function Inventory() {
           <button
             onClick={handleAddChipInventory}
             disabled={!newChipBlend || !newChipPounds}
-            className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:bg-slate-300"
+            className="flex items-center gap-1 px-3 py-2 bg-gf-lime text-white rounded-lg text-sm font-medium hover:bg-gf-dark-green disabled:bg-slate-300"
           >
             <Plus size={16} />
             Add
@@ -516,7 +516,7 @@ export default function Inventory() {
           <h2 className="text-xl font-bold text-slate-900">Top Coat Inventory</h2>
           <button
             onClick={handleSaveTopCoat}
-            className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
+            className="flex items-center gap-1 px-3 py-2 bg-gf-lime text-white rounded-lg text-sm font-medium hover:bg-gf-dark-green"
           >
             <Save size={16} />
             Save
@@ -591,7 +591,7 @@ export default function Inventory() {
           <h2 className="text-xl font-bold text-slate-900">Base Coat Inventory</h2>
           <button
             onClick={handleSaveBaseCoat}
-            className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
+            className="flex items-center gap-1 px-3 py-2 bg-gf-lime text-white rounded-lg text-sm font-medium hover:bg-gf-dark-green"
           >
             <Save size={16} />
             Save
@@ -688,7 +688,7 @@ export default function Inventory() {
           <h2 className="text-xl font-bold text-slate-900">Miscellaneous Inventory</h2>
           <button
             onClick={handleSaveMisc}
-            className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
+            className="flex items-center gap-1 px-3 py-2 bg-gf-lime text-white rounded-lg text-sm font-medium hover:bg-gf-dark-green"
           >
             <Save size={16} />
             Save

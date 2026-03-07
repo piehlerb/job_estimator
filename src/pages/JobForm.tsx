@@ -994,7 +994,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
               type="submit"
               form="job-form"
               disabled={saving}
-              className="flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-2.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 active:bg-blue-800 transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed text-sm sm:text-base"
+              className="flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-2.5 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green active:bg-gf-dark-green transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed text-sm sm:text-base"
             >
               <Save size={16} className="sm:w-[18px] sm:h-[18px]" />
               {saving ? 'Saving...' : jobId ? 'Update Job' : 'Create Job'}
@@ -1018,7 +1018,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
               onClick={() => setActiveTab('details')}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                 activeTab === 'details'
-                  ? 'bg-blue-100 text-blue-800'
+                  ? 'bg-green-100 text-green-800'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
@@ -1029,13 +1029,13 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
               onClick={() => setActiveTab('reminders')}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                 activeTab === 'reminders'
-                  ? 'bg-blue-100 text-blue-800'
+                  ? 'bg-green-100 text-green-800'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
               Reminders
               {reminders.length > 0 && (
-                <span className="ml-1.5 inline-flex items-center justify-center min-w-5 h-5 px-1 text-xs font-semibold rounded-full bg-blue-600 text-white">
+                <span className="ml-1.5 inline-flex items-center justify-center min-w-5 h-5 px-1 text-xs font-semibold rounded-full bg-gf-lime text-white">
                   {reminders.length}
                 </span>
               )}
@@ -1053,7 +1053,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                 placeholder="e.g., Smith Residence - Kitchen"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
               />
             </div>
 
@@ -1069,7 +1069,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                         value={status}
                         checked={formData.status === status}
                         onChange={(e) => setFormData({ ...formData, status: e.target.value as JobStatus })}
-                        className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                        className="w-4 h-4 text-gf-dark-green border-slate-300 focus:ring-gf-lime"
                       />
                       <span className={`text-xs sm:text-sm ${
                         status === 'Won' ? 'text-green-700' :
@@ -1086,7 +1086,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                   type="date"
                   value={formData.decisionDate}
                   onChange={(e) => setFormData({ ...formData, decisionDate: e.target.value })}
-                  className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
                 />
               </div>
             </div>
@@ -1097,7 +1097,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                 type="date"
                 value={formData.estimateDate}
                 onChange={(e) => setFormData({ ...formData, estimateDate: e.target.value })}
-                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
               />
             </div>
 
@@ -1111,7 +1111,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                   onChange={(e) => handleCustomerNameInputChange(e.target.value)}
                   onFocus={() => setShowCustomerDropdown(true)}
                   onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 200)}
-                  className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
                 />
                 {showCustomerDropdown && customerSuggestions.length > 0 && (
                   <div className="absolute z-10 w-full mt-1 bg-white border border-slate-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
@@ -1140,7 +1140,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                   placeholder="e.g., 123 Main St, City, State 12345"
                   value={formData.customerAddress}
                   onChange={(e) => setFormData({ ...formData, customerAddress: e.target.value })}
-                  className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
                 />
               </div>
             </div>
@@ -1152,7 +1152,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                 value={formData.notes}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                 rows={3}
-                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y"
+                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent resize-y"
               />
             </div>
 
@@ -1165,7 +1165,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                 onChange={(e) => handleTagInputChange(e.target.value)}
                 onFocus={() => setShowTagDropdown(true)}
                 onBlur={() => setTimeout(() => setShowTagDropdown(false), 200)}
-                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
               />
               <p className="mt-1 text-xs text-slate-500">Comma-separated tags used for reporting and filtering.</p>
               {showTagDropdown && tagSuggestions.length > 0 && (
@@ -1189,7 +1189,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
               <select
                 value={formData.system}
                 onChange={(e) => handleSystemChange(e.target.value)}
-                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent bg-white"
               >
                 <option value="">Select a system...</option>
                 {systems.map((sys) => (
@@ -1207,7 +1207,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                 placeholder="0"
                 value={formData.floorFootage}
                 onChange={(e) => setFormData({ ...formData, floorFootage: e.target.value })}
-                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
               />
             </div>
 
@@ -1218,7 +1218,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                 placeholder="0"
                 value={formData.verticalFootage}
                 onChange={(e) => setFormData({ ...formData, verticalFootage: e.target.value })}
-                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
               />
             </div>
 
@@ -1230,7 +1230,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                 placeholder="0"
                 value={formData.crackFillFactor}
                 onChange={(e) => setFormData({ ...formData, crackFillFactor: e.target.value })}
-                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
               />
             </div>
 
@@ -1241,7 +1241,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                 placeholder="0"
                 value={formData.travelDistance}
                 onChange={(e) => setFormData({ ...formData, travelDistance: e.target.value })}
-                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
               />
             </div>
 
@@ -1251,7 +1251,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                 type="date"
                 value={formData.installDate}
                 onChange={(e) => setFormData({ ...formData, installDate: e.target.value })}
-                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
               />
             </div>
 
@@ -1263,7 +1263,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                 min="1"
                 value={formData.installDays}
                 onChange={(e) => setFormData({ ...formData, installDays: e.target.value })}
-                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
               />
             </div>
 
@@ -1276,7 +1276,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                 onChange={(e) => handleChipBlendInputChange(e.target.value)}
                 onFocus={() => setShowBlendDropdown(true)}
                 onBlur={() => setTimeout(() => setShowBlendDropdown(false), 200)}
-                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
               />
               {showBlendDropdown && (
                 <div className="absolute z-10 w-full mt-1 bg-white border border-slate-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
@@ -1306,7 +1306,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
               <select
                 value={formData.baseColor}
                 onChange={(e) => setFormData({ ...formData, baseColor: e.target.value as BaseColor })}
-                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
               >
                 <option value="">Select a base coat color...</option>
                 {availableBaseCoatColors.map((color) => (
@@ -1329,7 +1329,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                     name="includeBasecoatTint"
                     checked={!formData.includeBasecoatTint}
                     onChange={() => setFormData({ ...formData, includeBasecoatTint: false })}
-                    className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                    className="w-4 h-4 text-gf-dark-green border-slate-300 focus:ring-gf-lime"
                   />
                   <span className="text-xs sm:text-sm text-slate-700">No</span>
                 </label>
@@ -1339,7 +1339,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                     name="includeBasecoatTint"
                     checked={formData.includeBasecoatTint}
                     onChange={() => setFormData({ ...formData, includeBasecoatTint: true })}
-                    className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                    className="w-4 h-4 text-gf-dark-green border-slate-300 focus:ring-gf-lime"
                   />
                   <span className="text-xs sm:text-sm text-slate-700">Yes</span>
                 </label>
@@ -1355,7 +1355,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                     name="includeTopcoatTint"
                     checked={!formData.includeTopcoatTint}
                     onChange={() => setFormData({ ...formData, includeTopcoatTint: false })}
-                    className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                    className="w-4 h-4 text-gf-dark-green border-slate-300 focus:ring-gf-lime"
                   />
                   <span className="text-xs sm:text-sm text-slate-700">No</span>
                 </label>
@@ -1365,7 +1365,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                     name="includeTopcoatTint"
                     checked={formData.includeTopcoatTint}
                     onChange={() => setFormData({ ...formData, includeTopcoatTint: true })}
-                    className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                    className="w-4 h-4 text-gf-dark-green border-slate-300 focus:ring-gf-lime"
                   />
                   <span className="text-xs sm:text-sm text-slate-700">Yes</span>
                 </label>
@@ -1381,7 +1381,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                     name="antiSlip"
                     checked={!formData.antiSlip}
                     onChange={() => setFormData({ ...formData, antiSlip: false })}
-                    className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                    className="w-4 h-4 text-gf-dark-green border-slate-300 focus:ring-gf-lime"
                   />
                   <span className="text-xs sm:text-sm text-slate-700">No</span>
                 </label>
@@ -1391,7 +1391,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                     name="antiSlip"
                     checked={formData.antiSlip}
                     onChange={() => setFormData({ ...formData, antiSlip: true })}
-                    className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                    className="w-4 h-4 text-gf-dark-green border-slate-300 focus:ring-gf-lime"
                   />
                   <span className="text-xs sm:text-sm text-slate-700">Yes</span>
                 </label>
@@ -1407,7 +1407,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                     name="abrasionResistance"
                     checked={!formData.abrasionResistance}
                     onChange={() => setFormData({ ...formData, abrasionResistance: false })}
-                    className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                    className="w-4 h-4 text-gf-dark-green border-slate-300 focus:ring-gf-lime"
                   />
                   <span className="text-xs sm:text-sm text-slate-700">No</span>
                 </label>
@@ -1417,7 +1417,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                     name="abrasionResistance"
                     checked={formData.abrasionResistance}
                     onChange={() => setFormData({ ...formData, abrasionResistance: true })}
-                    className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                    className="w-4 h-4 text-gf-dark-green border-slate-300 focus:ring-gf-lime"
                   />
                   <span className="text-xs sm:text-sm text-slate-700">Yes</span>
                 </label>
@@ -1433,7 +1433,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                     name="cyclo1Topcoat"
                     checked={!formData.cyclo1Topcoat}
                     onChange={() => setFormData({ ...formData, cyclo1Topcoat: false })}
-                    className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                    className="w-4 h-4 text-gf-dark-green border-slate-300 focus:ring-gf-lime"
                   />
                   <span className="text-xs sm:text-sm text-slate-700">No</span>
                 </label>
@@ -1443,7 +1443,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                     name="cyclo1Topcoat"
                     checked={formData.cyclo1Topcoat}
                     onChange={() => setFormData({ ...formData, cyclo1Topcoat: true })}
-                    className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                    className="w-4 h-4 text-gf-dark-green border-slate-300 focus:ring-gf-lime"
                   />
                   <span className="text-xs sm:text-sm text-slate-700">Yes</span>
                 </label>
@@ -1460,7 +1460,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                       name="cyclo1Coats"
                       checked={formData.cyclo1Coats === '0'}
                       onChange={() => setFormData({ ...formData, cyclo1Coats: '0' })}
-                      className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                      className="w-4 h-4 text-gf-dark-green border-slate-300 focus:ring-gf-lime"
                     />
                     <span className="text-xs sm:text-sm text-slate-700">0</span>
                   </label>
@@ -1470,7 +1470,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                       name="cyclo1Coats"
                       checked={formData.cyclo1Coats === '1'}
                       onChange={() => setFormData({ ...formData, cyclo1Coats: '1' })}
-                      className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                      className="w-4 h-4 text-gf-dark-green border-slate-300 focus:ring-gf-lime"
                     />
                     <span className="text-xs sm:text-sm text-slate-700">1</span>
                   </label>
@@ -1480,7 +1480,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                       name="cyclo1Coats"
                       checked={formData.cyclo1Coats === '2'}
                       onChange={() => setFormData({ ...formData, cyclo1Coats: '2' })}
-                      className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                      className="w-4 h-4 text-gf-dark-green border-slate-300 focus:ring-gf-lime"
                     />
                     <span className="text-xs sm:text-sm text-slate-700">2</span>
                   </label>
@@ -1499,7 +1499,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                       value={type}
                       checked={formData.coatingRemoval === type}
                       onChange={(e) => setFormData({ ...formData, coatingRemoval: e.target.value as CoatingRemovalType })}
-                      className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                      className="w-4 h-4 text-gf-dark-green border-slate-300 focus:ring-gf-lime"
                     />
                     <span className="text-xs sm:text-sm text-slate-700">{type}</span>
                   </label>
@@ -1516,7 +1516,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                     name="moistureMitigation"
                     checked={!formData.moistureMitigation}
                     onChange={() => setFormData({ ...formData, moistureMitigation: false })}
-                    className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                    className="w-4 h-4 text-gf-dark-green border-slate-300 focus:ring-gf-lime"
                   />
                   <span className="text-xs sm:text-sm text-slate-700">No</span>
                 </label>
@@ -1526,7 +1526,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                     name="moistureMitigation"
                     checked={formData.moistureMitigation}
                     onChange={() => setFormData({ ...formData, moistureMitigation: true })}
-                    className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                    className="w-4 h-4 text-gf-dark-green border-slate-300 focus:ring-gf-lime"
                   />
                   <span className="text-xs sm:text-sm text-slate-700">Yes</span>
                 </label>
@@ -1823,7 +1823,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                       <select
                         value={selectedProductId}
                         onChange={(e) => setSelectedProductId(e.target.value)}
-                        className="flex-1 px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="flex-1 px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
                       >
                         <option value="">Select a product...</option>
                         {allProducts.map((p) => (
@@ -1855,7 +1855,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                           setSelectedProductId('');
                         }}
                         disabled={!selectedProductId}
-                        className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="flex items-center gap-1 px-3 py-2 bg-gf-lime text-white text-sm rounded-lg hover:bg-gf-dark-green transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Plus size={14} />
                         Add
@@ -1896,7 +1896,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                                         i === idx ? { ...p, quantity: qty } : p
                                       ));
                                     }}
-                                    className="w-16 text-right text-sm bg-transparent border-b border-slate-300 focus:outline-none focus:border-blue-600 p-0"
+                                    className="w-16 text-right text-sm bg-transparent border-b border-slate-300 focus:outline-none focus:border-gf-lime p-0"
                                   />
                                 </td>
                                 <td className="py-2 text-right text-slate-500">{formatCurrency(jp.unitCost)}</td>
@@ -1912,7 +1912,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                                         i === idx ? { ...p, unitPrice: price } : p
                                       ));
                                     }}
-                                    className="w-24 text-right text-sm bg-transparent border-b border-slate-300 focus:outline-none focus:border-blue-600 p-0"
+                                    className="w-24 text-right text-sm bg-transparent border-b border-slate-300 focus:outline-none focus:border-gf-lime p-0"
                                   />
                                 </td>
                                 <td className="py-2 text-right text-slate-900 font-medium">
@@ -1947,72 +1947,72 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
               </div>
 
               {/* Suggested Pricing */}
-              <div className="bg-blue-50 rounded-lg p-3 sm:p-4 border border-blue-200">
-                <h4 className="text-xs sm:text-sm font-semibold text-blue-800 mb-2 sm:mb-3 uppercase tracking-wide">Suggested Pricing</h4>
+              <div className="bg-green-50 rounded-lg p-3 sm:p-4 border border-green-200">
+                <h4 className="text-xs sm:text-sm font-semibold text-gf-dark-green mb-2 sm:mb-3 uppercase tracking-wide">Suggested Pricing</h4>
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 md:gap-4 mb-3 sm:mb-4">
                   <div>
-                    <p className="text-xs text-blue-600">Discount</p>
-                    <p className="text-sm sm:text-base md:text-lg font-semibold text-blue-900">{formatCurrency(calculation.suggestedDiscount)}</p>
+                    <p className="text-xs text-gf-dark-green">Discount</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold text-gf-dark-green">{formatCurrency(calculation.suggestedDiscount)}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-blue-600">Crack Price</p>
-                    <p className="text-sm sm:text-base md:text-lg font-semibold text-blue-900">{formatCurrency(calculation.suggestedCrackPrice)}</p>
+                    <p className="text-xs text-gf-dark-green">Crack Price</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold text-gf-dark-green">{formatCurrency(calculation.suggestedCrackPrice)}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-blue-600">Floor $/sqft</p>
+                    <p className="text-xs text-gf-dark-green">Floor $/sqft</p>
                     <p className={`text-sm sm:text-base md:text-lg font-semibold ${(() => {
                       const selectedSystem = systems.find(s => s.id === formData.system);
                       const min = selectedSystem?.floorPriceMin ?? 6;
                       const max = selectedSystem?.floorPriceMax ?? 8;
-                      return (calculation.suggestedFloorPricePerSqft < min || calculation.suggestedFloorPricePerSqft > max) ? 'text-red-600' : 'text-blue-900';
+                      return (calculation.suggestedFloorPricePerSqft < min || calculation.suggestedFloorPricePerSqft > max) ? 'text-red-600' : 'text-gf-dark-green';
                     })()}`}>
                       {formatCurrency(calculation.suggestedFloorPricePerSqft)}
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-blue-600">Floor Price</p>
-                    <p className="text-sm sm:text-base md:text-lg font-semibold text-blue-900">{formatCurrency(calculation.suggestedFloorPrice)}</p>
+                    <p className="text-xs text-gf-dark-green">Floor Price</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold text-gf-dark-green">{formatCurrency(calculation.suggestedFloorPrice)}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-blue-600">Vertical Price - {formatCurrency(usedPricing.verticalPricePerSqft)}/sqft</p>
-                    <p className="text-sm sm:text-base md:text-lg font-semibold text-blue-900">{formatCurrency(calculation.suggestedVerticalPrice)}</p>
+                    <p className="text-xs text-gf-dark-green">Vertical Price - {formatCurrency(usedPricing.verticalPricePerSqft)}/sqft</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold text-gf-dark-green">{formatCurrency(calculation.suggestedVerticalPrice)}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-blue-600">Anti-Slip Price - {formatCurrency(usedPricing.antiSlipPricePerSqft)}/sqft</p>
-                    <p className="text-sm sm:text-base md:text-lg font-semibold text-blue-900">{formatCurrency(calculation.suggestedAntiSlipPrice)}</p>
+                    <p className="text-xs text-gf-dark-green">Anti-Slip Price - {formatCurrency(usedPricing.antiSlipPricePerSqft)}/sqft</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold text-gf-dark-green">{formatCurrency(calculation.suggestedAntiSlipPrice)}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-blue-600">Abrasion Resistance - {formatCurrency(usedPricing.abrasionResistancePricePerSqft)}/sqft</p>
-                    <p className="text-sm sm:text-base md:text-lg font-semibold text-blue-900">{formatCurrency(calculation.suggestedAbrasionResistancePrice)}</p>
+                    <p className="text-xs text-gf-dark-green">Abrasion Resistance - {formatCurrency(usedPricing.abrasionResistancePricePerSqft)}/sqft</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold text-gf-dark-green">{formatCurrency(calculation.suggestedAbrasionResistancePrice)}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-blue-600">
+                    <p className="text-xs text-gf-dark-green">
                       Coating Removal - {formData.coatingRemoval}
                       {formData.coatingRemoval === 'Paint' && ` - ${formatCurrency(usedPricing.coatingRemovalPaintPerSqft)}/sqft`}
                       {formData.coatingRemoval === 'Epoxy' && ` - ${formatCurrency(usedPricing.coatingRemovalEpoxyPerSqft)}/sqft`}
                     </p>
-                    <p className="text-sm sm:text-base md:text-lg font-semibold text-blue-900">{formatCurrency(calculation.suggestedCoatingRemovalPrice)}</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold text-gf-dark-green">{formatCurrency(calculation.suggestedCoatingRemovalPrice)}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-blue-600">Moisture Mitigation - {formatCurrency(usedPricing.moistureMitigationPerSqft)}/sqft</p>
-                    <p className="text-sm sm:text-base md:text-lg font-semibold text-blue-900">{formatCurrency(calculation.suggestedMoistureMitigationPrice)}</p>
+                    <p className="text-xs text-gf-dark-green">Moisture Mitigation - {formatCurrency(usedPricing.moistureMitigationPerSqft)}/sqft</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold text-gf-dark-green">{formatCurrency(calculation.suggestedMoistureMitigationPrice)}</p>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 sm:gap-4 pt-3 sm:pt-4 border-t border-blue-200">
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 sm:gap-4 pt-3 sm:pt-4 border-t border-green-200">
                   <div>
-                    <p className="text-xs sm:text-sm text-blue-600">Effective $/Sqft</p>
-                    <p className="text-xl sm:text-2xl font-bold text-blue-900">{formatCurrency(calculation.suggestedEffectivePricePerSqft)}</p>
+                    <p className="text-xs sm:text-sm text-gf-dark-green">Effective $/Sqft</p>
+                    <p className="text-xl sm:text-2xl font-bold text-gf-dark-green">{formatCurrency(calculation.suggestedEffectivePricePerSqft)}</p>
                   </div>
                   <div>
-                    <p className="text-xs sm:text-sm text-blue-600">Suggested Total</p>
-                    <p className="text-xl sm:text-2xl font-bold text-blue-900">{formatCurrency(calculation.suggestedTotal)}</p>
+                    <p className="text-xs sm:text-sm text-gf-dark-green">Suggested Total</p>
+                    <p className="text-xl sm:text-2xl font-bold text-gf-dark-green">{formatCurrency(calculation.suggestedTotal)}</p>
                   </div>
                   <div>
-                    <p className="text-xs sm:text-sm text-blue-600">Suggested Margin</p>
+                    <p className="text-xs sm:text-sm text-gf-dark-green">Suggested Margin</p>
                     <p className="text-xl sm:text-2xl font-bold text-green-600">{formatCurrency(calculation.suggestedMargin)}</p>
                   </div>
                   <div>
-                    <p className="text-xs sm:text-sm text-blue-600">Margin %</p>
+                    <p className="text-xs sm:text-sm text-gf-dark-green">Margin %</p>
                     <p className="text-xl sm:text-2xl font-bold text-green-600">{calculation.suggestedMarginPct.toFixed(1)}%</p>
                   </div>
                 </div>
@@ -2033,7 +2033,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                 <button
                   type="button"
                   onClick={openAddReminder}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-medium bg-gf-lime text-white rounded-lg hover:bg-gf-dark-green transition-colors"
                 >
                   <Plus size={14} />
                   Add Reminder
@@ -2078,7 +2078,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
             <button
               type="submit"
               disabled={saving}
-              className="flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 active:bg-blue-800 transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed text-sm sm:text-base"
+              className="flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green active:bg-gf-dark-green transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed text-sm sm:text-base"
             >
               <Save size={18} className="sm:w-5 sm:h-5" />
               {saving ? 'Saving...' : jobId ? 'Update Job' : 'Create Job'}
@@ -2117,7 +2117,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                   value={reminderForm.subject}
                   onChange={(e) => setReminderForm({ ...reminderForm, subject: e.target.value })}
                   placeholder="Reminder subject"
-                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
                 />
               </div>
               <div>
@@ -2127,7 +2127,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                   onChange={(e) => setReminderForm({ ...reminderForm, details: e.target.value })}
                   placeholder="Optional details"
                   rows={3}
-                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent resize-none"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -2137,7 +2137,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                     type="date"
                     value={reminderForm.dueDate}
                     onChange={(e) => setReminderForm({ ...reminderForm, dueDate: e.target.value })}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
                   />
                 </div>
                 <div>
@@ -2146,7 +2146,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                     type="time"
                     value={reminderForm.dueTime}
                     onChange={(e) => setReminderForm({ ...reminderForm, dueTime: e.target.value })}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
                   />
                 </div>
               </div>
@@ -2163,7 +2163,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                   type="button"
                   onClick={handleSaveReminder}
                   disabled={savingReminder}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed"
+                  className="px-4 py-2 text-sm font-medium text-white bg-gf-lime rounded-lg hover:bg-gf-dark-green transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed"
                 >
                   {savingReminder ? 'Saving...' : editingReminderId ? 'Save Reminder' : 'Add Reminder'}
                 </button>

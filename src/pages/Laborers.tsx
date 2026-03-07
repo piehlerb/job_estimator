@@ -107,7 +107,7 @@ export default function Laborers() {
           <h3 className="text-lg font-semibold text-slate-900">Your Laborers</h3>
           <button
             onClick={openAddForm}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors"
           >
             <Plus size={18} />
             New Laborer
@@ -119,7 +119,7 @@ export default function Laborers() {
             <p className="text-slate-600 mb-4">No laborers created yet</p>
             <button
               onClick={openAddForm}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors"
             >
               <Plus size={18} />
               Create Laborer
@@ -159,7 +159,7 @@ export default function Laborers() {
                 <div className="flex gap-2">
                   <button
                     onClick={() => handleEditLaborer(laborer)}
-                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                    className="p-2 text-gf-dark-green hover:bg-green-50 rounded-lg transition-colors"
                     title="Edit"
                   >
                     <Edit2 size={18} />
@@ -205,7 +205,7 @@ export default function Laborers() {
                     placeholder="e.g., John Smith"
                     value={laborerForm.name}
                     onChange={(e) => setLaborerForm({ ...laborerForm, name: e.target.value })}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
                     required
                   />
                 </div>
@@ -217,7 +217,7 @@ export default function Laborers() {
                     placeholder="0.00"
                     value={laborerForm.fullyLoadedRate}
                     onChange={(e) => setLaborerForm({ ...laborerForm, fullyLoadedRate: e.target.value })}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
                   />
                 </div>
               </div>
@@ -227,7 +227,7 @@ export default function Laborers() {
                     type="checkbox"
                     checked={laborerForm.isActive}
                     onChange={(e) => setLaborerForm({ ...laborerForm, isActive: e.target.checked })}
-                    className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                    className="w-4 h-4 text-gf-dark-green rounded focus:ring-gf-lime"
                   />
                   <span className="text-sm font-medium text-slate-900">Active</span>
                 </label>
@@ -243,7 +243,7 @@ export default function Laborers() {
                 <button
                   type="submit"
                   disabled={saving || !laborerForm.name.trim()}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 text-sm font-medium text-white bg-gf-lime rounded-lg hover:bg-gf-dark-green transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {saving ? 'Saving...' : editingLaborer ? 'Save Changes' : 'Add Laborer'}
                 </button>

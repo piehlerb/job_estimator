@@ -120,7 +120,7 @@ export default function Backup() {
           <button
             onClick={handleExport}
             disabled={exporting}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors disabled:opacity-50"
           >
             <Download size={18} />
             {exporting ? 'Exporting...' : 'Export Backup'}
@@ -189,7 +189,7 @@ export default function Backup() {
                   type="checkbox"
                   checked={deleteOrphans}
                   onChange={(e) => handleDeleteOrphansChange(e.target.checked)}
-                  className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                  className="w-4 h-4 text-gf-dark-green rounded focus:ring-gf-lime"
                 />
                 <span className="text-sm font-medium text-slate-900">
                   Delete local records not in import file (full sync)
@@ -202,9 +202,9 @@ export default function Backup() {
                   <p className="text-2xl font-bold text-green-600">{importPreview.toAdd.length}</p>
                   <p className="text-sm text-green-700">To Add</p>
                 </div>
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-center">
-                  <p className="text-2xl font-bold text-blue-600">{importPreview.toUpdate.length}</p>
-                  <p className="text-sm text-blue-700">To Update</p>
+                <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-center">
+                  <p className="text-2xl font-bold text-gf-dark-green">{importPreview.toUpdate.length}</p>
+                  <p className="text-sm text-gf-dark-green">To Update</p>
                 </div>
                 <div className="p-3 bg-slate-100 border border-slate-200 rounded-lg text-center">
                   <p className="text-2xl font-bold text-slate-600">{importPreview.toSkip.length}</p>
@@ -229,10 +229,10 @@ export default function Backup() {
                   </div>
                 ))}
                 {importPreview.toUpdate.map((item, i) => (
-                  <div key={`update-${i}`} className="flex items-center gap-3 p-3 bg-blue-50">
-                    <CheckCircle size={16} className="text-blue-600 flex-shrink-0" />
+                  <div key={`update-${i}`} className="flex items-center gap-3 p-3 bg-green-50">
+                    <CheckCircle size={16} className="text-gf-dark-green flex-shrink-0" />
                     <span className="text-sm">
-                      <span className="font-medium text-blue-700">Update</span>{' '}
+                      <span className="font-medium text-gf-dark-green">Update</span>{' '}
                       <span className="text-slate-600">{item.entityType}:</span>{' '}
                       <span className="text-slate-900">{item.entityName}</span>
                     </span>
@@ -272,7 +272,7 @@ export default function Backup() {
                 <button
                   onClick={handleImport}
                   disabled={importing || (importPreview.toAdd.length === 0 && importPreview.toUpdate.length === 0 && importPreview.toDelete.length === 0)}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  className="flex items-center gap-2 px-4 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors disabled:opacity-50"
                 >
                   {importing ? 'Importing...' : 'Apply Import'}
                 </button>
@@ -301,11 +301,11 @@ export default function Backup() {
                   </p>
                   <p className="text-sm text-green-700">Added</p>
                 </div>
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-center">
-                  <p className="text-2xl font-bold text-blue-600">
+                <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-center">
+                  <p className="text-2xl font-bold text-gf-dark-green">
                     {mergeLog.filter(e => e.action === 'update').length}
                   </p>
-                  <p className="text-sm text-blue-700">Updated</p>
+                  <p className="text-sm text-gf-dark-green">Updated</p>
                 </div>
                 <div className="p-3 bg-slate-100 border border-slate-200 rounded-lg text-center">
                   <p className="text-2xl font-bold text-slate-600">
@@ -328,18 +328,18 @@ export default function Backup() {
                     key={i}
                     className={`flex items-center gap-3 p-3 ${
                       entry.action === 'add' ? 'bg-green-50' :
-                      entry.action === 'update' ? 'bg-blue-50' :
+                      entry.action === 'update' ? 'bg-green-50' :
                       entry.action === 'delete' ? 'bg-red-50' : ''
                     }`}
                   >
                     {entry.action === 'add' && <CheckCircle size={16} className="text-green-600 flex-shrink-0" />}
-                    {entry.action === 'update' && <CheckCircle size={16} className="text-blue-600 flex-shrink-0" />}
+                    {entry.action === 'update' && <CheckCircle size={16} className="text-gf-dark-green flex-shrink-0" />}
                     {entry.action === 'skip' && <SkipForward size={16} className="text-slate-400 flex-shrink-0" />}
                     {entry.action === 'delete' && <XCircle size={16} className="text-red-600 flex-shrink-0" />}
                     <span className="text-sm">
                       <span className={`font-medium ${
                         entry.action === 'add' ? 'text-green-700' :
-                        entry.action === 'update' ? 'text-blue-700' :
+                        entry.action === 'update' ? 'text-gf-dark-green' :
                         entry.action === 'delete' ? 'text-red-700' : 'text-slate-500'
                       }`}>
                         {entry.action.charAt(0).toUpperCase() + entry.action.slice(1)}

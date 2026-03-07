@@ -10,7 +10,7 @@
   input:focus,
   select:focus,
   textarea:focus {
-    @apply outline-none ring-2 ring-blue-500 ring-offset-0;
+    @apply outline-none ring-2 ring-[#77bf43] ring-offset-0;
   }
 }
 
@@ -20,7 +20,7 @@
   }
 
   .btn-primary {
-    @apply px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 active:bg-blue-800 transition-colors;
+    @apply px-6 py-3 bg-[#77bf43] text-white rounded-lg font-semibold hover:bg-[#4d7820] active:bg-[#4d7820] transition-colors;
   }
 
   .btn-secondary {
@@ -32,7 +32,7 @@
   }
 
   .form-input {
-    @apply w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent;
+    @apply w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#77bf43] focus:border-transparent;
   }
 
   .section-title {
@@ -60,7 +60,7 @@
   }
 
   .nav-item.active {
-    @apply bg-blue-600 text-white;
+    @apply bg-[#4d7820] text-white;
   }
 }
 

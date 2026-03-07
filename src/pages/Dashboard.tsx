@@ -334,7 +334,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
         </div>
         <button
           onClick={onNewJob}
-          className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors text-sm sm:text-base"
+          className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors text-sm sm:text-base"
         >
           <Plus size={18} className="sm:w-5 sm:h-5" />
           New Job
@@ -356,14 +356,14 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
                     placeholder="Search jobs..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-8 pr-3 py-1.5 sm:py-2 border border-slate-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full pl-8 pr-3 py-1.5 sm:py-2 border border-slate-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-gf-lime"
                   />
                 </div>
                 <label className="text-xs sm:text-sm text-slate-600 font-medium">Sort:</label>
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value as 'date' | 'price' | 'margin')}
-                  className="flex-1 sm:flex-none px-2 sm:px-3 py-1.5 sm:py-2 border border-slate-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="flex-1 sm:flex-none px-2 sm:px-3 py-1.5 sm:py-2 border border-slate-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-gf-lime"
                 >
                   <option value="date">Recent</option>
                   <option value="price">Price (High to Low)</option>
@@ -376,7 +376,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
                     remindersNeedingAttentionCount > 0
                       ? 'bg-red-100 text-red-800 hover:bg-red-200'
                       : showReminders
-                        ? 'bg-blue-100 text-blue-800'
+                        ? 'bg-green-100 text-green-800'
                         : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                   }`}
                 >
@@ -415,7 +415,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
                   <select
                     value={chipBlendFilter}
                     onChange={(e) => setChipBlendFilter(e.target.value)}
-                    className="px-2 sm:px-3 py-1.5 sm:py-2 border border-slate-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="px-2 sm:px-3 py-1.5 sm:py-2 border border-slate-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-gf-lime"
                   >
                     <option value="">All Blends</option>
                     {availableChipBlends.map((blend) => (
@@ -434,7 +434,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
                       type="button"
                       onClick={() => setTagMatchMode('any')}
                       className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
-                        tagMatchMode === 'any' ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-500'
+                        tagMatchMode === 'any' ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-500'
                       }`}
                     >
                       Any
@@ -443,7 +443,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
                       type="button"
                       onClick={() => setTagMatchMode('all')}
                       className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
-                        tagMatchMode === 'all' ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-500'
+                        tagMatchMode === 'all' ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-500'
                       }`}
                     >
                       All
@@ -493,7 +493,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
             {jobsWithCalc.length === 0 && (
               <button
                 onClick={onNewJob}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors text-sm"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors text-sm"
               >
                 <Plus size={18} />
                 Create Job
@@ -642,7 +642,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
                             >
                               <FileText size={18} />
                             </button>
-                            <button className="text-blue-600 hover:text-blue-800 font-medium text-xs lg:text-sm">Edit</button>
+                            <button className="text-gf-dark-green hover:text-gf-dark-green font-medium text-xs lg:text-sm">Edit</button>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();

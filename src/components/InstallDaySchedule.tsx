@@ -105,7 +105,7 @@ export default function InstallDayScheduleComponent({
                       step="0.5"
                       value={daySchedule.hours}
                       onChange={(e) => updateDayHours(daySchedule.day, parseFloat(e.target.value) || 0)}
-                      className="w-20 px-2 py-1 text-sm border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-20 px-2 py-1 text-sm border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-gf-lime"
                     />
                   </div>
                 </div>
@@ -134,7 +134,7 @@ export default function InstallDayScheduleComponent({
                           onClick={() => toggleLaborer(daySchedule.day, laborer.id)}
                           className={`px-2.5 py-1.5 rounded text-xs font-medium transition-colors ${
                             isSelected
-                              ? 'bg-blue-600 text-white'
+                              ? 'bg-gf-lime text-white'
                               : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-300'
                           }`}
                         >
@@ -151,27 +151,27 @@ export default function InstallDayScheduleComponent({
       </div>
 
       {/* Summary */}
-      <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
+      <div className="bg-green-50 rounded-lg p-3 border border-green-200">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
           <div>
-            <p className="text-blue-600 mb-1">Total Days</p>
-            <p className="font-semibold text-blue-900">{localSchedule.length}</p>
+            <p className="text-gf-dark-green mb-1">Total Days</p>
+            <p className="font-semibold text-gf-dark-green">{localSchedule.length}</p>
           </div>
           <div>
-            <p className="text-blue-600 mb-1">Total Hours</p>
-            <p className="font-semibold text-blue-900">
+            <p className="text-gf-dark-green mb-1">Total Hours</p>
+            <p className="font-semibold text-gf-dark-green">
               {localSchedule.reduce((sum, s) => sum + s.hours, 0).toFixed(1)}h
             </p>
           </div>
           <div>
-            <p className="text-blue-600 mb-1">Avg Hours/Day</p>
-            <p className="font-semibold text-blue-900">
+            <p className="text-gf-dark-green mb-1">Avg Hours/Day</p>
+            <p className="font-semibold text-gf-dark-green">
               {(localSchedule.reduce((sum, s) => sum + s.hours, 0) / localSchedule.length).toFixed(1)}h
             </p>
           </div>
           <div>
-            <p className="text-blue-600 mb-1">Total Labor Cost</p>
-            <p className="font-semibold text-blue-900">
+            <p className="text-gf-dark-green mb-1">Total Labor Cost</p>
+            <p className="font-semibold text-gf-dark-green">
               $
               {localSchedule
                 .reduce((sum, s) => {

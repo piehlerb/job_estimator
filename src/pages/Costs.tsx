@@ -104,7 +104,7 @@ export default function Costs() {
                 placeholder="0.00"
                 value={costsForm.baseCostPerGal}
                 onChange={(e) => setCostsForm({ ...costsForm, baseCostPerGal: e.target.value })}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
               />
             </div>
             <div>
@@ -115,7 +115,7 @@ export default function Costs() {
                 placeholder="0.00"
                 value={costsForm.topCostPerGal}
                 onChange={(e) => setCostsForm({ ...costsForm, topCostPerGal: e.target.value })}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
               />
             </div>
           </div>
@@ -128,7 +128,7 @@ export default function Costs() {
                 placeholder="0.00"
                 value={costsForm.crackFillCost}
                 onChange={(e) => setCostsForm({ ...costsForm, crackFillCost: e.target.value })}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
               />
             </div>
             <div>
@@ -139,7 +139,7 @@ export default function Costs() {
                 placeholder="0.00"
                 value={costsForm.gasCost}
                 onChange={(e) => setCostsForm({ ...costsForm, gasCost: e.target.value })}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
               />
             </div>
           </div>
@@ -152,7 +152,7 @@ export default function Costs() {
                 placeholder="0.00"
                 value={costsForm.consumablesCost}
                 onChange={(e) => setCostsForm({ ...costsForm, consumablesCost: e.target.value })}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
               />
             </div>
             <div>
@@ -163,7 +163,7 @@ export default function Costs() {
                 placeholder="0.00"
                 value={costsForm.cyclo1CostPerGal}
                 onChange={(e) => setCostsForm({ ...costsForm, cyclo1CostPerGal: e.target.value })}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
               />
             </div>
           </div>
@@ -176,7 +176,7 @@ export default function Costs() {
                 placeholder="0.00"
                 value={costsForm.tintCostPerQuart}
                 onChange={(e) => setCostsForm({ ...costsForm, tintCostPerQuart: e.target.value })}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
               />
             </div>
             <div>
@@ -187,7 +187,7 @@ export default function Costs() {
                 placeholder="0.00"
                 value={costsForm.antiSlipCostPerGal}
                 onChange={(e) => setCostsForm({ ...costsForm, antiSlipCostPerGal: e.target.value })}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
               />
             </div>
           </div>
@@ -200,7 +200,7 @@ export default function Costs() {
                 placeholder="0.00"
                 value={costsForm.abrasionResistanceCostPerGal}
                 onChange={(e) => setCostsForm({ ...costsForm, abrasionResistanceCostPerGal: e.target.value })}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
               />
             </div>
           </div>
@@ -208,7 +208,7 @@ export default function Costs() {
             <button
               type="submit"
               disabled={costsSaving}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50"
+              className="px-6 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors disabled:opacity-50"
             >
               {costsSaving ? 'Saving...' : 'Save Costs'}
             </button>

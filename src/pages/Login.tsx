@@ -147,7 +147,7 @@ export default function Login({ onSuccess, onContinueOffline }: LoginProps) {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
                 disabled={loading}
                 required
               />
@@ -164,7 +164,7 @@ export default function Login({ onSuccess, onContinueOffline }: LoginProps) {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
                 disabled={loading}
                 required
                 minLength={6}
@@ -183,7 +183,7 @@ export default function Login({ onSuccess, onContinueOffline }: LoginProps) {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
                   disabled={loading}
                   required
                   minLength={6}
@@ -195,7 +195,7 @@ export default function Login({ onSuccess, onContinueOffline }: LoginProps) {
             <button
               type="submit"
               disabled={loading}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed"
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gf-lime text-white rounded-lg font-medium hover:bg-gf-dark-green transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed"
             >
               {loading ? (
                 <>
@@ -250,7 +250,7 @@ export default function Login({ onSuccess, onContinueOffline }: LoginProps) {
           {mode === 'login' ? "Don't have an account? " : 'Already have an account? '}
           <button
             onClick={() => setMode(mode === 'login' ? 'signup' : 'login')}
-            className="text-blue-400 hover:text-blue-300 font-medium"
+            className="text-gf-lime hover:text-gf-lime font-medium"
           >
             {mode === 'login' ? 'Sign up' : 'Sign in'}
           </button>

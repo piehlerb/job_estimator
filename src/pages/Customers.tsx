@@ -197,7 +197,7 @@ export default function Customers() {
         <button
           type="button"
           onClick={openAddForm}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors text-sm"
+          className="flex items-center gap-2 px-4 py-2 bg-gf-lime text-white rounded-lg font-medium hover:bg-gf-dark-green transition-colors text-sm"
         >
           <Plus size={16} />
           Add Customer
@@ -230,7 +230,7 @@ export default function Customers() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search customer name..."
-            className="w-full sm:max-w-sm px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full sm:max-w-sm px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
           />
           <div className="flex items-center gap-2 flex-wrap">
             <label className="text-xs sm:text-sm text-slate-600 font-medium">Job Status:</label>
@@ -299,7 +299,7 @@ export default function Customers() {
                     <tr
                       key={customer.id}
                       className={`border-b border-slate-200 hover:bg-slate-50 ${
-                        selectedCustomerId === customer.id ? 'bg-blue-50' : ''
+                        selectedCustomerId === customer.id ? 'bg-green-50' : ''
                       }`}
                     >
                       <td className="px-4 lg:px-6 py-4 text-sm">
@@ -342,7 +342,7 @@ export default function Customers() {
                                 selectedCustomerId === customer.id ? null : customer.id
                               )
                             }
-                            className="p-1.5 rounded text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                            className="p-1.5 rounded text-slate-400 hover:text-gf-dark-green hover:bg-green-50 transition-colors"
                             title={selectedCustomerId === customer.id ? 'Collapse' : 'View jobs'}
                           >
                             {selectedCustomerId === customer.id ? (
@@ -354,7 +354,7 @@ export default function Customers() {
                           <button
                             type="button"
                             onClick={() => openEditForm(customer)}
-                            className="p-1.5 rounded text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                            className="p-1.5 rounded text-slate-400 hover:text-gf-dark-green hover:bg-green-50 transition-colors"
                             title="Edit"
                           >
                             <Edit2 size={16} />
@@ -372,7 +372,7 @@ export default function Customers() {
                     </tr>
                     {/* Inline job list */}
                     {selectedCustomerId === customer.id && (
-                      <tr key={`${customer.id}-jobs`} className="bg-blue-50">
+                      <tr key={`${customer.id}-jobs`} className="bg-green-50">
                         <td colSpan={8} className="px-4 lg:px-6 py-0">
                           {selectedCustomerJobs.length === 0 ? (
                             <p className="py-4 text-sm text-slate-500">
@@ -381,7 +381,7 @@ export default function Customers() {
                           ) : (
                             <table className="w-full my-3">
                               <thead>
-                                <tr className="text-xs text-slate-500 border-b border-blue-200">
+                                <tr className="text-xs text-slate-500 border-b border-green-200">
                                   <th className="text-left pb-2 font-medium">Job</th>
                                   <th className="text-left pb-2 font-medium">Address</th>
                                   <th className="text-right pb-2 font-medium">Status</th>
@@ -393,7 +393,7 @@ export default function Customers() {
                                 {selectedCustomerJobs.map((job) => (
                                   <tr
                                     key={job.id}
-                                    className="border-b border-blue-100 last:border-0"
+                                    className="border-b border-green-100 last:border-0"
                                   >
                                     <td className="py-2 text-sm font-medium text-slate-900">
                                       {job.name || 'Untitled Job'}
@@ -455,7 +455,7 @@ export default function Customers() {
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   placeholder="e.g., John Smith"
                   required
-                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
                 />
               </div>
               <div>
@@ -465,7 +465,7 @@ export default function Customers() {
                   value={formData.address}
                   onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                   placeholder="e.g., 123 Main St, City, State 12345"
-                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -476,7 +476,7 @@ export default function Customers() {
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                     placeholder="e.g., (555) 123-4567"
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
                   />
                 </div>
                 <div>
@@ -486,7 +486,7 @@ export default function Customers() {
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     placeholder="e.g., john@example.com"
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
                   />
                 </div>
               </div>
@@ -497,7 +497,7 @@ export default function Customers() {
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                   placeholder="Any additional notes..."
                   rows={3}
-                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent resize-none"
                 />
               </div>
               <div className="flex items-center justify-end gap-3 pt-2">
@@ -511,7 +511,7 @@ export default function Customers() {
                 <button
                   type="submit"
                   disabled={saving || !formData.name.trim()}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 text-sm font-medium text-white bg-gf-lime rounded-lg hover:bg-gf-dark-green transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {saving ? 'Saving...' : editingCustomer ? 'Save Changes' : 'Add Customer'}
                 </button>

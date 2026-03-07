@@ -60,15 +60,15 @@ export default function Layout({
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 w-64 bg-slate-900 text-white shadow-lg transform transition-transform duration-300 ease-in-out z-40 ${
+        className={`fixed inset-y-0 left-0 w-64 bg-black text-white shadow-lg transform transition-transform duration-300 ease-in-out z-40 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         } md:static md:translate-x-0`}
       >
         <div className="flex flex-col h-full">
-          <div className="p-4 md:p-6 border-b border-slate-800">
-            <h1 className="text-xl md:text-2xl font-bold">Job Est</h1>
+          <div className="p-4 md:p-6 border-b border-gray-900">
+            <h1 className="text-xl md:text-2xl font-bold text-gf-electric">Estimator</h1>
             <p className="text-slate-400 text-xs md:text-sm mt-1">Estimation App</p>
-            <div className="mt-3 inline-flex items-center rounded-md bg-blue-600/20 px-2.5 py-1 text-xs font-semibold text-blue-200 border border-blue-500/40">
+            <div className="mt-3 inline-flex items-center rounded-md bg-gf-electric/20 px-2.5 py-1 text-xs font-semibold text-gf-electric border border-gf-electric/40">
               Version {APP_VERSION}
             </div>
           </div>
@@ -76,7 +76,7 @@ export default function Layout({
           <nav className="flex-1 p-2 md:p-4 space-y-1 md:space-y-2">
             <button
               onClick={() => onNavigate('dashboard')}
-              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors text-sm md:text-base"
+              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
             >
               <Home size={18} className="md:w-5 md:h-5" />
               <span>Dashboard</span>
@@ -84,7 +84,7 @@ export default function Layout({
 
             <button
               onClick={() => onNavigate('new-job')}
-              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors text-sm md:text-base"
+              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
             >
               <Plus size={18} className="md:w-5 md:h-5" />
               <span>New Job</span>
@@ -92,7 +92,7 @@ export default function Layout({
 
             <button
               onClick={() => onNavigate('inventory')}
-              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors text-sm md:text-base"
+              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
             >
               <Package size={18} className="md:w-5 md:h-5" />
               <span>Inventory</span>
@@ -100,7 +100,7 @@ export default function Layout({
 
             <button
               onClick={() => onNavigate('calendar')}
-              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors text-sm md:text-base"
+              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
             >
               <CalendarDays size={18} className="md:w-5 md:h-5" />
               <span>Calendar</span>
@@ -108,7 +108,7 @@ export default function Layout({
 
             <button
               onClick={() => onNavigate('reporting')}
-              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors text-sm md:text-base"
+              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
             >
               <BarChart3 size={18} className="md:w-5 md:h-5" />
               <span>Reporting</span>
@@ -116,7 +116,7 @@ export default function Layout({
 
             <button
               onClick={() => onNavigate('customers')}
-              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors text-sm md:text-base"
+              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
             >
               <Contact size={18} className="md:w-5 md:h-5" />
               <span>Customers</span>
@@ -124,7 +124,7 @@ export default function Layout({
 
             <button
               onClick={() => onNavigate('products')}
-              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors text-sm md:text-base"
+              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
             >
               <ShoppingBag size={18} className="md:w-5 md:h-5" />
               <span>Products</span>
@@ -132,7 +132,7 @@ export default function Layout({
 
             <button
               onClick={() => onNavigate('chip-systems')}
-              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors text-sm md:text-base"
+              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
             >
               <Cog size={18} className="md:w-5 md:h-5" />
               <span>Chip Systems</span>
@@ -140,7 +140,7 @@ export default function Layout({
 
             <button
               onClick={() => onNavigate('chip-blends')}
-              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors text-sm md:text-base"
+              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
             >
               <Layers size={18} className="md:w-5 md:h-5" />
               <span>Chip Blends</span>
@@ -148,7 +148,7 @@ export default function Layout({
 
             <button
               onClick={() => onNavigate('laborers')}
-              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors text-sm md:text-base"
+              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
             >
               <Users size={18} className="md:w-5 md:h-5" />
               <span>Laborers</span>
@@ -156,7 +156,7 @@ export default function Layout({
 
             <button
               onClick={() => onNavigate('costs')}
-              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors text-sm md:text-base"
+              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
             >
               <DollarSign size={18} className="md:w-5 md:h-5" />
               <span>Costs</span>
@@ -164,7 +164,7 @@ export default function Layout({
 
             <button
               onClick={() => onNavigate('pricing')}
-              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors text-sm md:text-base"
+              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
             >
               <DollarSign size={18} className="md:w-5 md:h-5" />
               <span>Pricing</span>
@@ -172,31 +172,31 @@ export default function Layout({
 
             <button
               onClick={() => onNavigate('settings')}
-              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors text-sm md:text-base"
+              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
             >
               <SlidersHorizontal size={18} className="md:w-5 md:h-5" />
               <span>Settings</span>
             </button>
           </nav>
 
-          <div className="p-2 md:p-4 border-t border-slate-800 space-y-2">
+          <div className="p-2 md:p-4 border-t border-gray-900 space-y-2">
             {/* Sync Status (if authenticated) */}
             {user && (
-              <div className="px-3 py-2 md:px-4 rounded-lg bg-slate-800/50">
+              <div className="px-3 py-2 md:px-4 rounded-lg bg-gray-900/50">
                 <SyncStatusIndicator />
               </div>
             )}
 
             {/* User Info (if authenticated) */}
             {user && (
-              <div className="px-3 py-2 md:px-4 rounded-lg bg-slate-800/50">
+              <div className="px-3 py-2 md:px-4 rounded-lg bg-gray-900/50">
                 <div className="flex items-center gap-2 mb-2">
                   <User size={14} className="text-slate-400" />
                   <span className="text-xs text-slate-400 truncate">{user.email}</span>
                 </div>
                 <button
                   onClick={handleLogout}
-                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs text-slate-300 hover:bg-gray-800 hover:text-white transition-colors"
                 >
                   <LogOut size={14} />
                   <span>Log Out</span>
@@ -205,11 +205,11 @@ export default function Layout({
             )}
 
             {/* Online/Offline Status */}
-            <div className="flex items-center justify-between px-3 py-2 md:px-4 rounded-lg bg-slate-800">
+            <div className="flex items-center justify-between px-3 py-2 md:px-4 rounded-lg bg-gray-900">
               <div className="flex items-center gap-2">
                 {isOnline ? (
                   <>
-                    <Wifi size={16} className="text-green-400 md:w-[18px] md:h-[18px]" />
+                    <Wifi size={16} className="text-gf-electric md:w-[18px] md:h-[18px]" />
                     <span className="text-xs md:text-sm font-medium">Online</span>
                   </>
                 ) : (

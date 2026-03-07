@@ -146,7 +146,7 @@ export default function Calendar({ onEditJob }: CalendarProps) {
                   ? 'bg-green-600 text-white'
                   : filterOption === 'Pending'
                   ? 'bg-yellow-500 text-white'
-                  : 'bg-blue-600 text-white'
+                  : 'bg-gf-lime text-white'
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
           >
@@ -214,12 +214,12 @@ export default function Calendar({ onEditJob }: CalendarProps) {
                     key={day}
                     className={`min-h-[100px] p-2 rounded-lg border ${
                       isToday(day)
-                        ? 'border-blue-500 bg-blue-50'
+                        ? 'border-gf-lime bg-green-50'
                         : 'border-slate-200 bg-white'
                     }`}
                   >
                     <div className={`text-sm font-medium mb-1 ${
-                      isToday(day) ? 'text-blue-600' : 'text-slate-700'
+                      isToday(day) ? 'text-gf-dark-green' : 'text-slate-700'
                     }`}>
                       {day}
                     </div>
@@ -237,7 +237,7 @@ export default function Calendar({ onEditJob }: CalendarProps) {
                         <button
                           key={`${job.id}-${reminder.id}`}
                           onClick={() => onEditJob(job.id)}
-                          className="w-full text-left p-1.5 rounded border text-xs transition-colors hover:opacity-80 bg-blue-100 text-blue-800 border-blue-200"
+                          className="w-full text-left p-1.5 rounded border text-xs transition-colors hover:opacity-80 bg-green-100 text-green-800 border-green-200"
                         >
                           <div className="font-medium truncate">{reminder.subject}</div>
                           <div className="text-[10px] opacity-75 truncate">

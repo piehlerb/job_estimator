@@ -102,7 +102,7 @@ export default function Pricing() {
         <p className="text-sm text-slate-600 mb-4">
           These pricing values are used for suggested pricing calculations in new jobs. Existing jobs retain their original pricing values.
         </p>
-        <p className="text-sm text-blue-600 mb-6 bg-blue-50 p-3 rounded-lg border border-blue-200">
+        <p className="text-sm text-gf-dark-green mb-6 bg-green-50 p-3 rounded-lg border border-green-200">
           <strong>Note:</strong> Vertical pricing and floor price constraints are now configured per chip system in the Chip Systems page.
         </p>
         <form onSubmit={handleSavePricing} className="space-y-4">
@@ -115,7 +115,7 @@ export default function Pricing() {
                 placeholder="0.00"
                 value={pricingForm.antiSlipPricePerSqft}
                 onChange={(e) => setPricingForm({ ...pricingForm, antiSlipPricePerSqft: e.target.value })}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
               />
               <p className="text-xs text-slate-500 mt-1">Multiplied by floor square footage (when anti-slip is selected)</p>
             </div>
@@ -127,7 +127,7 @@ export default function Pricing() {
                 placeholder="0.00"
                 value={pricingForm.abrasionResistancePricePerSqft}
                 onChange={(e) => setPricingForm({ ...pricingForm, abrasionResistancePricePerSqft: e.target.value })}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
               />
               <p className="text-xs text-slate-500 mt-1">Multiplied by floor square footage (when abrasion resistance is selected)</p>
             </div>
@@ -142,7 +142,7 @@ export default function Pricing() {
                 placeholder="5"
                 value={pricingForm.crackFillFactorUnitsPerGallon}
                 onChange={(e) => setPricingForm({ ...pricingForm, crackFillFactorUnitsPerGallon: e.target.value })}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
               />
               <p className="text-xs text-slate-500 mt-1">How many crack-fill factor units equals 1 gallon (default: 5)</p>
             </div>
@@ -155,7 +155,7 @@ export default function Pricing() {
                 placeholder="3"
                 value={pricingForm.suggestedCrackFillPriceMultiplier}
                 onChange={(e) => setPricingForm({ ...pricingForm, suggestedCrackFillPriceMultiplier: e.target.value })}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
               />
               <p className="text-xs text-slate-500 mt-1">Suggested crack-fill price = crack-fill cost × this multiplier (default: 3)</p>
             </div>
@@ -169,7 +169,7 @@ export default function Pricing() {
                 placeholder="0.00"
                 value={pricingForm.coatingRemovalPaintPerSqft}
                 onChange={(e) => setPricingForm({ ...pricingForm, coatingRemovalPaintPerSqft: e.target.value })}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
               />
               <p className="text-xs text-slate-500 mt-1">Multiplied by floor square footage (when paint removal is selected)</p>
             </div>
@@ -181,7 +181,7 @@ export default function Pricing() {
                 placeholder="0.00"
                 value={pricingForm.coatingRemovalEpoxyPerSqft}
                 onChange={(e) => setPricingForm({ ...pricingForm, coatingRemovalEpoxyPerSqft: e.target.value })}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
               />
               <p className="text-xs text-slate-500 mt-1">Multiplied by floor square footage (when epoxy removal is selected)</p>
             </div>
@@ -195,7 +195,7 @@ export default function Pricing() {
                 placeholder="0.00"
                 value={pricingForm.moistureMitigationPerSqft}
                 onChange={(e) => setPricingForm({ ...pricingForm, moistureMitigationPerSqft: e.target.value })}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
               />
               <p className="text-xs text-slate-500 mt-1">Multiplied by floor square footage (when moisture mitigation is selected)</p>
             </div>
@@ -204,7 +204,7 @@ export default function Pricing() {
             <button
               type="submit"
               disabled={pricingSaving}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50"
+              className="px-6 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors disabled:opacity-50"
             >
               {pricingSaving ? 'Saving...' : 'Save Pricing'}
             </button>

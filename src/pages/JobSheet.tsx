@@ -115,7 +115,7 @@ export default function JobSheet({ jobId, onBack }: JobSheetProps) {
           </button>
           <button
             onClick={handlePrint}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors text-sm"
+            className="flex items-center gap-2 px-4 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors text-sm"
           >
             <Printer size={16} />
             <span>Print</span>
@@ -131,7 +131,7 @@ export default function JobSheet({ jobId, onBack }: JobSheetProps) {
             <div className="flex items-center justify-between">
               <div>
                 <h1 className="text-xl font-bold text-slate-900">Job Sheet</h1>
-                <h2 className="text-lg font-semibold text-blue-600">{job.name}</h2>
+                <h2 className="text-lg font-semibold text-gf-dark-green">{job.name}</h2>
               </div>
               <div className="text-right text-sm text-slate-500">
                 <p>Install: {formatDate(job.installDate)}</p>
@@ -189,25 +189,25 @@ export default function JobSheet({ jobId, onBack }: JobSheetProps) {
               <h3 className="text-sm font-semibold text-slate-900 mb-2 border-b border-slate-200 pb-1">Materials Needed</h3>
               {calculation && (
                 <div className="grid grid-cols-2 gap-2">
-                  <div className="bg-blue-50 p-3 rounded-lg text-center">
-                    <span className="text-xs text-blue-600 block">Basecoat</span>
-                    <span className="text-xl font-bold text-blue-900">{calculation.baseGallons.toFixed(1)}</span>
-                    <span className="text-xs text-blue-600 block">gallons</span>
+                  <div className="bg-green-50 p-3 rounded-lg text-center">
+                    <span className="text-xs text-gf-dark-green block">Basecoat</span>
+                    <span className="text-xl font-bold text-gf-dark-green">{calculation.baseGallons.toFixed(1)}</span>
+                    <span className="text-xs text-gf-dark-green block">gallons</span>
                   </div>
-                  <div className="bg-blue-50 p-3 rounded-lg text-center">
-                    <span className="text-xs text-blue-600 block">Topcoat</span>
-                    <span className="text-xl font-bold text-blue-900">{calculation.topGallons.toFixed(1)}</span>
-                    <span className="text-xs text-blue-600 block">gallons</span>
+                  <div className="bg-green-50 p-3 rounded-lg text-center">
+                    <span className="text-xs text-gf-dark-green block">Topcoat</span>
+                    <span className="text-xl font-bold text-gf-dark-green">{calculation.topGallons.toFixed(1)}</span>
+                    <span className="text-xs text-gf-dark-green block">gallons</span>
                   </div>
-                  <div className="bg-blue-50 p-3 rounded-lg text-center">
-                    <span className="text-xs text-blue-600 block">Chip</span>
-                    <span className="text-xl font-bold text-blue-900">{calculation.chipNeeded}</span>
-                    <span className="text-xs text-blue-600 block">boxes</span>
+                  <div className="bg-green-50 p-3 rounded-lg text-center">
+                    <span className="text-xs text-gf-dark-green block">Chip</span>
+                    <span className="text-xl font-bold text-gf-dark-green">{calculation.chipNeeded}</span>
+                    <span className="text-xs text-gf-dark-green block">boxes</span>
                   </div>
-                  <div className="bg-blue-50 p-3 rounded-lg text-center">
-                    <span className="text-xs text-blue-600 block">Crack Fill</span>
-                    <span className="text-xl font-bold text-blue-900">{calculation.crackFillGallons.toFixed(1)}</span>
-                    <span className="text-xs text-blue-600 block">gallons</span>
+                  <div className="bg-green-50 p-3 rounded-lg text-center">
+                    <span className="text-xs text-gf-dark-green block">Crack Fill</span>
+                    <span className="text-xl font-bold text-gf-dark-green">{calculation.crackFillGallons.toFixed(1)}</span>
+                    <span className="text-xs text-gf-dark-green block">gallons</span>
                   </div>
                 </div>
               )}
@@ -237,7 +237,7 @@ export default function JobSheet({ jobId, onBack }: JobSheetProps) {
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
-          .bg-slate-50, .bg-blue-50, .bg-yellow-50 {
+          .bg-slate-50, .bg-green-50, .bg-yellow-50 {
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }

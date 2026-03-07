@@ -44,7 +44,7 @@ export function SyncStatusIndicator() {
         {isSyncing ? (
           <>
             <div className="flex items-center gap-1.5">
-              <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+              <div className="w-2 h-2 bg-gf-lime rounded-full animate-pulse"></div>
               <span>Syncing...</span>
             </div>
           </>

@@ -262,7 +262,7 @@ export default function Reporting() {
             <select
               value={dateFieldMode}
               onChange={(e) => setDateFieldMode(e.target.value as DateFieldMode)}
-              className="px-2 sm:px-3 py-1.5 sm:py-2 border border-slate-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-2 sm:px-3 py-1.5 sm:py-2 border border-slate-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-gf-lime"
             >
               <option value="install">Install Date</option>
               <option value="created">Created Date</option>
@@ -270,7 +270,7 @@ export default function Reporting() {
             <select
               value={dateRangePreset}
               onChange={(e) => setDateRangePreset(e.target.value as DateRangePreset)}
-              className="px-2 sm:px-3 py-1.5 sm:py-2 border border-slate-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-2 sm:px-3 py-1.5 sm:py-2 border border-slate-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-gf-lime"
             >
               <option value="all">All Time</option>
               <option value="30d">Last 30 Days</option>
@@ -284,13 +284,13 @@ export default function Reporting() {
                   type="date"
                   value={customStartDate}
                   onChange={(e) => setCustomStartDate(e.target.value)}
-                  className="px-2 sm:px-3 py-1.5 sm:py-2 border border-slate-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="px-2 sm:px-3 py-1.5 sm:py-2 border border-slate-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-gf-lime"
                 />
                 <input
                   type="date"
                   value={customEndDate}
                   onChange={(e) => setCustomEndDate(e.target.value)}
-                  className="px-2 sm:px-3 py-1.5 sm:py-2 border border-slate-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="px-2 sm:px-3 py-1.5 sm:py-2 border border-slate-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-gf-lime"
                 />
               </>
             )}
@@ -304,7 +304,7 @@ export default function Reporting() {
                   type="button"
                   onClick={() => setTagMatchMode('any')}
                   className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
-                    tagMatchMode === 'any' ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-500'
+                    tagMatchMode === 'any' ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-500'
                   }`}
                 >
                   Any
@@ -313,7 +313,7 @@ export default function Reporting() {
                   type="button"
                   onClick={() => setTagMatchMode('all')}
                   className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
-                    tagMatchMode === 'all' ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-500'
+                    tagMatchMode === 'all' ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-500'
                   }`}
                 >
                   All
