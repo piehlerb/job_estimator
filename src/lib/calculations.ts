@@ -70,35 +70,41 @@ export function calculateJobOutputs(
   // Price per sqft
   const pricePerSqft = floorFootage > 0 ? totalPrice / floorFootage : 0;
 
-  // Chip needed: ((floor + (vertical * 1.1)) / feetPerLb / 40) rounded up
+  // Chip needed: apply vertical usage factor, then convert using system feetPerLb and 40lb boxes
+  const chipVerticalUsageFactor = pricing.chipVerticalUsageFactor ?? 1.1;
   const chipNeededRaw = feetPerLb > 0
-    ? (floorFootage + (verticalFootage * 1.1)) / feetPerLb / 40
+    ? (floorFootage + (verticalFootage * chipVerticalUsageFactor)) / feetPerLb / 40
     : 0;
   const chipNeeded = Math.ceil(chipNeededRaw);
 
   // Chip cost
   const chipCost = chipNeeded * boxCost;
 
-  // Base gallons: floor / baseSpread + (vertical / baseSpread) * 1.25
+  const verticalSpreadUsageMultiplier = pricing.verticalSpreadUsageMultiplier ?? 1.25;
+
+  // Base gallons: floor / baseSpread + (vertical / baseSpread) * vertical spread usage multiplier
   const baseGallons = baseSpread > 0
-    ? (floorFootage / baseSpread) + ((verticalFootage / baseSpread) * 1.25)
+    ? (floorFootage / baseSpread) + ((verticalFootage / baseSpread) * verticalSpreadUsageMultiplier)
     : 0;
 
   // Base cost
   const baseCost = baseGallons * baseCostPerGal;
 
-  // Top gallons: floor / topSpread + (vertical / topSpread) * 1.25
+  // Top gallons: floor / topSpread + (vertical / topSpread) * vertical spread usage multiplier
   // If double broadcast, multiply by 2
   const baseTopGallons = topSpread > 0
-    ? (floorFootage / topSpread) + ((verticalFootage / topSpread) * 1.25)
+    ? (floorFootage / topSpread) + ((verticalFootage / topSpread) * verticalSpreadUsageMultiplier)
     : 0;
   const topGallons = system.doubleBroadcast ? baseTopGallons * 2 : baseTopGallons;
 
   // Top cost
   const topCost = topGallons * topCostPerGal;
 
-  // Crack fill gallons: crackFillFactor * 0.2
-  const crackFillGallons = crackFillFactor * 0.2;
+  // Crack fill gallons: crackFillFactor / crackFillFactorUnitsPerGallon
+  const crackFillFactorUnitsPerGallon = pricing.crackFillFactorUnitsPerGallon ?? 5;
+  const crackFillGallons = crackFillFactorUnitsPerGallon > 0
+    ? crackFillFactor / crackFillFactorUnitsPerGallon
+    : 0;
 
   // Crack fill cost
   const crackFillCost = crackFillGallons * crackFillCostPerGal;
@@ -133,14 +139,19 @@ export function calculateJobOutputs(
   const gasGeneratorCost = gasCost * totalHours * 1.2;
 
   // Gas heater cost: if install month is 11, 12, 1, 2, 3 then (gasCost + 1) * totalHours, else 0
+  const gasHeaterMonths = pricing.gasHeaterMonths && pricing.gasHeaterMonths.length > 0
+    ? pricing.gasHeaterMonths
+    : [11, 12, 1, 2, 3];
   const installMonth = installDate ? new Date(installDate).getMonth() + 1 : 0;
-  const isWinterMonth = [11, 12, 1, 2, 3].includes(installMonth);
+  const isWinterMonth = gasHeaterMonths.includes(installMonth);
   const gasHeaterCost = isWinterMonth ? (gasCost + 1) * totalHours : 0;
 
   // Gas travel cost:
-  // Initial estimate trip: travelDistance * 2 * gasCost / 20
-  // Work days travel: travelDistance * 2 * gasCost / 10 * installDays
-  const gasTravelCost = (travelDistance * 2 * gasCost / 20) + (travelDistance * 2 * gasCost / 10 * installDays);
+  // Uses configurable MPG and accounts for 1 estimate round trip + install-day round trips
+  const travelGasMpg = pricing.travelGasMpg ?? 10;
+  const roundTripMiles = travelDistance * 2;
+  const travelGasCostPerRoundTrip = travelGasMpg > 0 ? (roundTripMiles * gasCost / travelGasMpg) : 0;
+  const gasTravelCost = travelGasCostPerRoundTrip * (installDays + 1);
 
   // Labor: calculate based on installSchedule if available, otherwise use legacy method
   const laborCost = installSchedule && installSchedule.length > 0
@@ -171,12 +182,15 @@ export function calculateJobOutputs(
   // Margin per day: (totalPrice - totalCosts) / installDays
   const marginPerDay = installDays > 0 ? jobMargin / installDays : 0;
 
-  // Suggested discount: floorFootage * -1, max 500 for floor footage
-  const cappedFloor = Math.min(floorFootage, 500);
+  // Suggested discount: floorFootage * -1, optionally capped by settings
+  const useSuggestedDiscountCap = pricing.useSuggestedDiscountCap ?? true;
+  const suggestedDiscountCapSqft = pricing.suggestedDiscountCapSqft ?? 500;
+  const cappedFloor = useSuggestedDiscountCap ? Math.min(floorFootage, suggestedDiscountCapSqft) : floorFootage;
   const suggestedDiscount = cappedFloor * -1;
 
-  // Suggested crack price: crackFillCost * 3
-  const suggestedCrackPrice = crackFillCost * 3;
+  // Suggested crack price: crackFillCost * configurable multiplier
+  const crackFillPriceMultiplier = pricing.suggestedCrackFillPriceMultiplier ?? 3;
+  const suggestedCrackPrice = crackFillCost * crackFillPriceMultiplier;
 
   // Use system-specific pricing, fallback to global pricing if not set
   const floorPriceMin = system.floorPriceMin ?? pricing.floorPriceMin ?? 6;

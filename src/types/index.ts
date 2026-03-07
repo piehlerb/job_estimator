@@ -61,6 +61,14 @@ export interface Pricing {
   verticalPricePerSqft: number; // DEPRECATED: Moved to ChipSystem - kept for backward compatibility
   antiSlipPricePerSqft: number; // Price per sqft for anti-slip additive
   abrasionResistancePricePerSqft: number; // Price per sqft for abrasion resistance additive
+  crackFillFactorUnitsPerGallon?: number; // Crack fill factor units that equal 1 gallon (default 5)
+  suggestedCrackFillPriceMultiplier?: number; // Suggested crack-fill pricing multiplier on crack-fill cost (default 3)
+  chipVerticalUsageFactor?: number; // Extra chip usage factor applied to vertical sqft (default 1.1)
+  verticalSpreadUsageMultiplier?: number; // Extra base/top spread multiplier for vertical sqft (default 1.25)
+  gasHeaterMonths?: number[]; // Months where gas heater cost is applied (1-12), default [11,12,1,2,3]
+  travelGasMpg?: number; // MPG used for travel gas calculation (default 10)
+  useSuggestedDiscountCap?: boolean; // Toggle cap on suggested discount (default true)
+  suggestedDiscountCapSqft?: number; // Maximum sqft used for suggested discount (default 500)
   coatingRemovalPaintPerSqft: number; // Price per sqft for paint removal
   coatingRemovalEpoxyPerSqft: number; // Price per sqft for epoxy removal
   moistureMitigationPerSqft: number; // Price per sqft for moisture mitigation

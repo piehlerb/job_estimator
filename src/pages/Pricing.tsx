@@ -14,6 +14,8 @@ export default function Pricing() {
   const [pricingForm, setPricingForm] = useState({
     antiSlipPricePerSqft: '',
     abrasionResistancePricePerSqft: '',
+    crackFillFactorUnitsPerGallon: '',
+    suggestedCrackFillPriceMultiplier: '',
     coatingRemovalPaintPerSqft: '',
     coatingRemovalEpoxyPerSqft: '',
     moistureMitigationPerSqft: '',
@@ -35,11 +37,25 @@ export default function Pricing() {
       };
       setPricing(mergedPricing);
       setPricingForm({
-        antiSlipPricePerSqft: storedPricing.antiSlipPricePerSqft.toString(),
-        abrasionResistancePricePerSqft: storedPricing.abrasionResistancePricePerSqft?.toString() || '0',
-        coatingRemovalPaintPerSqft: storedPricing.coatingRemovalPaintPerSqft.toString(),
-        coatingRemovalEpoxyPerSqft: storedPricing.coatingRemovalEpoxyPerSqft.toString(),
-        moistureMitigationPerSqft: storedPricing.moistureMitigationPerSqft.toString(),
+        antiSlipPricePerSqft: mergedPricing.antiSlipPricePerSqft.toString(),
+        abrasionResistancePricePerSqft: mergedPricing.abrasionResistancePricePerSqft?.toString() || '0',
+        crackFillFactorUnitsPerGallon: (mergedPricing.crackFillFactorUnitsPerGallon ?? 5).toString(),
+        suggestedCrackFillPriceMultiplier: (mergedPricing.suggestedCrackFillPriceMultiplier ?? 3).toString(),
+        coatingRemovalPaintPerSqft: mergedPricing.coatingRemovalPaintPerSqft.toString(),
+        coatingRemovalEpoxyPerSqft: mergedPricing.coatingRemovalEpoxyPerSqft.toString(),
+        moistureMitigationPerSqft: mergedPricing.moistureMitigationPerSqft.toString(),
+      });
+    } else {
+      const defaults = getDefaultPricing();
+      setPricing(defaults);
+      setPricingForm({
+        antiSlipPricePerSqft: defaults.antiSlipPricePerSqft.toString(),
+        abrasionResistancePricePerSqft: defaults.abrasionResistancePricePerSqft.toString(),
+        crackFillFactorUnitsPerGallon: (defaults.crackFillFactorUnitsPerGallon ?? 5).toString(),
+        suggestedCrackFillPriceMultiplier: (defaults.suggestedCrackFillPriceMultiplier ?? 3).toString(),
+        coatingRemovalPaintPerSqft: defaults.coatingRemovalPaintPerSqft.toString(),
+        coatingRemovalEpoxyPerSqft: defaults.coatingRemovalEpoxyPerSqft.toString(),
+        moistureMitigationPerSqft: defaults.moistureMitigationPerSqft.toString(),
       });
     }
 
@@ -55,6 +71,8 @@ export default function Pricing() {
         ...pricing,
         antiSlipPricePerSqft: parseFloat(pricingForm.antiSlipPricePerSqft) || 0,
         abrasionResistancePricePerSqft: parseFloat(pricingForm.abrasionResistancePricePerSqft) || 0,
+        crackFillFactorUnitsPerGallon: parseFloat(pricingForm.crackFillFactorUnitsPerGallon) || 5,
+        suggestedCrackFillPriceMultiplier: parseFloat(pricingForm.suggestedCrackFillPriceMultiplier) || 3,
         coatingRemovalPaintPerSqft: parseFloat(pricingForm.coatingRemovalPaintPerSqft) || 0,
         coatingRemovalEpoxyPerSqft: parseFloat(pricingForm.coatingRemovalEpoxyPerSqft) || 0,
         moistureMitigationPerSqft: parseFloat(pricingForm.moistureMitigationPerSqft) || 0,
@@ -112,6 +130,34 @@ export default function Pricing() {
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
               <p className="text-xs text-slate-500 mt-1">Multiplied by floor square footage (when abrasion resistance is selected)</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-semibold text-slate-900 mb-2">Crack Fill Factor Units per Gallon</label>
+              <input
+                type="number"
+                step="0.1"
+                min="0.1"
+                placeholder="5"
+                value={pricingForm.crackFillFactorUnitsPerGallon}
+                onChange={(e) => setPricingForm({ ...pricingForm, crackFillFactorUnitsPerGallon: e.target.value })}
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <p className="text-xs text-slate-500 mt-1">How many crack-fill factor units equals 1 gallon (default: 5)</p>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-900 mb-2">Suggested Crack Fill Price Multiplier</label>
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                placeholder="3"
+                value={pricingForm.suggestedCrackFillPriceMultiplier}
+                onChange={(e) => setPricingForm({ ...pricingForm, suggestedCrackFillPriceMultiplier: e.target.value })}
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <p className="text-xs text-slate-500 mt-1">Suggested crack-fill price = crack-fill cost × this multiplier (default: 3)</p>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">

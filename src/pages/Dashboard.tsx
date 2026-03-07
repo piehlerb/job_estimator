@@ -1,7 +1,7 @@
-import { Plus, Trash2, FileText, Search, Bell } from 'lucide-react';
+import { Plus, Trash2, FileText, Search, Bell, Check, X } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
-import { getAllJobs, deleteJob, getDefaultCosts, getCosts, getPricing, getDefaultPricing } from '../lib/db';
-import { Job, JobCalculation, Costs, Pricing, JobStatus } from '../types';
+import { getAllJobs, deleteJob, updateJob, getDefaultCosts, getCosts, getPricing, getDefaultPricing } from '../lib/db';
+import { Job, JobCalculation, Costs, Pricing, JobStatus, JobReminder } from '../types';
 import { calculateJobOutputs } from '../lib/calculations';
 
 interface DashboardProps {
@@ -16,6 +16,7 @@ interface JobWithCalc {
 }
 
 interface ReminderItem {
+  reminderId: string;
   jobId: string;
   jobName: string;
   subject: string;
@@ -37,6 +38,8 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
   const [tagMatchMode, setTagMatchMode] = useState<'any' | 'all'>('any');
   const [searchQuery, setSearchQuery] = useState('');
   const [showReminders, setShowReminders] = useState(false);
+  const [selectedReminder, setSelectedReminder] = useState<ReminderItem | null>(null);
+  const [updatingReminder, setUpdatingReminder] = useState(false);
 
   useEffect(() => {
     loadJobs();
@@ -226,6 +229,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
         .filter((reminder) => !reminder.completed)
         .forEach((reminder) => {
           allReminders.push({
+            reminderId: reminder.id,
             jobId: job.id,
             jobName: job.name || 'Untitled Job',
             subject: reminder.subject,
@@ -237,6 +241,73 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
 
     return allReminders.sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime());
   }, [jobsWithCalc]);
+
+  const selectedReminderDetails = useMemo(() => {
+    if (!selectedReminder) return null;
+    const jobEntry = jobsWithCalc.find(({ job }) => job.id === selectedReminder.jobId);
+    if (!jobEntry) return null;
+    const reminder = (jobEntry.job.reminders || []).find((r) => r.id === selectedReminder.reminderId);
+    if (!reminder) return null;
+    return {
+      job: jobEntry.job,
+      reminder,
+    };
+  }, [selectedReminder, jobsWithCalc]);
+
+  const updateReminderForJob = async (
+    jobId: string,
+    reminderUpdater: (currentReminders: JobReminder[]) => JobReminder[]
+  ) => {
+    const jobEntry = jobsWithCalc.find(({ job }) => job.id === jobId);
+    if (!jobEntry) return;
+
+    const currentReminders = [...(jobEntry.job.reminders || [])];
+    const updatedReminders = reminderUpdater(currentReminders);
+    const updatedJob: Job = {
+      ...jobEntry.job,
+      reminders: updatedReminders.length > 0 ? updatedReminders : undefined,
+      updatedAt: new Date().toISOString(),
+      synced: false,
+    };
+    await updateJob(updatedJob);
+    await loadJobs();
+  };
+
+  const handleCompleteReminder = async (reminderItem: ReminderItem) => {
+    setUpdatingReminder(true);
+    try {
+      await updateReminderForJob(reminderItem.jobId, (currentReminders) => (
+        currentReminders.map((r) => (
+          r.id === reminderItem.reminderId
+            ? { ...r, completed: true, updatedAt: new Date().toISOString() }
+            : r
+        ))
+      ));
+      setSelectedReminder(null);
+    } catch (error) {
+      console.error('Error completing reminder:', error);
+      alert('Error completing reminder.');
+    } finally {
+      setUpdatingReminder(false);
+    }
+  };
+
+  const handleDeleteReminder = async (reminderItem: ReminderItem) => {
+    if (!window.confirm('Delete this reminder?')) return;
+    setUpdatingReminder(true);
+    try {
+      await updateReminderForJob(reminderItem.jobId, (currentReminders) => (
+        currentReminders.filter((r) => r.id !== reminderItem.reminderId)
+      ));
+      setSelectedReminder(null);
+    } catch (error) {
+      console.error('Error deleting reminder:', error);
+      alert('Error deleting reminder.');
+    } finally {
+      setUpdatingReminder(false);
+    }
+  };
+
   const getStatusColor = (status: JobStatus) => {
     switch (status) {
       case 'Won': return 'bg-green-100 text-green-800';
@@ -413,27 +484,55 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
                 {remindersByDue.map((reminder) => {
                   const isOverdue = new Date(reminder.dueAt).getTime() < Date.now();
                   return (
-                    <button
-                      key={`${reminder.jobId}-${reminder.subject}-${reminder.dueAt}`}
-                      type="button"
-                      onClick={() => onEditJob(reminder.jobId)}
+                    <div
+                      key={`${reminder.jobId}-${reminder.reminderId}`}
                       className={`w-full text-left p-3 border rounded-lg transition-colors hover:bg-white ${
                         isOverdue ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-white'
                       }`}
                     >
                       <div className="flex items-start justify-between gap-3">
-                        <div>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedReminder(reminder)}
+                          className="flex-1 text-left"
+                        >
                           <p className="text-sm font-semibold text-slate-900">{reminder.subject}</p>
                           <p className="text-xs text-slate-600 mt-0.5">{reminder.jobName}</p>
                           {reminder.details && (
                             <p className="text-xs text-slate-500 mt-1 line-clamp-2">{reminder.details}</p>
                           )}
+                          <p className={`text-xs font-medium mt-1 ${isOverdue ? 'text-red-700' : 'text-slate-600'}`}>
+                            {new Date(reminder.dueAt).toLocaleString()}
+                          </p>
+                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCompleteReminder(reminder);
+                            }}
+                            className="p-1.5 rounded text-green-600 hover:bg-green-50 transition-colors"
+                            title="Mark complete"
+                            disabled={updatingReminder}
+                          >
+                            <Check size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteReminder(reminder);
+                            }}
+                            className="p-1.5 rounded text-red-600 hover:bg-red-50 transition-colors"
+                            title="Delete reminder"
+                            disabled={updatingReminder}
+                          >
+                            <Trash2 size={14} />
+                          </button>
                         </div>
-                        <p className={`text-xs font-medium whitespace-nowrap ${isOverdue ? 'text-red-700' : 'text-slate-600'}`}>
-                          {new Date(reminder.dueAt).toLocaleString()}
-                        </p>
                       </div>
-                    </button>
+                    </div>
                   );
                 })}
               </div>
@@ -625,6 +724,68 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
           </>
         )}
       </div>
+
+      {selectedReminder && selectedReminderDetails && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-900">Reminder</h3>
+              <button
+                type="button"
+                onClick={() => setSelectedReminder(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="px-6 py-5 space-y-3">
+              <div>
+                <p className="text-xs text-slate-500">Job</p>
+                <p className="text-sm font-medium text-slate-900">{selectedReminderDetails.job.name || 'Untitled Job'}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">Subject</p>
+                <p className="text-sm font-medium text-slate-900">{selectedReminderDetails.reminder.subject}</p>
+              </div>
+              {selectedReminderDetails.reminder.details && (
+                <div>
+                  <p className="text-xs text-slate-500">Details</p>
+                  <p className="text-sm text-slate-700 whitespace-pre-wrap">{selectedReminderDetails.reminder.details}</p>
+                </div>
+              )}
+              <div>
+                <p className="text-xs text-slate-500">Due</p>
+                <p className="text-sm text-slate-700">{new Date(selectedReminderDetails.reminder.dueAt).toLocaleString()}</p>
+              </div>
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleCompleteReminder(selectedReminder)}
+                  disabled={updatingReminder}
+                  className="px-3 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed"
+                >
+                  Mark Complete
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteReminder(selectedReminder)}
+                  disabled={updatingReminder}
+                  className="px-3 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed"
+                >
+                  Delete
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedReminder(null)}
+                  className="px-3 py-2 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

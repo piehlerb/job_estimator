@@ -27,6 +27,12 @@ export default function Settings() {
   const [form, setForm] = useState({
     minimumMarginBuffer: '',
     minimumJobPrice: '',
+    chipVerticalUsageFactor: '',
+    verticalSpreadUsageMultiplier: '',
+    travelGasMpg: '',
+    useSuggestedDiscountCap: true,
+    suggestedDiscountCapSqft: '',
+    gasHeaterMonths: [] as number[],
   });
 
   const initializedRef = useRef(false);
@@ -53,11 +59,25 @@ export default function Settings() {
       setForm({
         minimumMarginBuffer: (mergedPricing.minimumMarginBuffer ?? 2000).toString(),
         minimumJobPrice: (mergedPricing.minimumJobPrice ?? 2500).toString(),
+        chipVerticalUsageFactor: (mergedPricing.chipVerticalUsageFactor ?? 1.1).toString(),
+        verticalSpreadUsageMultiplier: (mergedPricing.verticalSpreadUsageMultiplier ?? 1.25).toString(),
+        travelGasMpg: (mergedPricing.travelGasMpg ?? 10).toString(),
+        useSuggestedDiscountCap: mergedPricing.useSuggestedDiscountCap ?? true,
+        suggestedDiscountCapSqft: (mergedPricing.suggestedDiscountCapSqft ?? 500).toString(),
+        gasHeaterMonths: (mergedPricing.gasHeaterMonths && mergedPricing.gasHeaterMonths.length > 0)
+          ? mergedPricing.gasHeaterMonths
+          : [11, 12, 1, 2, 3],
       });
     } else {
       setForm({
         minimumMarginBuffer: '2000',
         minimumJobPrice: '2500',
+        chipVerticalUsageFactor: '1.1',
+        verticalSpreadUsageMultiplier: '1.25',
+        travelGasMpg: '10',
+        useSuggestedDiscountCap: true,
+        suggestedDiscountCapSqft: '500',
+        gasHeaterMonths: [11, 12, 1, 2, 3],
       });
     }
 
@@ -113,6 +133,12 @@ export default function Settings() {
         ...pricing,
         minimumMarginBuffer: parseFloat(form.minimumMarginBuffer) || 2000,
         minimumJobPrice: parseFloat(form.minimumJobPrice) || 2500,
+        chipVerticalUsageFactor: parseFloat(form.chipVerticalUsageFactor) || 1.1,
+        verticalSpreadUsageMultiplier: parseFloat(form.verticalSpreadUsageMultiplier) || 1.25,
+        travelGasMpg: parseFloat(form.travelGasMpg) || 10,
+        useSuggestedDiscountCap: form.useSuggestedDiscountCap,
+        suggestedDiscountCapSqft: parseFloat(form.suggestedDiscountCapSqft) || 500,
+        gasHeaterMonths: form.gasHeaterMonths.length > 0 ? form.gasHeaterMonths : [11, 12, 1, 2, 3],
         updatedAt: new Date().toISOString(),
       };
 
@@ -205,6 +231,21 @@ export default function Settings() {
     return <div className="p-6 text-center">Loading...</div>;
   }
 
+  const monthOptions = [
+    { value: 1, label: 'Jan' },
+    { value: 2, label: 'Feb' },
+    { value: 3, label: 'Mar' },
+    { value: 4, label: 'Apr' },
+    { value: 5, label: 'May' },
+    { value: 6, label: 'Jun' },
+    { value: 7, label: 'Jul' },
+    { value: 8, label: 'Aug' },
+    { value: 9, label: 'Sep' },
+    { value: 10, label: 'Oct' },
+    { value: 11, label: 'Nov' },
+    { value: 12, label: 'Dec' },
+  ];
+
   return (
     <div className="p-6 md:p-8 max-w-5xl mx-auto space-y-6">
       <h1 className="text-3xl font-bold text-slate-900">Settings</h1>
@@ -240,6 +281,101 @@ export default function Settings() {
               />
               <p className="text-xs text-slate-500 mt-1">Suggested total will be adjusted upward if it falls below this amount</p>
             </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-semibold text-slate-900 mb-2">Chip Vertical Usage Factor</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="1.1"
+                value={form.chipVerticalUsageFactor}
+                onChange={(e) => setForm({ ...form, chipVerticalUsageFactor: e.target.value })}
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <p className="text-xs text-slate-500 mt-1">Used to account for higher chip usage on verticals.</p>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-900 mb-2">Vertical Spread Usage Multiplier</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="1.25"
+                value={form.verticalSpreadUsageMultiplier}
+                onChange={(e) => setForm({ ...form, verticalSpreadUsageMultiplier: e.target.value })}
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <p className="text-xs text-slate-500 mt-1">Used to account for higher base/top product usage on verticals.</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-semibold text-slate-900 mb-2">Travel Gas MPG</label>
+              <input
+                type="number"
+                step="0.1"
+                min="0.1"
+                placeholder="10"
+                value={form.travelGasMpg}
+                onChange={(e) => setForm({ ...form, travelGasMpg: e.target.value })}
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <p className="text-xs text-slate-500 mt-1">Used for travel fuel cost (estimate trip + install-day round trips).</p>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-900 mb-2">Suggested Discount Cap (Sqft)</label>
+              <div className="flex items-center gap-2 mb-2">
+                <input
+                  id="useSuggestedDiscountCap"
+                  type="checkbox"
+                  checked={form.useSuggestedDiscountCap}
+                  onChange={(e) => setForm({ ...form, useSuggestedDiscountCap: e.target.checked })}
+                  className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                />
+                <label htmlFor="useSuggestedDiscountCap" className="text-sm text-slate-700">Enable cap</label>
+              </div>
+              <input
+                type="number"
+                step="1"
+                min="0"
+                placeholder="500"
+                disabled={!form.useSuggestedDiscountCap}
+                value={form.suggestedDiscountCapSqft}
+                onChange={(e) => setForm({ ...form, suggestedDiscountCapSqft: e.target.value })}
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-slate-100 disabled:text-slate-400"
+              />
+              <p className="text-xs text-slate-500 mt-1">When enabled, suggested discount uses min(floor sqft, cap).</p>
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-slate-900 mb-2">Gas Heater Months</label>
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+              {monthOptions.map((month) => {
+                const selected = form.gasHeaterMonths.includes(month.value);
+                return (
+                  <button
+                    key={month.value}
+                    type="button"
+                    onClick={() => {
+                      const nextMonths = selected
+                        ? form.gasHeaterMonths.filter((m) => m !== month.value)
+                        : [...form.gasHeaterMonths, month.value];
+                      setForm({ ...form, gasHeaterMonths: nextMonths.sort((a, b) => a - b) });
+                    }}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                      selected
+                        ? 'bg-blue-100 text-blue-800 border-blue-300'
+                        : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
+                    }`}
+                  >
+                    {month.label}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-xs text-slate-500 mt-1">Gas heater cost applies only when install date falls in selected months.</p>
           </div>
           <div className="pt-4">
             <button
