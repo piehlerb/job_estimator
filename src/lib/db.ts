@@ -497,6 +497,8 @@ export function getDefaultCosts(): Costs {
     tintCostPerQuart: 0,
     antiSlipCostPerGal: 0,
     abrasionResistanceCostPerGal: 0,
+    moistureMitigationCostPerGal: 0,
+    moistureMitigationSpreadRate: 200,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };

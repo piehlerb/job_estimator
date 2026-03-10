@@ -1,4 +1,4 @@
-import { Plus, Trash2, Edit2 } from 'lucide-react';
+import { Plus, Trash2, Edit2, Star } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import {
   getAllSystems,
@@ -66,6 +66,7 @@ export default function ChipSystems() {
         floorPriceMin: parseFloat(systemForm.floorPriceMin) || 6.0,
         floorPriceMax: parseFloat(systemForm.floorPriceMax) || 8.0,
         notes: systemForm.notes || undefined,
+        isDefault: editingSystem?.isDefault,
         createdAt: editingSystem?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -104,6 +105,21 @@ export default function ChipSystems() {
       notes: system.notes || '',
     });
     setShowSystemForm(true);
+  };
+
+  const handleSetDefault = async (systemId: string) => {
+    try {
+      for (const system of systems) {
+        const wasDefault = !!system.isDefault;
+        const willBeDefault = system.id === systemId;
+        if (wasDefault !== willBeDefault) {
+          await updateSystem({ ...system, isDefault: willBeDefault, updatedAt: new Date().toISOString() });
+        }
+      }
+      await loadData();
+    } catch (error) {
+      console.error('Error setting default system:', error);
+    }
   };
 
   if (loading) {
@@ -153,7 +169,15 @@ export default function ChipSystems() {
                 className="flex items-center justify-between p-4 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
               >
                 <div>
-                  <p className="font-semibold text-slate-900">{system.name}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-semibold text-slate-900">{system.name}</p>
+                    {system.isDefault && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gf-lime text-white text-xs font-semibold rounded-full">
+                        <Star size={10} className="fill-white" />
+                        Default
+                      </span>
+                    )}
+                  </div>
                   <p className="text-sm text-slate-600 mt-1">
                     {system.feetPerLb} ft/lb | ${system.boxCost}/box
                   </p>
@@ -167,6 +191,13 @@ export default function ChipSystems() {
                   )}
                 </div>
                 <div className="flex gap-2">
+                  <button
+                    onClick={() => handleSetDefault(system.id)}
+                    title={system.isDefault ? 'Default system' : 'Set as default'}
+                    className={`p-2 rounded-lg transition-colors ${system.isDefault ? 'text-gf-lime cursor-default' : 'text-slate-400 hover:text-gf-lime hover:bg-green-50'}`}
+                  >
+                    <Star size={18} className={system.isDefault ? 'fill-gf-lime' : ''} />
+                  </button>
                   <button
                     onClick={() => handleEditSystem(system)}
                     className="p-2 text-gf-dark-green hover:bg-green-50 rounded-lg transition-colors"

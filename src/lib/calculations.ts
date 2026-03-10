@@ -67,6 +67,8 @@ export function calculateJobOutputs(
     tintCostPerQuart,
     antiSlipCostPerGal = 0,
     abrasionResistanceCostPerGal = 0,
+    moistureMitigationCostPerGal = 0,
+    moistureMitigationSpreadRate = 200,
   } = costs;
 
   // Price per sqft
@@ -135,6 +137,12 @@ export function calculateJobOutputs(
   // Abrasion resistance cost: based on cyclo1 gallons (if abrasion resistance is enabled)
   const abrasionResistanceCost = abrasionResistance ? cyclo1Needed * abrasionResistanceCostPerGal : 0;
 
+  // Moisture mitigation material: gallons needed based on spread rate, cost based on cost per gallon
+  const moistureMitigationGallons = moistureMitigation && moistureMitigationSpreadRate > 0
+    ? Math.ceil(floorFootage / moistureMitigationSpreadRate)
+    : 0;
+  const moistureMitigationMaterialCost = moistureMitigationGallons * moistureMitigationCostPerGal;
+
   // Tint needed: calculate based on which coats include tint
   // Formula: (topGallons * 128 * 0.1) if includeTopcoatTint + (baseGallons * 128 * 0.1) if includeBasecoatTint
   const tintNeeded = (includeTopcoatTint ? topGallons * 128 * 0.1 : 0)
@@ -183,7 +191,7 @@ export function calculateJobOutputs(
 
   // Total costs
   const totalCosts = chipCost + baseCost + topCost + consumablesCost + crackFillCost
-    + cyclo1Cost + tintCost + antiSlipCost + abrasionResistanceCost
+    + cyclo1Cost + tintCost + antiSlipCost + abrasionResistanceCost + moistureMitigationMaterialCost
     + gasHeaterCost + gasTravelCost + gasGeneratorCost + royaltyCost + laborCost;
 
   // Total costs per sqft
@@ -298,6 +306,8 @@ export function calculateJobOutputs(
     suggestedAntiSlipPrice,
     suggestedAbrasionResistancePrice,
     suggestedCoatingRemovalPrice,
+    moistureMitigationGallons,
+    moistureMitigationMaterialCost,
     suggestedMoistureMitigationPrice,
     suggestedTotal,
     suggestedMargin,

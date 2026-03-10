@@ -21,6 +21,8 @@ export default function Costs() {
     tintCostPerQuart: '',
     antiSlipCostPerGal: '',
     abrasionResistanceCostPerGal: '',
+    moistureMitigationCostPerGal: '',
+    moistureMitigationSpreadRate: '',
   });
 
   useEffect(() => {
@@ -48,6 +50,8 @@ export default function Costs() {
         tintCostPerQuart: (storedCosts.tintCostPerQuart || 0).toString(),
         antiSlipCostPerGal: (storedCosts.antiSlipCostPerGal || 0).toString(),
         abrasionResistanceCostPerGal: (storedCosts.abrasionResistanceCostPerGal || 0).toString(),
+        moistureMitigationCostPerGal: (storedCosts.moistureMitigationCostPerGal ?? 0).toString(),
+        moistureMitigationSpreadRate: (storedCosts.moistureMitigationSpreadRate ?? 200).toString(),
       });
     }
 
@@ -70,6 +74,8 @@ export default function Costs() {
         tintCostPerQuart: parseFloat(costsForm.tintCostPerQuart) || 0,
         antiSlipCostPerGal: parseFloat(costsForm.antiSlipCostPerGal) || 0,
         abrasionResistanceCostPerGal: parseFloat(costsForm.abrasionResistanceCostPerGal) || 0,
+        moistureMitigationCostPerGal: parseFloat(costsForm.moistureMitigationCostPerGal) || 0,
+        moistureMitigationSpreadRate: parseFloat(costsForm.moistureMitigationSpreadRate) || 200,
         updatedAt: new Date().toISOString(),
       };
 
@@ -202,6 +208,33 @@ export default function Costs() {
                 onChange={(e) => setCostsForm({ ...costsForm, abrasionResistanceCostPerGal: e.target.value })}
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
               />
+            </div>
+          </div>
+          <div className="border-t border-slate-200 my-2"></div>
+          <h4 className="text-sm font-bold text-slate-700 uppercase tracking-wide">Moisture Mitigation</h4>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-semibold text-slate-900 mb-2">Cost per Gallon ($)</label>
+              <input
+                type="number"
+                step="0.01"
+                placeholder="0.00"
+                value={costsForm.moistureMitigationCostPerGal}
+                onChange={(e) => setCostsForm({ ...costsForm, moistureMitigationCostPerGal: e.target.value })}
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-900 mb-2">Spread Rate (sq ft / gal)</label>
+              <input
+                type="number"
+                step="1"
+                placeholder="200"
+                value={costsForm.moistureMitigationSpreadRate}
+                onChange={(e) => setCostsForm({ ...costsForm, moistureMitigationSpreadRate: e.target.value })}
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
+              />
+              <p className="text-xs text-slate-500 mt-1">Square feet of floor covered per gallon</p>
             </div>
           </div>
           <div className="pt-4">

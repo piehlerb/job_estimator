@@ -17,6 +17,7 @@ export interface ChipSystem {
   floorPriceMin?: number; // Minimum floor price per sqft for suggested pricing
   floorPriceMax?: number; // Maximum floor price per sqft for suggested pricing
   notes?: string; // Optional notes about this chip system
+  isDefault?: boolean; // If true, this system is pre-selected on new jobs
   createdAt: string;
   updatedAt: string;
   deleted?: boolean;
@@ -34,6 +35,8 @@ export interface Costs {
   tintCostPerQuart: number;
   antiSlipCostPerGal: number;
   abrasionResistanceCostPerGal: number;
+  moistureMitigationCostPerGal?: number; // Cost per gallon of moisture mitigation product
+  moistureMitigationSpreadRate?: number; // Square feet covered per gallon
   createdAt: string;
   updatedAt: string;
 }
@@ -272,6 +275,8 @@ export interface JobCalculation {
   suggestedAntiSlipPrice: number;
   suggestedAbrasionResistancePrice: number;
   suggestedCoatingRemovalPrice: number;
+  moistureMitigationGallons: number;
+  moistureMitigationMaterialCost: number;
   suggestedMoistureMitigationPrice: number;
   suggestedTotal: number;
   suggestedMargin: number;

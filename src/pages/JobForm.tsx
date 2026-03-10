@@ -328,6 +328,13 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
         setPricing({ ...getDefaultPricing(), ...storedPricing });
       }
 
+      if (!jobId) {
+        const defaultSystem = allSystems.find((s) => s.isDefault);
+        if (defaultSystem) {
+          setFormData((prev) => ({ ...prev, system: defaultSystem.id }));
+        }
+      }
+
       if (jobId) {
         console.log('[JobForm] Loading existing job:', jobId);
         const job = await getJob(jobId);
@@ -457,6 +464,8 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
           // Override with current costs for new fields if snapshot doesn't have them
           antiSlipCostPerGal: existingJob.costsSnapshot.antiSlipCostPerGal ?? costs.antiSlipCostPerGal,
           abrasionResistanceCostPerGal: existingJob.costsSnapshot.abrasionResistanceCostPerGal ?? costs.abrasionResistanceCostPerGal,
+          moistureMitigationCostPerGal: existingJob.costsSnapshot.moistureMitigationCostPerGal ?? costs.moistureMitigationCostPerGal,
+          moistureMitigationSpreadRate: existingJob.costsSnapshot.moistureMitigationSpreadRate ?? costs.moistureMitigationSpreadRate,
         }
       : costs;
     const pricingToUse = existingJob && !useCurrentValues && existingJob.pricingSnapshot
@@ -1057,6 +1066,60 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
               />
             </div>
 
+            <div className="md:col-span-2 lg:col-span-2 flex gap-3">
+              <div className="relative w-1/4 min-w-0">
+                <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Customer Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g., John Smith"
+                  value={formData.customerName}
+                  onChange={(e) => handleCustomerNameInputChange(e.target.value)}
+                  onFocus={() => setShowCustomerDropdown(true)}
+                  onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 200)}
+                  className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
+                />
+                {showCustomerDropdown && customerSuggestions.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-slate-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    {customerSuggestions.map((customer) => (
+                      <button
+                        key={customer.name}
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          handleCustomerSelect(customer);
+                        }}
+                        onClick={() => handleCustomerSelect(customer)}
+                        className="w-full px-3 sm:px-4 py-2 text-left hover:bg-slate-100 text-xs sm:text-sm"
+                      >
+                        <div className="font-medium text-slate-800">{customer.name}</div>
+                        {customer.address && <div className="text-slate-500 truncate">{customer.address}</div>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Customer Address</label>
+                <input
+                  type="text"
+                  placeholder="e.g., 123 Main St, City, State 12345"
+                  value={formData.customerAddress}
+                  onChange={(e) => setFormData({ ...formData, customerAddress: e.target.value })}
+                  className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
+                />
+              </div>
+              <div className="w-28 shrink-0">
+                <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Travel (mi)</label>
+                <input
+                  type="number"
+                  placeholder="0"
+                  value={formData.travelDistance}
+                  onChange={(e) => setFormData({ ...formData, travelDistance: e.target.value })}
+                  className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
+                />
+              </div>
+            </div>
+
             <div className="flex flex-col gap-3">
               <div>
                 <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Status</label>
@@ -1099,50 +1162,6 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                 onChange={(e) => setFormData({ ...formData, estimateDate: e.target.value })}
                 className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
               />
-            </div>
-
-            <div className="md:col-span-2 lg:col-span-2 flex gap-3">
-              <div className="relative w-2/5 min-w-0">
-                <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Customer Name</label>
-                <input
-                  type="text"
-                  placeholder="e.g., John Smith"
-                  value={formData.customerName}
-                  onChange={(e) => handleCustomerNameInputChange(e.target.value)}
-                  onFocus={() => setShowCustomerDropdown(true)}
-                  onBlur={() => setTimeout(() => setShowCustomerDropdown(false), 200)}
-                  className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
-                />
-                {showCustomerDropdown && customerSuggestions.length > 0 && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-slate-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                    {customerSuggestions.map((customer) => (
-                      <button
-                        key={customer.name}
-                        type="button"
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          handleCustomerSelect(customer);
-                        }}
-                        onClick={() => handleCustomerSelect(customer)}
-                        className="w-full px-3 sm:px-4 py-2 text-left hover:bg-slate-100 text-xs sm:text-sm"
-                      >
-                        <div className="font-medium text-slate-800">{customer.name}</div>
-                        {customer.address && <div className="text-slate-500 truncate">{customer.address}</div>}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Customer Address</label>
-                <input
-                  type="text"
-                  placeholder="e.g., 123 Main St, City, State 12345"
-                  value={formData.customerAddress}
-                  onChange={(e) => setFormData({ ...formData, customerAddress: e.target.value })}
-                  className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
-                />
-              </div>
             </div>
 
             <div className="md:col-span-2 lg:col-span-3">
@@ -1230,17 +1249,6 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                 placeholder="0"
                 value={formData.crackFillFactor}
                 onChange={(e) => setFormData({ ...formData, crackFillFactor: e.target.value })}
-                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Travel Distance (miles)</label>
-              <input
-                type="number"
-                placeholder="0"
-                value={formData.travelDistance}
-                onChange={(e) => setFormData({ ...formData, travelDistance: e.target.value })}
                 className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
               />
             </div>
@@ -1643,6 +1651,12 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                     <p className="text-xs text-slate-500">Abrasion Resistance Cost</p>
                     <p className="text-sm sm:text-base md:text-lg font-semibold">{formatCurrency(calculation.abrasionResistanceCost)}</p>
                   </div>
+                  {formData.moistureMitigation && (
+                    <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
+                      <p className="text-xs text-slate-500">Moisture Mitigation ({calculation.moistureMitigationGallons} gal)</p>
+                      <p className="text-sm sm:text-base md:text-lg font-semibold">{formatCurrency(calculation.moistureMitigationMaterialCost)}</p>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1996,6 +2010,9 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                   <div>
                     <p className="text-xs text-gf-dark-green">Moisture Mitigation - {formatCurrency(usedPricing.moistureMitigationPerSqft)}/sqft</p>
                     <p className="text-sm sm:text-base md:text-lg font-semibold text-gf-dark-green">{formatCurrency(calculation.suggestedMoistureMitigationPrice)}</p>
+                    {calculation.moistureMitigationGallons > 0 && (
+                      <p className="text-xs text-gf-grey mt-0.5">{calculation.moistureMitigationGallons} gal · material {formatCurrency(calculation.moistureMitigationMaterialCost)}</p>
+                    )}
                   </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 sm:gap-4 pt-3 sm:pt-4 border-t border-green-200">
