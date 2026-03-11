@@ -230,6 +230,7 @@ export interface BaseCoatInventory {
   baseA: number; // gallons
   baseBGrey: number; // gallons
   baseBTan: number; // gallons
+  baseBClear: number; // gallons
   updatedAt: string;
 }
 

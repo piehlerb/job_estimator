@@ -53,6 +53,7 @@ export default function Inventory() {
     baseA: 0,
     baseBGrey: 0,
     baseBTan: 0,
+    baseBClear: 0,
     updatedAt: new Date().toISOString(),
   });
   const [miscInventory, setMiscInventory] = useState<MiscInventory>({
@@ -70,6 +71,7 @@ export default function Inventory() {
   const [baseACommitment, setBaseACommitment] = useState<CoatCommitment>({ committed: 0, potential: 0 });
   const [baseBGreyCommitment, setBaseBGreyCommitment] = useState<CoatCommitment>({ committed: 0, potential: 0 });
   const [baseBTanCommitment, setBaseBTanCommitment] = useState<CoatCommitment>({ committed: 0, potential: 0 });
+  const [baseBClearCommitment, setBaseBClearCommitment] = useState<CoatCommitment>({ committed: 0, potential: 0 });
 
   const [newChipBlend, setNewChipBlend] = useState('');
   const [newChipPounds, setNewChipPounds] = useState('');
@@ -310,6 +312,12 @@ export default function Inventory() {
     setBaseBTanCommitment({
       committed: (baseTanCommitted * 2) / 3,
       potential: (baseTanPotential * 2) / 3,
+    });
+
+    // Base B Clear is 2/3 of clear jobs
+    setBaseBClearCommitment({
+      committed: (clearCommitted * 2) / 3,
+      potential: (clearPotential * 2) / 3,
     });
   };
 
@@ -675,6 +683,28 @@ export default function Inventory() {
                 <td className="py-3 px-2 text-right text-slate-500">{baseBTanCommitment.potential.toFixed(2)}</td>
                 <td className={`py-3 px-2 text-right ${getAvailablePotential(baseCoatInventory.baseBTan, baseBTanCommitment.potential) < 0 ? 'text-red-400' : 'text-slate-500'}`}>
                   {getAvailablePotential(baseCoatInventory.baseBTan, baseBTanCommitment.potential).toFixed(2)}
+                </td>
+              </tr>
+              <tr className="border-b border-slate-100">
+                <td className="py-3 px-2 font-medium">Base B - Clear</td>
+                <td className="py-3 px-2 text-right">
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={baseCoatInventory.baseBClear}
+                    onChange={(e) =>
+                      setBaseCoatInventory({ ...baseCoatInventory, baseBClear: parseFloat(e.target.value) || 0 })
+                    }
+                    className="w-24 px-2 py-1 border border-slate-300 rounded text-right"
+                  />
+                </td>
+                <td className="py-3 px-2 text-right">{baseBClearCommitment.committed.toFixed(2)}</td>
+                <td className={`py-3 px-2 text-right font-semibold ${getAvailable(baseCoatInventory.baseBClear, baseBClearCommitment.committed) < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                  {getAvailable(baseCoatInventory.baseBClear, baseBClearCommitment.committed).toFixed(2)}
+                </td>
+                <td className="py-3 px-2 text-right text-slate-500">{baseBClearCommitment.potential.toFixed(2)}</td>
+                <td className={`py-3 px-2 text-right ${getAvailablePotential(baseCoatInventory.baseBClear, baseBClearCommitment.potential) < 0 ? 'text-red-400' : 'text-slate-500'}`}>
+                  {getAvailablePotential(baseCoatInventory.baseBClear, baseBClearCommitment.potential).toFixed(2)}
                 </td>
               </tr>
             </tbody>

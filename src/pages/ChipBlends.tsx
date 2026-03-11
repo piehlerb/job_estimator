@@ -52,7 +52,7 @@ export default function ChipBlends() {
         getAllSystems(),
         getAllBaseCoatColors(),
       ]);
-      setBlends(blendsData);
+      setBlends([...blendsData].sort((a, b) => a.name.localeCompare(b.name)));
       setSystems(systemsData);
       setBaseCoatColors(baseCoatColorsData);
     } catch (error) {

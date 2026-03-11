@@ -1,5 +1,5 @@
 import { Job, InstallDaySchedule, Customer } from '../types';
-import { getAllJobs, updateJob, getAllCustomers, addCustomer } from './db';
+import { getAllJobs, updateJob, getAllCustomers, getAllCustomersForSync, addCustomer, deleteCustomer } from './db';
 
 /**
  * Converts legacy job data (jobHours + selectedLaborers) to installSchedule format
@@ -77,9 +77,11 @@ export async function migrateAllJobsToSchedule(): Promise<number> {
  * overwrite any records the user has already created.
  */
 export async function migrateCustomersFromJobs(): Promise<number> {
-  // Only seed if the store is empty
-  const existing = await getAllCustomers();
-  if (existing.length > 0) return 0;
+  // Only seed if the store is completely empty AND has never been seeded before.
+  // getAllCustomersForSync includes soft-deleted records, so if migrated- records
+  // exist (even deleted ones) we know a prior seed already ran and we should skip.
+  const allIncludingDeleted = await getAllCustomersForSync();
+  if (allIncludingDeleted.length > 0) return 0;
 
   const jobs = await getAllJobs();
 
@@ -159,4 +161,36 @@ export async function migrateCustomersFromJobs(): Promise<number> {
   }
 
   return count;
+}
+
+/**
+ * Removes duplicate "migrated-" customers that have a real counterpart.
+ * When a real customer (non-migrated ID) exists with the same name (case-insensitive)
+ * as a migrated- customer, the migrated- record is soft-deleted.
+ * Returns the number of duplicates removed.
+ */
+export async function cleanupMigratedCustomerDuplicates(): Promise<number> {
+  const all = await getAllCustomers();
+
+  const realByName = new Map<string, Customer>();
+  const migratedByName = new Map<string, Customer>();
+
+  for (const customer of all) {
+    const key = customer.name.trim().toLowerCase();
+    if (customer.id.startsWith('migrated-')) {
+      migratedByName.set(key, customer);
+    } else {
+      realByName.set(key, customer);
+    }
+  }
+
+  let removed = 0;
+  for (const [key, migrated] of migratedByName) {
+    if (realByName.has(key)) {
+      await deleteCustomer(migrated.id);
+      removed++;
+    }
+  }
+
+  return removed;
 }

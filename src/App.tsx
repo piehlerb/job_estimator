@@ -18,7 +18,7 @@ import Login from './pages/Login';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { useAuth } from './contexts/AuthContext';
 import { useAutoSync } from './hooks/useAutoSync';
-import { migrateCustomersFromJobs } from './lib/jobMigration';
+import { migrateCustomersFromJobs, cleanupMigratedCustomerDuplicates } from './lib/jobMigration';
 import { getAllJobs, updateJob } from './lib/db';
 
 type Page = 'dashboard' | 'new-job' | 'edit-job' | 'job-sheet' | 'chip-systems' | 'chip-blends' | 'laborers' | 'costs' | 'pricing' | 'settings' | 'inventory' | 'calendar' | 'reporting' | 'customers' | 'products';
@@ -138,6 +138,14 @@ function App() {
       }
     }).catch((err) => {
       console.warn('[Migration] Customer seed failed:', err);
+    });
+
+    cleanupMigratedCustomerDuplicates().then((count) => {
+      if (count > 0) {
+        console.log(`[Migration] Removed ${count} duplicate migrated- customer(s)`);
+      }
+    }).catch((err) => {
+      console.warn('[Migration] Customer cleanup failed:', err);
     });
   }, [user, offlineMode]);
 

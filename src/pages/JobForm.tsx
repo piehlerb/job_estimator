@@ -187,16 +187,13 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
   }, [formData.customerName, availableCustomers]);
 
   const applicableChipBlends = useMemo(() => {
-    if (!formData.system) {
-      return chipBlends;
-    }
-
-    return chipBlends.filter((blend) => {
-      if (!blend.systemIds || blend.systemIds.length === 0) {
-        return true;
-      }
-      return blend.systemIds.includes(formData.system);
-    });
+    const filtered = !formData.system
+      ? chipBlends
+      : chipBlends.filter((blend) => {
+          if (!blend.systemIds || blend.systemIds.length === 0) return true;
+          return blend.systemIds.includes(formData.system);
+        });
+    return [...filtered].sort((a, b) => a.name.localeCompare(b.name));
   }, [chipBlends, formData.system]);
 
   const selectedBlend = useMemo(() => {
@@ -1154,16 +1151,6 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
               </div>
             </div>
 
-            <div>
-              <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Estimate Date</label>
-              <input
-                type="date"
-                value={formData.estimateDate}
-                onChange={(e) => setFormData({ ...formData, estimateDate: e.target.value })}
-                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
-              />
-            </div>
-
             <div className="md:col-span-2 lg:col-span-3">
               <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Notes</label>
               <textarea
@@ -1259,18 +1246,6 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                 type="date"
                 value={formData.installDate}
                 onChange={(e) => setFormData({ ...formData, installDate: e.target.value })}
-                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Install Days</label>
-              <input
-                type="number"
-                placeholder="1"
-                min="1"
-                value={formData.installDays}
-                onChange={(e) => setFormData({ ...formData, installDays: e.target.value })}
                 className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
               />
             </div>
@@ -1540,6 +1515,19 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                 </label>
               </div>
             </div>
+          </div>
+
+          {/* Install Days - just above daily schedule */}
+          <div>
+            <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Install Days</label>
+            <input
+              type="number"
+              placeholder="1"
+              min="1"
+              value={formData.installDays}
+              onChange={(e) => setFormData({ ...formData, installDays: e.target.value })}
+              className="w-full sm:w-48 px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
+            />
           </div>
 
           {/* Daily Schedule Section */}
@@ -2090,6 +2078,16 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
               )}
             </div>
           )}
+
+          <div>
+            <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Estimate Date</label>
+            <input
+              type="date"
+              value={formData.estimateDate}
+              onChange={(e) => setFormData({ ...formData, estimateDate: e.target.value })}
+              className="w-full sm:w-48 px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
+            />
+          </div>
 
           <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
             <button
