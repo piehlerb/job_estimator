@@ -552,6 +552,8 @@ export function getDefaultPricing(): Pricing {
     chipVerticalUsageFactor: 1.1,
     verticalSpreadUsageMultiplier: 1.25,
     gasHeaterMonths: [11, 12, 1, 2, 3],
+    gasGeneratorGallonsPerHour: 1.2,
+    gasHeaterGallonsPerHour: 1,
     travelGasMpg: 10,
     useSuggestedDiscountCap: true,
     suggestedDiscountCapSqft: 500,

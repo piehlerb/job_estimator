@@ -71,6 +71,8 @@ export interface Pricing {
   chipVerticalUsageFactor?: number; // Extra chip usage factor applied to vertical sqft (default 1.1)
   verticalSpreadUsageMultiplier?: number; // Extra base/top spread multiplier for vertical sqft (default 1.25)
   gasHeaterMonths?: number[]; // Months where gas heater cost is applied (1-12), default [11,12,1,2,3]
+  gasGeneratorGallonsPerHour?: number; // Gas gallons/hour for generator (default 1.2)
+  gasHeaterGallonsPerHour?: number; // Gas gallons/hour for heater (default 1)
   travelGasMpg?: number; // MPG used for travel gas calculation (default 10)
   useSuggestedDiscountCap?: boolean; // Toggle cap on suggested discount (default true)
   suggestedDiscountCapSqft?: number; // Maximum sqft used for suggested discount (default 500)
@@ -182,6 +184,7 @@ export interface Job {
   // Surface preparation
   coatingRemoval?: CoatingRemovalType; // Type of coating removal needed
   moistureMitigation?: boolean; // Whether moisture mitigation is needed
+  disableGasHeater?: boolean; // If true, gas heater cost is forced to zero
   // Actual pricing breakdown (editable, persisted)
   actualDiscount?: number;
   actualCrackPrice?: number;

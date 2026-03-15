@@ -29,6 +29,8 @@ export default function Settings() {
     minimumJobPrice: '',
     chipVerticalUsageFactor: '',
     verticalSpreadUsageMultiplier: '',
+    gasGeneratorGallonsPerHour: '',
+    gasHeaterGallonsPerHour: '',
     travelGasMpg: '',
     useSuggestedDiscountCap: true,
     suggestedDiscountCapSqft: '',
@@ -61,6 +63,8 @@ export default function Settings() {
         minimumJobPrice: (mergedPricing.minimumJobPrice ?? 2500).toString(),
         chipVerticalUsageFactor: (mergedPricing.chipVerticalUsageFactor ?? 1.1).toString(),
         verticalSpreadUsageMultiplier: (mergedPricing.verticalSpreadUsageMultiplier ?? 1.25).toString(),
+        gasGeneratorGallonsPerHour: (mergedPricing.gasGeneratorGallonsPerHour ?? 1.2).toString(),
+        gasHeaterGallonsPerHour: (mergedPricing.gasHeaterGallonsPerHour ?? 1).toString(),
         travelGasMpg: (mergedPricing.travelGasMpg ?? 10).toString(),
         useSuggestedDiscountCap: mergedPricing.useSuggestedDiscountCap ?? true,
         suggestedDiscountCapSqft: (mergedPricing.suggestedDiscountCapSqft ?? 500).toString(),
@@ -74,6 +78,8 @@ export default function Settings() {
         minimumJobPrice: '2500',
         chipVerticalUsageFactor: '1.1',
         verticalSpreadUsageMultiplier: '1.25',
+        gasGeneratorGallonsPerHour: '1.2',
+        gasHeaterGallonsPerHour: '1',
         travelGasMpg: '10',
         useSuggestedDiscountCap: true,
         suggestedDiscountCapSqft: '500',
@@ -135,6 +141,8 @@ export default function Settings() {
         minimumJobPrice: parseFloat(form.minimumJobPrice) || 2500,
         chipVerticalUsageFactor: parseFloat(form.chipVerticalUsageFactor) || 1.1,
         verticalSpreadUsageMultiplier: parseFloat(form.verticalSpreadUsageMultiplier) || 1.25,
+        gasGeneratorGallonsPerHour: parseFloat(form.gasGeneratorGallonsPerHour) || 1.2,
+        gasHeaterGallonsPerHour: parseFloat(form.gasHeaterGallonsPerHour) || 1,
         travelGasMpg: parseFloat(form.travelGasMpg) || 10,
         useSuggestedDiscountCap: form.useSuggestedDiscountCap,
         suggestedDiscountCapSqft: parseFloat(form.suggestedDiscountCapSqft) || 500,
@@ -349,6 +357,34 @@ export default function Settings() {
               <p className="text-xs text-slate-500 mt-1">When enabled, suggested discount uses min(floor sqft, cap).</p>
             </div>
           </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-semibold text-slate-900 mb-2">Gas Generator (Gallons/Hour)</label>
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                placeholder="1.2"
+                value={form.gasGeneratorGallonsPerHour}
+                onChange={(e) => setForm({ ...form, gasGeneratorGallonsPerHour: e.target.value })}
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
+              />
+              <p className="text-xs text-slate-500 mt-1">Used for generator fuel cost (gallons per hour).</p>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-900 mb-2">Gas Heater (Gallons/Hour)</label>
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                placeholder="1"
+                value={form.gasHeaterGallonsPerHour}
+                onChange={(e) => setForm({ ...form, gasHeaterGallonsPerHour: e.target.value })}
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
+              />
+              <p className="text-xs text-slate-500 mt-1">Used for heater fuel cost (gallons per hour).</p>
+            </div>
+          </div>
           <div>
             <label className="block text-sm font-semibold text-slate-900 mb-2">Gas Heater Months</label>
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
@@ -480,4 +516,3 @@ export default function Settings() {
     </div>
   );
 }
-

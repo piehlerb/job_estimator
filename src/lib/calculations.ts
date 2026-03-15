@@ -17,6 +17,7 @@ interface JobInputs {
   cyclo1Coats?: number; // Additional job-level cyclo1 coats
   coatingRemoval: CoatingRemovalType;
   moistureMitigation: boolean;
+  disableGasHeater?: boolean;
   installSchedule?: InstallDaySchedule[]; // Optional per-day schedule
 }
 
@@ -44,6 +45,7 @@ export function calculateJobOutputs(
     coatingRemoval,
     moistureMitigation,
     installSchedule,
+    disableGasHeater,
   } = inputs;
 
   const {
@@ -156,16 +158,21 @@ export function calculateJobOutputs(
     ? installSchedule.reduce((sum, day) => sum + day.hours, 0)
     : jobHours;
 
-  // Gas generator cost: gasCost * totalHours * 1.2
-  const gasGeneratorCost = gasCost * totalHours * 1.2;
+  const gasGeneratorGallonsPerHour = pricing.gasGeneratorGallonsPerHour ?? 1.2;
+  const gasHeaterGallonsPerHour = pricing.gasHeaterGallonsPerHour ?? 1;
 
-  // Gas heater cost: if install month is 11, 12, 1, 2, 3 then (gasCost + 1) * totalHours, else 0
+  // Gas generator cost: gasCost * generator gallons/hour * totalHours
+  const gasGeneratorCost = gasCost * gasGeneratorGallonsPerHour * totalHours;
+
+  // Gas heater cost: if install month is 11, 12, 1, 2, 3 then gasCost * heater gallons/hour * totalHours, else 0
   const gasHeaterMonths = pricing.gasHeaterMonths && pricing.gasHeaterMonths.length > 0
     ? pricing.gasHeaterMonths
     : [11, 12, 1, 2, 3];
   const installMonth = installDate ? new Date(installDate).getMonth() + 1 : 0;
   const isWinterMonth = gasHeaterMonths.includes(installMonth);
-  const gasHeaterCost = isWinterMonth ? (gasCost + 1) * totalHours : 0;
+  const gasHeaterCost = !disableGasHeater && isWinterMonth
+    ? gasCost * gasHeaterGallonsPerHour * totalHours
+    : 0;
 
   // Gas travel cost:
   // Uses configurable MPG and accounts for 1 estimate round trip + install-day round trips

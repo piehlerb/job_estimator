@@ -128,6 +128,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
     cyclo1Coats: '0',
     coatingRemoval: 'None' as CoatingRemovalType,
     moistureMitigation: false,
+    disableGasHeater: false,
     // Actual pricing breakdown
     actualDiscount: '',
     actualCrackPrice: '',
@@ -215,6 +216,13 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
     if (!formData.chipBlend) return;
 
     const normalized = normalizeChipBlendName(formData.chipBlend);
+    if (!normalized) return;
+
+    const isKnownBlend = chipBlends.some(
+      (blend) => normalizeChipBlendName(blend.name) === normalized
+    );
+    if (!isKnownBlend) return;
+
     const isApplicable = applicableChipBlends.some(
       (blend) => normalizeChipBlendName(blend.name) === normalized
     );
@@ -223,7 +231,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
       setChipBlendInput('');
       setFormData((prev) => ({ ...prev, chipBlend: '', baseColor: '' }));
     }
-  }, [applicableChipBlends, formData.chipBlend]);
+  }, [applicableChipBlends, chipBlends, formData.chipBlend]);
 
   useEffect(() => {
     if (!selectedBlend?.baseCoatColorIds || selectedBlend.baseCoatColorIds.length === 0) return;
@@ -366,6 +374,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
             cyclo1Coats: (job.cyclo1Coats ?? 0).toString(),
             coatingRemoval: job.coatingRemoval || 'None',
             moistureMitigation: job.moistureMitigation || false,
+            disableGasHeater: job.disableGasHeater || false,
             // Actual pricing
             actualDiscount: job.actualDiscount?.toString() || '',
             actualCrackPrice: job.actualCrackPrice?.toString() || '',
@@ -501,6 +510,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
       cyclo1Coats: parseInt(formData.cyclo1Coats) || 0,
       coatingRemoval: formData.coatingRemoval,
       moistureMitigation: formData.moistureMitigation,
+      disableGasHeater: formData.disableGasHeater,
       installSchedule: installSchedule.length > 0 ? installSchedule : undefined,
     };
 
@@ -866,6 +876,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
         cyclo1Coats: parseInt(formData.cyclo1Coats) || 0,
         coatingRemoval: formData.coatingRemoval,
         moistureMitigation: formData.moistureMitigation,
+        disableGasHeater: formData.disableGasHeater,
         // Actual pricing breakdown
         actualDiscount: parseFloat(formData.actualDiscount) || undefined,
         actualCrackPrice: parseFloat(formData.actualCrackPrice) || undefined,
@@ -1515,6 +1526,7 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                 </label>
               </div>
             </div>
+
           </div>
 
           {/* Install Days - just above daily schedule */}
@@ -1659,6 +1671,15 @@ export default function JobForm({ jobId, onBack }: JobFormProps) {
                   <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
                     <p className="text-xs text-slate-500">Gas Heater</p>
                     <p className="text-sm sm:text-base md:text-lg font-semibold">{formatCurrency(calculation.gasHeaterCost)}</p>
+                    <label className="mt-2 flex items-center gap-2 text-xs text-slate-600">
+                      <input
+                        type="checkbox"
+                        checked={formData.disableGasHeater}
+                        onChange={(e) => setFormData({ ...formData, disableGasHeater: e.target.checked })}
+                        className="w-3.5 h-3.5 text-gf-dark-green border-slate-300 focus:ring-gf-lime"
+                      />
+                      Disable (force $0)
+                    </label>
                   </div>
                   <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
                     <p className="text-xs text-slate-500">Gas Travel</p>
