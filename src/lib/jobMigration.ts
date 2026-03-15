@@ -194,3 +194,27 @@ export async function cleanupMigratedCustomerDuplicates(): Promise<number> {
 
   return removed;
 }
+
+/**
+ * Backfill jobs to persist disableGasHeater flag (default false).
+ * Returns the number of jobs updated.
+ */
+export async function migrateJobsDisableGasHeater(): Promise<number> {
+  const jobs = await getAllJobs();
+  let migratedCount = 0;
+  const now = new Date().toISOString();
+
+  for (const job of jobs) {
+    if (job.disableGasHeater !== undefined) continue;
+
+    await updateJob({
+      ...job,
+      disableGasHeater: false,
+      updatedAt: now,
+      synced: false,
+    });
+    migratedCount++;
+  }
+
+  return migratedCount;
+}

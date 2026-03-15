@@ -206,6 +206,10 @@ export interface Job {
   systemSnapshot: ChipSystem;
   // Snapshot of laborers assigned to this job
   laborersSnapshot: Laborer[];
+  // Estimate grouping (alternative or bundled estimates for the same customer)
+  groupId?: string;             // UUID shared by all jobs in the same group
+  groupType?: 'alternative' | 'bundled'; // Type of grouping
+  isPrimaryEstimate?: boolean;  // True for the job that originated the group
   createdAt: string;
   updatedAt: string;
   synced: boolean;

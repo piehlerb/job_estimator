@@ -267,6 +267,13 @@ export async function getAllJobs(): Promise<Job[]> {
   });
 }
 
+export async function getAllJobsByGroupId(groupId: string): Promise<Job[]> {
+  const jobs = await getAllJobs();
+  return jobs
+    .filter((job: Job) => job.groupId === groupId)
+    .sort((a: Job, b: Job) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+}
+
 // Sync version - returns all records including deleted
 export async function getAllJobsForSync(): Promise<Job[]> {
   const db = await getDB();

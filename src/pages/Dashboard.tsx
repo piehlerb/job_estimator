@@ -1,4 +1,4 @@
-import { Plus, Trash2, FileText, Search, Bell, Check, X } from 'lucide-react';
+import { Plus, Trash2, FileText, Search, Bell, Check, X, ChevronDown, ChevronRight, Link, Shuffle } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { getAllJobs, deleteJob, updateJob, getDefaultCosts, getCosts, getPricing, getDefaultPricing } from '../lib/db';
 import { Job, JobCalculation, Costs, Pricing, JobStatus, JobReminder } from '../types';
@@ -40,6 +40,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
   const [showReminders, setShowReminders] = useState(false);
   const [selectedReminder, setSelectedReminder] = useState<ReminderItem | null>(null);
   const [updatingReminder, setUpdatingReminder] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     loadJobs();
@@ -141,7 +142,30 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
   const handleDeleteJob = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this job?')) {
       try {
+        // Capture groupId before deletion so we can clean up afterwards
+        const deletingJob = jobsWithCalc.find(({ job }) => job.id === id)?.job;
+        const groupId = deletingJob?.groupId;
+
         await deleteJob(id);
+
+        // If the job belonged to a group, check if only 1 sibling remains
+        // and if so, ungroup that sibling (a group of 1 is meaningless)
+        if (groupId) {
+          const allJobs = await getAllJobs();
+          const remaining = allJobs.filter(j => j.groupId === groupId && !j.deleted);
+          if (remaining.length === 1) {
+            const lone = remaining[0];
+            await updateJob({
+              ...lone,
+              groupId: undefined,
+              groupType: undefined,
+              isPrimaryEstimate: undefined,
+              updatedAt: new Date().toISOString(),
+              synced: false,
+            });
+          }
+        }
+
         await loadJobs();
       } catch (error) {
         console.error('Error deleting job:', error);
@@ -220,7 +244,57 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
     });
   }, [jobsWithCalc, searchQuery, statusFilter, chipBlendFilter, selectedTagFilters, tagMatchMode, sortBy]);
 
-  
+  type GroupDisplayItem = {
+    type: 'group';
+    groupId: string;
+    groupType: 'alternative' | 'bundled';
+    customerName: string;
+    jobs: JobWithCalc[];
+    sortKey: number;
+    aggregateTotalPrice: number;
+    aggregateTotalCosts: number;
+  };
+  type JobDisplayItem = { type: 'job'; jobWithCalc: JobWithCalc; sortKey: number };
+  type DisplayItem = GroupDisplayItem | JobDisplayItem;
+
+  const displayItems = useMemo((): DisplayItem[] => {
+    const groupMap = new Map<string, JobWithCalc[]>();
+    const ungrouped: JobWithCalc[] = [];
+
+    for (const jwc of filteredAndSortedJobs) {
+      if (jwc.job.groupId) {
+        const existing = groupMap.get(jwc.job.groupId) || [];
+        existing.push(jwc);
+        groupMap.set(jwc.job.groupId, existing);
+      } else {
+        ungrouped.push(jwc);
+      }
+    }
+
+    const items: DisplayItem[] = [];
+    for (const [groupId, jobs] of groupMap.entries()) {
+      const sortKey = Math.max(...jobs.map(j => new Date(j.job.createdAt).getTime()));
+      const customerName = jobs[0]?.job.customerName || 'Unknown Customer';
+      const groupType = jobs[0]?.job.groupType || 'alternative';
+      const aggregateTotalPrice = jobs.reduce((s, j) => s + j.job.totalPrice, 0);
+      const aggregateTotalCosts = jobs.reduce((s, j) => s + j.calc.totalCosts, 0);
+      items.push({ type: 'group', groupId, groupType, customerName, jobs, sortKey, aggregateTotalPrice, aggregateTotalCosts });
+    }
+    for (const jwc of ungrouped) {
+      items.push({ type: 'job', jobWithCalc: jwc, sortKey: new Date(jwc.job.createdAt).getTime() });
+    }
+    return items.sort((a, b) => b.sortKey - a.sortKey);
+  }, [filteredAndSortedJobs]);
+
+  const toggleGroup = (groupId: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      return next;
+    });
+  };
+
   const remindersByDue = useMemo((): ReminderItem[] => {
     const allReminders: ReminderItem[] = [];
 
@@ -504,7 +578,71 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
           <>
             {/* Mobile Card View */}
             <div className="md:hidden divide-y divide-slate-200">
-              {filteredAndSortedJobs.map(({ job, calc }) => {
+              {displayItems.map((item) => {
+                if (item.type === 'group') {
+                  const isExpanded = expandedGroups.has(item.groupId);
+                  const isBundled = item.groupType === 'bundled';
+                  const aggMarginPct = item.aggregateTotalPrice > 0 ? ((item.aggregateTotalPrice - item.aggregateTotalCosts) / item.aggregateTotalPrice) * 100 : 0;
+                  return (
+                    <div key={item.groupId}>
+                      {/* Group header (mobile) */}
+                      <div
+                        className={`p-3 sm:p-4 cursor-pointer transition-colors ${isBundled ? 'bg-blue-50 hover:bg-blue-100' : 'bg-purple-50 hover:bg-purple-100'}`}
+                        onClick={() => toggleGroup(item.groupId)}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 min-w-0">
+                            {isExpanded ? <ChevronDown size={14} className="flex-shrink-0 text-slate-500" /> : <ChevronRight size={14} className="flex-shrink-0 text-slate-500" />}
+                            {isBundled ? <Link size={13} className="flex-shrink-0 text-blue-600" /> : <Shuffle size={13} className="flex-shrink-0 text-purple-600" />}
+                            <span className="text-sm font-semibold text-slate-900 truncate">{item.customerName}</span>
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${isBundled ? 'bg-blue-200 text-blue-800' : 'bg-purple-200 text-purple-800'}`}>
+                              {isBundled ? `Bundle (${item.jobs.length})` : `${item.jobs.length} Options`}
+                            </span>
+                          </div>
+                        </div>
+                        {isBundled && (
+                          <div className="mt-1.5 pl-9 grid grid-cols-3 gap-2 text-xs">
+                            <div><p className="text-slate-500">Combined Cost</p><p className="font-medium">${item.aggregateTotalCosts.toFixed(0)}</p></div>
+                            <div><p className="text-slate-500">Combined Price</p><p className="font-semibold">${item.aggregateTotalPrice.toFixed(0)}</p></div>
+                            <div><p className="text-slate-500">Margin</p><p className={`font-semibold ${aggMarginPct >= 30 ? 'text-green-600' : 'text-orange-600'}`}>{aggMarginPct.toFixed(0)}%</p></div>
+                          </div>
+                        )}
+                      </div>
+                      {/* Group children (mobile) */}
+                      {isExpanded && item.jobs.map(({ job, calc }) => {
+                        const marginPct = job.totalPrice > 0 ? ((job.totalPrice - calc.totalCosts) / job.totalPrice) * 100 : 0;
+                        return (
+                          <div
+                            key={job.id}
+                            className={`p-3 sm:p-4 hover:bg-slate-50 transition-colors cursor-pointer border-l-4 ${isBundled ? 'border-blue-300' : 'border-purple-300'}`}
+                            onClick={() => onEditJob(job.id)}
+                          >
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-0.5">
+                                  <h4 className="text-sm font-semibold text-slate-900 truncate">{job.name || 'Untitled Job'}</h4>
+                                  <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${getStatusColor(job.status)}`}>{job.status}</span>
+                                </div>
+                                <p className="text-xs text-slate-500">{new Date(job.createdAt).toLocaleDateString()}</p>
+                              </div>
+                              <div className="flex items-center gap-1 ml-2">
+                                <button onClick={(e) => { e.stopPropagation(); onViewJobSheet(job.id); }} className="p-1.5 text-green-600 hover:bg-green-50 rounded transition-colors" title="Job Sheet"><FileText size={16} /></button>
+                                <button onClick={(e) => { e.stopPropagation(); handleDeleteJob(job.id); }} className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"><Trash2 size={16} /></button>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2 text-xs">
+                              <div><p className="text-slate-500">Cost</p><p className="font-medium text-slate-900">${calc.totalCosts.toFixed(0)}</p></div>
+                              <div><p className="text-slate-500">Price</p><p className="font-semibold text-slate-900">${job.totalPrice.toFixed(0)}</p></div>
+                              <div><p className="text-slate-500">Margin</p><p className={`font-semibold ${marginPct >= 30 ? 'text-green-600' : 'text-orange-600'}`}>{marginPct.toFixed(0)}%</p></div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                }
+
+                const { job, calc } = item.jobWithCalc;
                 const marginPct = job.totalPrice > 0 ? ((job.totalPrice - calc.totalCosts) / job.totalPrice) * 100 : 0;
                 return (
                   <div
@@ -524,53 +662,20 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
                         {(job.tags || []).length > 0 && (
                           <div className="mt-1 flex flex-wrap gap-1">
                             {(job.tags || []).slice(0, 3).map((tag) => (
-                              <span
-                                key={tag}
-                                className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-medium"
-                              >
-                                {tag}
-                              </span>
+                              <span key={tag} className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-medium">{tag}</span>
                             ))}
                           </div>
                         )}
                       </div>
                       <div className="flex items-center gap-1 ml-2">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onViewJobSheet(job.id);
-                          }}
-                          className="p-1.5 text-green-600 hover:bg-green-50 rounded transition-colors"
-                          title="Job Sheet"
-                        >
-                          <FileText size={16} />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteJob(job.id);
-                          }}
-                          className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); onViewJobSheet(job.id); }} className="p-1.5 text-green-600 hover:bg-green-50 rounded transition-colors" title="Job Sheet"><FileText size={16} /></button>
+                        <button onClick={(e) => { e.stopPropagation(); handleDeleteJob(job.id); }} className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"><Trash2 size={16} /></button>
                       </div>
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-xs">
-                      <div>
-                        <p className="text-slate-500">Cost</p>
-                        <p className="font-medium text-slate-900">${calc.totalCosts.toFixed(0)}</p>
-                      </div>
-                      <div>
-                        <p className="text-slate-500">Price</p>
-                        <p className="font-semibold text-slate-900">${job.totalPrice.toFixed(0)}</p>
-                      </div>
-                      <div>
-                        <p className="text-slate-500">Actual Margin</p>
-                        <p className={`font-semibold ${marginPct >= 30 ? 'text-green-600' : 'text-orange-600'}`}>
-                          {marginPct.toFixed(0)}%
-                        </p>
-                      </div>
+                      <div><p className="text-slate-500">Cost</p><p className="font-medium text-slate-900">${calc.totalCosts.toFixed(0)}</p></div>
+                      <div><p className="text-slate-500">Price</p><p className="font-semibold text-slate-900">${job.totalPrice.toFixed(0)}</p></div>
+                      <div><p className="text-slate-500">Actual Margin</p><p className={`font-semibold ${marginPct >= 30 ? 'text-green-600' : 'text-orange-600'}`}>{marginPct.toFixed(0)}%</p></div>
                     </div>
                   </div>
                 );
@@ -592,7 +697,86 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredAndSortedJobs.map(({ job, calc }) => {
+                  {displayItems.map((item) => {
+                    if (item.type === 'group') {
+                      const isExpanded = expandedGroups.has(item.groupId);
+                      const isBundled = item.groupType === 'bundled';
+                      const aggMarginPct = item.aggregateTotalPrice > 0 ? ((item.aggregateTotalPrice - item.aggregateTotalCosts) / item.aggregateTotalPrice) * 100 : 0;
+                      return (
+                        <>
+                          {/* Group header row (desktop) */}
+                          <tr
+                            key={`group-${item.groupId}`}
+                            className={`border-b border-slate-200 cursor-pointer transition-colors ${isBundled ? 'bg-blue-50 hover:bg-blue-100' : 'bg-purple-50 hover:bg-purple-100'}`}
+                            onClick={() => toggleGroup(item.groupId)}
+                          >
+                            <td className="px-4 lg:px-6 py-3 text-sm font-semibold text-slate-900" colSpan={isBundled ? 1 : 5}>
+                              <div className="flex items-center gap-2">
+                                {isExpanded ? <ChevronDown size={14} className="text-slate-500 flex-shrink-0" /> : <ChevronRight size={14} className="text-slate-500 flex-shrink-0" />}
+                                {isBundled ? <Link size={13} className="text-blue-600 flex-shrink-0" /> : <Shuffle size={13} className="text-purple-600 flex-shrink-0" />}
+                                <span>{item.customerName}</span>
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${isBundled ? 'bg-blue-200 text-blue-800' : 'bg-purple-200 text-purple-800'}`}>
+                                  {isBundled ? `Bundle · ${item.jobs.length} parts` : `${item.jobs.length} Alternatives`}
+                                </span>
+                              </div>
+                            </td>
+                            {isBundled && (
+                              <>
+                                <td className="px-4 lg:px-6 py-3 text-sm text-center text-slate-400">—</td>
+                                <td className="px-4 lg:px-6 py-3 text-sm text-right text-slate-700 font-medium">${item.aggregateTotalCosts.toFixed(0)}</td>
+                                <td className="px-4 lg:px-6 py-3 text-sm text-right font-semibold text-slate-900">${item.aggregateTotalPrice.toFixed(0)}</td>
+                                <td className={`px-4 lg:px-6 py-3 text-sm text-right font-bold ${aggMarginPct >= 30 ? 'text-green-600' : 'text-orange-600'}`}>{aggMarginPct.toFixed(0)}%</td>
+                                <td className="px-4 lg:px-6 py-3 text-sm text-right text-slate-400">—</td>
+                                <td className="px-4 lg:px-6 py-3 text-sm text-right text-slate-400">—</td>
+                              </>
+                            )}
+                          </tr>
+                          {/* Group children (desktop) */}
+                          {isExpanded && item.jobs.map(({ job, calc }) => {
+                            const marginPct = job.totalPrice > 0 ? ((job.totalPrice - calc.totalCosts) / job.totalPrice) * 100 : 0;
+                            return (
+                              <tr
+                                key={job.id}
+                                className="border-b border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer"
+                                onClick={() => onEditJob(job.id)}
+                              >
+                                <td className="py-3 text-sm font-medium text-slate-900">
+                                  <div className="flex items-center">
+                                    <div className={`w-1 self-stretch mr-3 rounded-r ${isBundled ? 'bg-blue-300' : 'bg-purple-300'}`} style={{minHeight: '100%'}} />
+                                    <div className="px-2 lg:px-3">
+                                      <div>{job.name || 'Untitled Job'}</div>
+                                      {(job.tags || []).length > 0 && (
+                                        <div className="mt-0.5 flex flex-wrap gap-1">
+                                          {(job.tags || []).slice(0, 3).map((tag) => (
+                                            <span key={tag} className="inline-block px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium">{tag}</span>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-4 lg:px-6 py-3 text-sm text-center">
+                                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(job.status)}`}>{job.status}</span>
+                                </td>
+                                <td className="px-4 lg:px-6 py-3 text-sm text-slate-600 text-right">${calc.totalCosts.toFixed(0)}</td>
+                                <td className="px-4 lg:px-6 py-3 text-sm font-semibold text-slate-900 text-right">${job.totalPrice.toFixed(0)}</td>
+                                <td className={`px-4 lg:px-6 py-3 text-sm font-semibold text-right ${marginPct >= 30 ? 'text-green-600' : 'text-orange-600'}`}>{marginPct.toFixed(0)}%</td>
+                                <td className="px-4 lg:px-6 py-3 text-sm text-slate-600 text-right">{new Date(job.createdAt).toLocaleDateString()}</td>
+                                <td className="px-4 lg:px-6 py-3 text-sm text-right">
+                                  <div className="flex items-center justify-end gap-2">
+                                    <button onClick={(e) => { e.stopPropagation(); onViewJobSheet(job.id); }} className="text-green-600 hover:text-green-800" title="Job Sheet"><FileText size={18} /></button>
+                                    <button className="text-gf-dark-green hover:text-gf-dark-green font-medium text-xs lg:text-sm">Edit</button>
+                                    <button onClick={(e) => { e.stopPropagation(); handleDeleteJob(job.id); }} className="text-red-600 hover:text-red-800"><Trash2 size={18} /></button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </>
+                      );
+                    }
+
+                    const { job, calc } = item.jobWithCalc;
                     const marginPct = job.totalPrice > 0 ? ((job.totalPrice - calc.totalCosts) / job.totalPrice) * 100 : 0;
                     return (
                       <tr
@@ -605,53 +789,23 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
                           {(job.tags || []).length > 0 && (
                             <div className="mt-1 flex flex-wrap gap-1">
                               {(job.tags || []).slice(0, 3).map((tag) => (
-                                <span
-                                  key={tag}
-                                  className="inline-block px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium"
-                                >
-                                  {tag}
-                                </span>
+                                <span key={tag} className="inline-block px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium">{tag}</span>
                               ))}
                             </div>
                           )}
                         </td>
                         <td className="px-4 lg:px-6 py-4 text-sm text-center">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(job.status)}`}>
-                            {job.status}
-                          </span>
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(job.status)}`}>{job.status}</span>
                         </td>
                         <td className="px-4 lg:px-6 py-4 text-sm text-slate-600 text-right">${calc.totalCosts.toFixed(0)}</td>
-                        <td className="px-4 lg:px-6 py-4 text-sm font-semibold text-slate-900 text-right">
-                          ${job.totalPrice.toFixed(0)}
-                        </td>
-                        <td className={`px-4 lg:px-6 py-4 text-sm font-semibold text-right ${marginPct >= 30 ? 'text-green-600' : 'text-orange-600'}`}>
-                          {marginPct.toFixed(0)}%
-                        </td>
-                        <td className="px-4 lg:px-6 py-4 text-sm text-slate-600 text-right">
-                          {new Date(job.createdAt).toLocaleDateString()}
-                        </td>
+                        <td className="px-4 lg:px-6 py-4 text-sm font-semibold text-slate-900 text-right">${job.totalPrice.toFixed(0)}</td>
+                        <td className={`px-4 lg:px-6 py-4 text-sm font-semibold text-right ${marginPct >= 30 ? 'text-green-600' : 'text-orange-600'}`}>{marginPct.toFixed(0)}%</td>
+                        <td className="px-4 lg:px-6 py-4 text-sm text-slate-600 text-right">{new Date(job.createdAt).toLocaleDateString()}</td>
                         <td className="px-4 lg:px-6 py-4 text-sm text-right">
                           <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onViewJobSheet(job.id);
-                              }}
-                              className="text-green-600 hover:text-green-800"
-                              title="Job Sheet"
-                            >
-                              <FileText size={18} />
-                            </button>
+                            <button onClick={(e) => { e.stopPropagation(); onViewJobSheet(job.id); }} className="text-green-600 hover:text-green-800" title="Job Sheet"><FileText size={18} /></button>
                             <button className="text-gf-dark-green hover:text-gf-dark-green font-medium text-xs lg:text-sm">Edit</button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteJob(job.id);
-                              }}
-                              className="text-red-600 hover:text-red-800"
-                            >
-                              <Trash2 size={18} />
-                            </button>
+                            <button onClick={(e) => { e.stopPropagation(); handleDeleteJob(job.id); }} className="text-red-600 hover:text-red-800"><Trash2 size={18} /></button>
                           </div>
                         </td>
                       </tr>

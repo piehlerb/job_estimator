@@ -18,7 +18,7 @@ import Login from './pages/Login';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { useAuth } from './contexts/AuthContext';
 import { useAutoSync } from './hooks/useAutoSync';
-import { migrateCustomersFromJobs, cleanupMigratedCustomerDuplicates } from './lib/jobMigration';
+import { migrateCustomersFromJobs, cleanupMigratedCustomerDuplicates, migrateJobsDisableGasHeater } from './lib/jobMigration';
 import { getAllJobs, updateJob } from './lib/db';
 
 type Page = 'dashboard' | 'new-job' | 'edit-job' | 'job-sheet' | 'chip-systems' | 'chip-blends' | 'laborers' | 'costs' | 'pricing' | 'settings' | 'inventory' | 'calendar' | 'reporting' | 'customers' | 'products';
@@ -147,6 +147,14 @@ function App() {
     }).catch((err) => {
       console.warn('[Migration] Customer cleanup failed:', err);
     });
+
+    migrateJobsDisableGasHeater().then((count) => {
+      if (count > 0) {
+        console.log(`[Migration] Backfilled disableGasHeater for ${count} job(s)`);
+      }
+    }).catch((err) => {
+      console.warn('[Migration] disableGasHeater backfill failed:', err);
+    });
   }, [user, offlineMode]);
 
   const handleNavigation = (page: Page, jobId?: string) => {
@@ -209,10 +217,10 @@ function App() {
         />
       )}
       {currentPage === 'new-job' && (
-        <JobForm onBack={handleBackToDashboard} />
+        <JobForm onBack={handleBackToDashboard} onEditJob={(id) => handleNavigation('edit-job', id)} />
       )}
       {currentPage === 'edit-job' && editingJobId && (
-        <JobForm jobId={editingJobId} onBack={handleBackToDashboard} />
+        <JobForm jobId={editingJobId} onBack={handleBackToDashboard} onEditJob={(id) => handleNavigation('edit-job', id)} />
       )}
       {currentPage === 'chip-systems' && (
         <ChipSystems />
@@ -252,4 +260,3 @@ function App() {
 }
 
 export default App;
-
