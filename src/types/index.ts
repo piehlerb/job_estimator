@@ -150,6 +150,30 @@ export interface InstallDaySchedule {
   laborerIds: string[];
 }
 
+export interface ActualDaySchedule {
+  day: number;
+  hours: number;
+  laborerIds: string[];
+}
+
+export interface ActualCosts {
+  actualChipCost: number;
+  actualBaseCost: number;
+  actualTopCost: number;
+  actualCyclo1Cost: number;
+  actualTintCost: number;
+  actualGasGeneratorCost: number;
+  actualGasHeaterCost: number;
+  actualGasTravelCost: number;
+  actualLaborCost: number;
+  actualConsumablesCost: number;
+  actualRoyaltyCost: number;
+  actualTotalCosts: number;
+  actualTotalHours: number;
+  actualMargin: number;
+  actualMarginPct: number;
+}
+
 export interface Job {
   id: string;
   name: string;
@@ -172,6 +196,7 @@ export interface Job {
   status: JobStatus;
   estimateDate?: string; // Date the estimate was created/sent (defaults to createdAt date)
   decisionDate?: string; // Date the customer made a decision (Won/Lost)
+  probability?: number;  // 0 | 20 | 40 | 60 | 80 | 100 — likelihood of closing
   notes?: string;
   // Tint options
   includeBasecoatTint?: boolean;
@@ -195,6 +220,13 @@ export interface Job {
   actualAbrasionResistancePrice?: number;
   actualCoatingRemovalPrice?: number;
   actualMoistureMitigationPrice?: number;
+  // Actual job execution data (only relevant for Won jobs)
+  actualInstallSchedule?: ActualDaySchedule[];
+  actualBaseCoatGallons?: number;
+  actualTopCoatGallons?: number;
+  actualCyclo1Gallons?: number;
+  actualTintOz?: number;         // Combined base + top tint, in oz
+  actualChipBoxes?: number;
   // Products added to this job
   products?: JobProduct[];
   reminders?: JobReminder[];

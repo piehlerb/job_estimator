@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 import { Clock } from 'lucide-react';
-import type { InstallDaySchedule, Laborer } from '../types';
+import type { InstallDaySchedule, ActualDaySchedule, Laborer } from '../types';
+
+type DaySchedule = InstallDaySchedule | ActualDaySchedule;
 
 interface InstallDayScheduleProps {
   installDays: number;
-  schedule: InstallDaySchedule[];
+  schedule: DaySchedule[];
   availableLaborers: Laborer[];
-  onChange: (schedule: InstallDaySchedule[]) => void;
+  onChange: (schedule: DaySchedule[]) => void;
 }
 
 export default function InstallDayScheduleComponent({
@@ -15,12 +17,12 @@ export default function InstallDayScheduleComponent({
   availableLaborers,
   onChange,
 }: InstallDayScheduleProps) {
-  const [localSchedule, setLocalSchedule] = useState<InstallDaySchedule[]>(schedule);
+  const [localSchedule, setLocalSchedule] = useState<DaySchedule[]>(schedule);
 
   // Update local schedule when installDays changes
   useEffect(() => {
     const days = Math.max(1, installDays);
-    const newSchedule: InstallDaySchedule[] = [];
+    const newSchedule: DaySchedule[] = [];
 
     for (let i = 1; i <= days; i++) {
       const existing = localSchedule.find(s => s.day === i);

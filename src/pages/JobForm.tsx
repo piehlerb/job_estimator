@@ -20,8 +20,8 @@ import {
   getAllBaseCoatColors,
   getAllJobsByGroupId,
 } from '../lib/db';
-import { BaseColor, ChipSystem, Costs, Pricing, Job, JobCalculation, JobStatus, Laborer, InstallDaySchedule, ChipInventory, CoatingRemovalType, Product, JobProduct, BaseCoatColor, JobReminder } from '../types';
-import { calculateJobOutputs } from '../lib/calculations';
+import { BaseColor, ChipSystem, Costs, Pricing, Job, JobCalculation, JobStatus, Laborer, InstallDaySchedule, ActualDaySchedule, ActualCosts, ChipInventory, CoatingRemovalType, Product, JobProduct, BaseCoatColor, JobReminder } from '../types';
+import { calculateJobOutputs, calculateActualCosts } from '../lib/calculations';
 import InstallDayScheduleComponent from '../components/InstallDaySchedule';
 import { convertLegacyJobToSchedule } from '../lib/jobMigration';
 import { compareSnapshots, SnapshotChanges } from '../lib/snapshotComparison';
@@ -83,7 +83,19 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
   const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [showProductsSection, setShowProductsSection] = useState(false);
   const [selectedProductId, setSelectedProductId] = useState('');
-  const [activeTab, setActiveTab] = useState<'details' | 'reminders'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'reminders' | 'actuals'>('details');
+
+  // Actuals state (for Won jobs)
+  const [actualInstallSchedule, setActualInstallSchedule] = useState<ActualDaySchedule[]>([]);
+  const [actualMaterials, setActualMaterials] = useState({
+    actualBaseCoatGallons: '',
+    actualTopCoatGallons: '',
+    actualCyclo1Gallons: '',
+    actualTintOz: '',
+    actualChipBoxes: '',
+  });
+  const [actualCalculation, setActualCalculation] = useState<ActualCosts | null>(null);
+  const actualsInitialized = useRef(false);
 
   // Reminders state
   const [reminders, setReminders] = useState<JobReminder[]>([]);
@@ -129,6 +141,7 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
     tags: '',
     baseColor: '' as BaseColor | '',
     status: 'Pending' as JobStatus,
+    probability: '20',
     estimateDate: new Date().toISOString().split('T')[0],
     decisionDate: '',
     notes: '',
@@ -165,6 +178,44 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
   useEffect(() => {
     calculateCosts();
   }, [formData, systems, costs, pricing, activeLaborers, installSchedule, useCurrentValues, existingJob]);
+
+  // Reactively compute actual costs when actuals change
+  useEffect(() => {
+    if (!existingJob || actualInstallSchedule.length === 0) {
+      setActualCalculation(null);
+      return;
+    }
+    const costsToUse = existingJob ? { ...getDefaultCosts(), ...existingJob.costsSnapshot } : costs;
+    const pricingToUse = existingJob?.pricingSnapshot
+      ? { ...getDefaultPricing(), ...existingJob.pricingSnapshot }
+      : pricing;
+    const laborersToUse = [
+      ...activeLaborers,
+      ...existingJob.laborersSnapshot.filter(sl => !activeLaborers.some(al => al.id === sl.id)),
+    ];
+    const chipBoxCost = existingJob.systemSnapshot?.boxCost ?? 0;
+
+    const calc = calculateActualCosts(
+      {
+        actualSchedule: actualInstallSchedule,
+        actualBaseCoatGallons: parseFloat(actualMaterials.actualBaseCoatGallons) || 0,
+        actualTopCoatGallons: parseFloat(actualMaterials.actualTopCoatGallons) || 0,
+        actualCyclo1Gallons: parseFloat(actualMaterials.actualCyclo1Gallons) || 0,
+        actualTintOz: parseFloat(actualMaterials.actualTintOz) || 0,
+        actualChipBoxes: parseFloat(actualMaterials.actualChipBoxes) || 0,
+        chipBoxCost,
+        totalPrice: parseFloat(formData.totalPrice) || 0,
+        installDays: parseFloat(formData.installDays) || 1,
+        installDate: formData.installDate,
+        travelDistance: parseFloat(formData.travelDistance) || 0,
+        disableGasHeater: formData.disableGasHeater,
+      },
+      costsToUse,
+      pricingToUse,
+      laborersToUse
+    );
+    setActualCalculation(calc);
+  }, [actualInstallSchedule, actualMaterials, formData.totalPrice, formData.installDays, formData.installDate, formData.travelDistance, formData.disableGasHeater, existingJob, activeLaborers, costs, pricing]);
 
 
   const productsTotalPrice = useMemo(
@@ -377,6 +428,7 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
             tags: (job.tags || []).join(', '),
             baseColor: job.baseColor || '',
             status: job.status || 'Pending',
+            probability: (job.probability?.toString()) ?? (job.status === 'Won' ? '100' : job.status === 'Lost' ? '0' : '20'),
             estimateDate: job.estimateDate || job.createdAt.split('T')[0],
             decisionDate: job.decisionDate || '',
             notes: job.notes || '',
@@ -410,6 +462,24 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
           if (schedule) {
             setInstallSchedule(schedule);
           }
+          // Load actuals data for Won jobs
+          if (job.actualInstallSchedule && job.actualInstallSchedule.length > 0) {
+            setActualInstallSchedule(job.actualInstallSchedule);
+            actualsInitialized.current = true;
+          } else if (schedule) {
+            // Pre-populate from estimated schedule as starting point
+            setActualInstallSchedule(schedule.map(d => ({ ...d })));
+          }
+          if (job.actualBaseCoatGallons != null || job.actualTopCoatGallons != null) {
+            actualsInitialized.current = true;
+          }
+          setActualMaterials({
+            actualBaseCoatGallons: job.actualBaseCoatGallons?.toString() || '',
+            actualTopCoatGallons: job.actualTopCoatGallons?.toString() || '',
+            actualCyclo1Gallons: job.actualCyclo1Gallons?.toString() || '',
+            actualTintOz: job.actualTintOz?.toString() || '',
+            actualChipBoxes: job.actualChipBoxes?.toString() || '',
+          });
           // Load products from existing job
           if (job.products && job.products.length > 0) {
             setJobProducts(job.products);
@@ -637,6 +707,11 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
       actualFloorPricePerSqft: newFloorPerSqft.toFixed(2),
     });
     setTimeout(() => { updatingFrom.current = null; }, 0);
+  };
+
+  const handleStatusChange = (newStatus: JobStatus) => {
+    const probMap: Record<JobStatus, string> = { Won: '100', Lost: '0', Pending: '20' };
+    setFormData(prev => ({ ...prev, status: newStatus, probability: probMap[newStatus] }));
   };
 
   const handleSystemChange = (systemId: string) => {
@@ -1109,6 +1184,7 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
         status: formData.status,
         estimateDate: formData.estimateDate || undefined,
         decisionDate: formData.decisionDate || undefined,
+        probability: parseInt(formData.probability) || 0,
         notes: formData.notes || undefined,
         includeBasecoatTint: formData.includeBasecoatTint,
         includeTopcoatTint: formData.includeTopcoatTint,
@@ -1129,6 +1205,13 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
         actualAbrasionResistancePrice: parseFloat(formData.actualAbrasionResistancePrice) || undefined,
         actualCoatingRemovalPrice: parseFloat(formData.actualCoatingRemovalPrice) || undefined,
         actualMoistureMitigationPrice: parseFloat(formData.actualMoistureMitigationPrice) || undefined,
+        // Actual execution data
+        actualInstallSchedule: actualInstallSchedule.length > 0 ? actualInstallSchedule : undefined,
+        actualBaseCoatGallons: parseFloat(actualMaterials.actualBaseCoatGallons) || undefined,
+        actualTopCoatGallons: parseFloat(actualMaterials.actualTopCoatGallons) || undefined,
+        actualCyclo1Gallons: parseFloat(actualMaterials.actualCyclo1Gallons) || undefined,
+        actualTintOz: parseFloat(actualMaterials.actualTintOz) || undefined,
+        actualChipBoxes: parseFloat(actualMaterials.actualChipBoxes) || undefined,
         products: jobProducts.length > 0 ? jobProducts : undefined,
         reminders: reminders.length > 0
           ? [...reminders].sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime())
@@ -1388,6 +1471,19 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
                 </span>
               )}
             </button>
+            {formData.status === 'Won' && jobId && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('actuals')}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                  activeTab === 'actuals'
+                    ? 'bg-green-100 text-green-800'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                Actuals
+              </button>
+            )}
           </div>
 
           {activeTab === 'details' && (
@@ -1459,37 +1555,51 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
               </div>
             </div>
 
-            <div className="flex flex-col gap-3">
-              <div>
-                <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Status</label>
-                <div className="flex flex-wrap gap-3 sm:gap-4">
-                  {(['Pending', 'Won', 'Lost'] as JobStatus[]).map((status) => (
-                    <label key={status} className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="status"
-                        value={status}
-                        checked={formData.status === status}
-                        onChange={(e) => setFormData({ ...formData, status: e.target.value as JobStatus })}
-                        className="w-4 h-4 text-gf-dark-green border-slate-300 focus:ring-gf-lime"
-                      />
-                      <span className={`text-xs sm:text-sm ${
-                        status === 'Won' ? 'text-green-700' :
-                        status === 'Lost' ? 'text-red-700' :
-                        'text-slate-700'
-                      }`}>{status}</span>
-                    </label>
-                  ))}
+            <div className="md:col-span-2 lg:col-span-3">
+              <div className="flex flex-col sm:flex-row sm:items-start gap-4 sm:gap-6">
+                <div className="flex-1">
+                  <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Status</label>
+                  <div className="flex flex-wrap gap-3 sm:gap-4">
+                    {(['Pending', 'Won', 'Lost'] as JobStatus[]).map((status) => (
+                      <label key={status} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="status"
+                          value={status}
+                          checked={formData.status === status}
+                          onChange={() => handleStatusChange(status)}
+                          className="w-4 h-4 text-gf-dark-green border-slate-300 focus:ring-gf-lime"
+                        />
+                        <span className={`text-xs sm:text-sm ${
+                          status === 'Won' ? 'text-green-700' :
+                          status === 'Lost' ? 'text-red-700' :
+                          'text-slate-700'
+                        }`}>{status}</span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
-              </div>
-              <div>
-                <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Decision Date</label>
-                <input
-                  type="date"
-                  value={formData.decisionDate}
-                  onChange={(e) => setFormData({ ...formData, decisionDate: e.target.value })}
-                  className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
-                />
+                <div>
+                  <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Probability</label>
+                  <select
+                    value={formData.probability}
+                    onChange={(e) => setFormData(prev => ({ ...prev, probability: e.target.value }))}
+                    className="w-28 px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime"
+                  >
+                    {[0, 20, 40, 60, 80, 100].map(p => (
+                      <option key={p} value={p}>{p}%</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Decision Date</label>
+                  <input
+                    type="date"
+                    value={formData.decisionDate}
+                    onChange={(e) => setFormData({ ...formData, decisionDate: e.target.value })}
+                    className="w-full sm:w-auto px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
+                  />
+                </div>
               </div>
             </div>
 
@@ -2378,6 +2488,187 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
           )}
 
             </>
+          )}
+
+          {activeTab === 'actuals' && (
+            <div className="space-y-6">
+              {/* Section A: Actual Labor */}
+              <div className="rounded-lg border border-slate-200 p-4 sm:p-5 bg-slate-50">
+                <h3 className="text-sm sm:text-base font-semibold text-slate-900 mb-1">Actual Labor</h3>
+                <p className="text-xs text-slate-500 mb-4">Record actual hours and crew for each install day.</p>
+                <InstallDayScheduleComponent
+                  installDays={parseFloat(formData.installDays) || 1}
+                  schedule={actualInstallSchedule}
+                  availableLaborers={existingJob
+                    ? [...activeLaborers, ...existingJob.laborersSnapshot.filter(sl => !activeLaborers.some(al => al.id === sl.id))]
+                    : activeLaborers
+                  }
+                  onChange={(s) => setActualInstallSchedule(s as ActualDaySchedule[])}
+                />
+              </div>
+
+              {/* Section B: Actual Materials */}
+              <div className="rounded-lg border border-slate-200 p-4 sm:p-5 bg-slate-50">
+                <h3 className="text-sm sm:text-base font-semibold text-slate-900 mb-1">Actual Materials Used</h3>
+                <p className="text-xs text-slate-500 mb-4">Enter quantities actually consumed. Estimated amounts shown as reference.</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Base Coat (gal)
+                      {calculation && <span className="ml-1 text-slate-400 font-normal">est. {calculation.baseGallons.toFixed(1)}</span>}
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      placeholder={calculation ? calculation.baseGallons.toFixed(1) : '0'}
+                      value={actualMaterials.actualBaseCoatGallons}
+                      onChange={(e) => setActualMaterials(prev => ({ ...prev, actualBaseCoatGallons: e.target.value }))}
+                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Top Coat (gal)
+                      {calculation && <span className="ml-1 text-slate-400 font-normal">est. {calculation.topGallons.toFixed(1)}</span>}
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      placeholder={calculation ? calculation.topGallons.toFixed(1) : '0'}
+                      value={actualMaterials.actualTopCoatGallons}
+                      onChange={(e) => setActualMaterials(prev => ({ ...prev, actualTopCoatGallons: e.target.value }))}
+                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Cyclo1 (gal)
+                      {calculation && <span className="ml-1 text-slate-400 font-normal">est. {calculation.cyclo1Needed.toFixed(1)}</span>}
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      placeholder={calculation ? calculation.cyclo1Needed.toFixed(1) : '0'}
+                      value={actualMaterials.actualCyclo1Gallons}
+                      onChange={(e) => setActualMaterials(prev => ({ ...prev, actualCyclo1Gallons: e.target.value }))}
+                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Tint (oz)
+                      {calculation && <span className="ml-1 text-slate-400 font-normal">est. {calculation.tintNeeded.toFixed(1)}</span>}
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      placeholder={calculation ? calculation.tintNeeded.toFixed(1) : '0'}
+                      value={actualMaterials.actualTintOz}
+                      onChange={(e) => setActualMaterials(prev => ({ ...prev, actualTintOz: e.target.value }))}
+                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Chip Boxes
+                      {calculation && <span className="ml-1 text-slate-400 font-normal">est. {calculation.chipNeeded}</span>}
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      placeholder={calculation ? calculation.chipNeeded.toString() : '0'}
+                      value={actualMaterials.actualChipBoxes}
+                      onChange={(e) => setActualMaterials(prev => ({ ...prev, actualChipBoxes: e.target.value }))}
+                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Section C: Actual vs Estimated Cost Comparison */}
+              {actualCalculation && calculation && (
+                <div className="rounded-lg border border-slate-200 p-4 sm:p-5 bg-white">
+                  <h3 className="text-sm sm:text-base font-semibold text-slate-900 mb-4">Estimated vs. Actual Costs</h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-slate-200">
+                          <th className="text-left py-2 pr-4 text-xs font-semibold text-slate-600 w-32">Category</th>
+                          <th className="text-right py-2 px-3 text-xs font-semibold text-slate-600">Estimated</th>
+                          <th className="text-right py-2 px-3 text-xs font-semibold text-slate-600">Actual</th>
+                          <th className="text-right py-2 pl-3 text-xs font-semibold text-slate-600">Difference</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {[
+                          { label: 'Chip', est: calculation.chipCost, act: actualCalculation.actualChipCost },
+                          { label: 'Base Coat', est: calculation.baseCost, act: actualCalculation.actualBaseCost },
+                          { label: 'Top Coat', est: calculation.topCost, act: actualCalculation.actualTopCost },
+                          { label: 'Cyclo1', est: calculation.cyclo1Cost, act: actualCalculation.actualCyclo1Cost },
+                          { label: 'Tint', est: calculation.tintCost, act: actualCalculation.actualTintCost },
+                          {
+                            label: 'Gas',
+                            est: calculation.gasGeneratorCost + calculation.gasHeaterCost + calculation.gasTravelCost,
+                            act: actualCalculation.actualGasGeneratorCost + actualCalculation.actualGasHeaterCost + actualCalculation.actualGasTravelCost,
+                          },
+                          { label: 'Labor', est: calculation.laborCost, act: actualCalculation.actualLaborCost },
+                          { label: 'Consumables', est: calculation.consumablesCost, act: actualCalculation.actualConsumablesCost },
+                          { label: 'Royalty', est: calculation.royaltyCost, act: actualCalculation.actualRoyaltyCost },
+                        ].map(({ label, est, act }) => {
+                          const diff = act - est;
+                          return (
+                            <tr key={label}>
+                              <td className="py-2 pr-4 text-xs text-slate-700">{label}</td>
+                              <td className="py-2 px-3 text-right text-xs text-slate-600">{formatCurrency(est)}</td>
+                              <td className="py-2 px-3 text-right text-xs text-slate-800 font-medium">{formatCurrency(act)}</td>
+                              <td className={`py-2 pl-3 text-right text-xs font-medium ${diff > 0.01 ? 'text-red-600' : diff < -0.01 ? 'text-green-700' : 'text-slate-500'}`}>
+                                {diff > 0.01 ? '+' : ''}{formatCurrency(diff)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        <tr className="border-t-2 border-slate-300 font-semibold">
+                          <td className="py-2.5 pr-4 text-sm text-slate-900">Total</td>
+                          <td className="py-2.5 px-3 text-right text-sm text-slate-700">{formatCurrency(calculation.totalCosts)}</td>
+                          <td className="py-2.5 px-3 text-right text-sm text-slate-900">{formatCurrency(actualCalculation.actualTotalCosts)}</td>
+                          <td className={`py-2.5 pl-3 text-right text-sm font-semibold ${(actualCalculation.actualTotalCosts - calculation.totalCosts) > 0.01 ? 'text-red-600' : 'text-green-700'}`}>
+                            {(actualCalculation.actualTotalCosts - calculation.totalCosts) > 0.01 ? '+' : ''}{formatCurrency(actualCalculation.actualTotalCosts - calculation.totalCosts)}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Margin summary cards */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-5 pt-4 border-t border-slate-200">
+                    <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
+                      <p className="text-xs text-slate-500 mb-1">Estimated Margin</p>
+                      <p className="text-lg font-bold text-slate-800">{formatCurrency(calculation.jobMargin)}</p>
+                      <p className="text-xs text-slate-500">{calculation.totalCosts > 0 ? ((calculation.jobMargin / (parseFloat(formData.totalPrice) || 1)) * 100).toFixed(1) : '0.0'}%</p>
+                    </div>
+                    <div className={`rounded-lg p-3 border ${actualCalculation.actualMargin >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                      <p className="text-xs text-slate-500 mb-1">Actual Margin</p>
+                      <p className={`text-lg font-bold ${actualCalculation.actualMargin >= 0 ? 'text-green-800' : 'text-red-700'}`}>
+                        {formatCurrency(actualCalculation.actualMargin)}
+                      </p>
+                      <p className="text-xs text-slate-500">{actualCalculation.actualMarginPct.toFixed(1)}%</p>
+                    </div>
+                    <div className={`rounded-lg p-3 border ${(actualCalculation.actualMargin - calculation.jobMargin) >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                      <p className="text-xs text-slate-500 mb-1">Margin Difference</p>
+                      <p className={`text-lg font-bold ${(actualCalculation.actualMargin - calculation.jobMargin) >= 0 ? 'text-green-800' : 'text-red-700'}`}>
+                        {(actualCalculation.actualMargin - calculation.jobMargin) >= 0 ? '+' : ''}{formatCurrency(actualCalculation.actualMargin - calculation.jobMargin)}
+                      </p>
+                      <p className="text-xs text-slate-500">vs. estimated</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
 
           {activeTab === 'reminders' && (

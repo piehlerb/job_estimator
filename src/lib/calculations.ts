@@ -1,4 +1,4 @@
-import { ChipSystem, Costs, Laborer, JobCalculation, InstallDaySchedule, Pricing, CoatingRemovalType } from '../types';
+import { ChipSystem, Costs, Laborer, JobCalculation, InstallDaySchedule, ActualDaySchedule, ActualCosts, Pricing, CoatingRemovalType } from '../types';
 
 interface JobInputs {
   floorFootage: number;
@@ -320,5 +320,112 @@ export function calculateJobOutputs(
     suggestedMargin,
     suggestedMarginPct,
     suggestedEffectivePricePerSqft,
+  };
+}
+
+interface ActualCostParams {
+  actualSchedule: ActualDaySchedule[];
+  actualBaseCoatGallons: number;
+  actualTopCoatGallons: number;
+  actualCyclo1Gallons: number;
+  actualTintOz: number;
+  actualChipBoxes: number;
+  chipBoxCost: number;
+  totalPrice: number;
+  installDays: number;
+  installDate: string;
+  travelDistance: number;
+  disableGasHeater?: boolean;
+}
+
+export function calculateActualCosts(
+  params: ActualCostParams,
+  costs: Costs,
+  pricing: Pricing,
+  laborers: Laborer[]
+): ActualCosts {
+  const {
+    actualSchedule,
+    actualBaseCoatGallons,
+    actualTopCoatGallons,
+    actualCyclo1Gallons,
+    actualTintOz,
+    actualChipBoxes,
+    chipBoxCost,
+    totalPrice,
+    installDays,
+    installDate,
+    travelDistance,
+    disableGasHeater,
+  } = params;
+
+  const {
+    baseCostPerGal,
+    topCostPerGal,
+    gasCost,
+    consumablesCost,
+    cyclo1CostPerGal,
+    tintCostPerQuart,
+  } = costs;
+
+  const actualChipCost = actualChipBoxes * chipBoxCost;
+  const actualBaseCost = actualBaseCoatGallons * baseCostPerGal;
+  const actualTopCost = actualTopCoatGallons * topCostPerGal;
+  const actualCyclo1Cost = actualCyclo1Gallons * cyclo1CostPerGal;
+  const actualTintCost = actualTintOz > 0 ? (actualTintOz / 32) * tintCostPerQuart : 0;
+
+  const actualTotalHours = actualSchedule.reduce((sum, day) => sum + day.hours, 0);
+
+  const gasGeneratorGallonsPerHour = pricing.gasGeneratorGallonsPerHour ?? 1.2;
+  const gasHeaterGallonsPerHour = pricing.gasHeaterGallonsPerHour ?? 1;
+
+  const actualGasGeneratorCost = gasCost * gasGeneratorGallonsPerHour * actualTotalHours;
+
+  const gasHeaterMonths = pricing.gasHeaterMonths && pricing.gasHeaterMonths.length > 0
+    ? pricing.gasHeaterMonths
+    : [11, 12, 1, 2, 3];
+  const installMonth = installDate ? new Date(installDate).getMonth() + 1 : 0;
+  const isWinterMonth = gasHeaterMonths.includes(installMonth);
+  const actualGasHeaterCost = !disableGasHeater && isWinterMonth
+    ? gasCost * gasHeaterGallonsPerHour * actualTotalHours
+    : 0;
+
+  const travelGasMpg = pricing.travelGasMpg ?? 10;
+  const roundTripMiles = travelDistance * 2;
+  const travelGasCostPerRoundTrip = travelGasMpg > 0 ? (roundTripMiles * gasCost / travelGasMpg) : 0;
+  const actualGasTravelCost = travelGasCostPerRoundTrip * (installDays + 1);
+
+  const actualLaborCost = actualSchedule.reduce((total, daySchedule) => {
+    const dayLaborers = laborers.filter(l => daySchedule.laborerIds.includes(l.id));
+    const dayRate = dayLaborers.reduce((sum, l) => sum + l.fullyLoadedRate, 0);
+    return total + (dayRate * daySchedule.hours);
+  }, 0);
+
+  const actualConsumablesCost = consumablesCost;
+  const actualRoyaltyCost = totalPrice * 0.05;
+
+  const actualTotalCosts = actualChipCost + actualBaseCost + actualTopCost + actualCyclo1Cost
+    + actualTintCost + actualGasGeneratorCost + actualGasHeaterCost + actualGasTravelCost
+    + actualLaborCost + actualConsumablesCost + actualRoyaltyCost;
+
+  const actualMargin = totalPrice - actualTotalCosts;
+  const actualMarginPct = totalPrice > 0 ? (actualMargin / totalPrice) * 100 : 0;
+
+  return {
+    actualChipCost,
+    actualBaseCost,
+    actualTopCost,
+    actualCyclo1Cost,
+    actualTintCost,
+    actualGasGeneratorCost,
+    actualGasHeaterCost,
+    actualGasTravelCost,
+    actualLaborCost,
+    actualConsumablesCost,
+    actualRoyaltyCost,
+    actualTotalCosts,
+    actualTotalHours,
+    actualMargin,
+    actualMarginPct,
   };
 }

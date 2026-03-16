@@ -156,11 +156,40 @@ export default function JobSheet({ jobId, onBack }: JobSheetProps) {
               <div>
                 <h3 className="text-sm font-semibold text-slate-900 mb-2 border-b border-slate-200 pb-1">Job Details</h3>
                 <div className="grid grid-cols-2 gap-2 text-sm">
+                  <p className="col-span-2"><span className="text-slate-500">System:</span> <span className="font-medium">{job.systemSnapshot.name}</span></p>
                   <p><span className="text-slate-500">Chip Blend:</span> <span className="font-medium">{job.chipBlend || '-'}</span></p>
                   <p><span className="text-slate-500">Base Color:</span> <span className="font-medium">{job.baseColor || '-'}</span></p>
                   <p><span className="text-slate-500">Tags:</span> <span className="font-medium">{(job.tags || []).length > 0 ? (job.tags || []).join(', ') : '-'}</span></p>
                   <p><span className="text-slate-500">Floor Sq Ft:</span> <span className="font-medium">{job.floorFootage.toLocaleString()}</span></p>
                   <p><span className="text-slate-500">Vertical Sq Ft:</span> <span className="font-medium">{job.verticalFootage.toLocaleString()}</span></p>
+                </div>
+              </div>
+
+              {/* System Spread Rate Assumptions */}
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900 mb-2 border-b border-slate-200 pb-1">Spread Rate Assumptions</h3>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <p>
+                    <span className="text-slate-500">Base Coat:</span>{' '}
+                    <span className="font-medium">{job.systemSnapshot.baseSpread} sqft/gal</span>
+                    <span className="text-slate-400"> × {job.systemSnapshot.baseCoats ?? 1} coat{(job.systemSnapshot.baseCoats ?? 1) !== 1 ? 's' : ''}</span>
+                  </p>
+                  <p>
+                    <span className="text-slate-500">Top Coat:</span>{' '}
+                    <span className="font-medium">{job.systemSnapshot.topSpread} sqft/gal</span>
+                    <span className="text-slate-400"> × {job.systemSnapshot.topCoats ?? 1} coat{(job.systemSnapshot.topCoats ?? 1) !== 1 ? 's' : ''}</span>
+                  </p>
+                  {(job.systemSnapshot.cyclo1Spread > 0) && (
+                    <p>
+                      <span className="text-slate-500">Cyclo1:</span>{' '}
+                      <span className="font-medium">{job.systemSnapshot.cyclo1Spread} sqft/gal</span>
+                      <span className="text-slate-400"> × {job.systemSnapshot.cyclo1Coats ?? 1} coat{(job.systemSnapshot.cyclo1Coats ?? 1) !== 1 ? 's' : ''}</span>
+                    </p>
+                  )}
+                  <p>
+                    <span className="text-slate-500">Chip:</span>{' '}
+                    <span className="font-medium">{job.systemSnapshot.feetPerLb} sqft/lb</span>
+                  </p>
                 </div>
               </div>
 

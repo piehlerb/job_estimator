@@ -33,6 +33,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
 
   // Filter state - default to showing Pending and Won
   const [statusFilter, setStatusFilter] = useState<JobStatus[]>(['Pending', 'Won']);
+  const [probabilityFilter, setProbabilityFilter] = useState<number>(0);
   const [chipBlendFilter, setChipBlendFilter] = useState<string>('');
   const [selectedTagFilters, setSelectedTagFilters] = useState<string[]>([]);
   const [tagMatchMode, setTagMatchMode] = useState<'any' | 'all'>('any');
@@ -212,6 +213,11 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
       filtered = filtered.filter(({ job }) => statusFilter.includes(job.status));
     }
 
+    // Apply probability filter
+    if (probabilityFilter > 0) {
+      filtered = filtered.filter(({ job }) => (job.probability ?? 20) >= probabilityFilter);
+    }
+
     // Apply chip blend filter
     if (chipBlendFilter) {
       filtered = filtered.filter(({ job }) => job.chipBlend === chipBlendFilter);
@@ -242,7 +248,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
           return new Date(b.job.createdAt).getTime() - new Date(a.job.createdAt).getTime();
       }
     });
-  }, [jobsWithCalc, searchQuery, statusFilter, chipBlendFilter, selectedTagFilters, tagMatchMode, sortBy]);
+  }, [jobsWithCalc, searchQuery, statusFilter, probabilityFilter, chipBlendFilter, selectedTagFilters, tagMatchMode, sortBy]);
 
   type GroupDisplayItem = {
     type: 'group';
@@ -477,6 +483,26 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
                       }`}
                     >
                       {status}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Probability Filter */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <label className="text-xs sm:text-sm text-slate-600 font-medium">Min Prob:</label>
+                <div className="flex gap-1.5 flex-wrap">
+                  {[0, 20, 40, 60, 80, 100].map(p => (
+                    <button
+                      key={p}
+                      onClick={() => setProbabilityFilter(p)}
+                      className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                        probabilityFilter === p
+                          ? 'bg-blue-100 text-blue-800'
+                          : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                      }`}
+                    >
+                      {p === 0 ? 'Any' : `≥${p}%`}
                     </button>
                   ))}
                 </div>
