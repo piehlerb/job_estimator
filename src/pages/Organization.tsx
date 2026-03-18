@@ -8,6 +8,7 @@ import {
   createOrganization,
   joinOrganizationByCode,
   leaveOrganization,
+  deleteOrganization,
   getOrgMembers,
   getOrgInvitations,
   generateInviteCode,
@@ -117,6 +118,21 @@ export default function Organization() {
       await refreshOrganization();
     } catch (err: any) {
       setMgmtError(err.message ?? 'Failed to leave organization.');
+    }
+  };
+
+  // =====================================================
+  // Delete organization
+  // =====================================================
+  const handleDelete = async () => {
+    if (!organization) return;
+    if (!confirm(`Permanently delete "${organization.name}"? All members will lose access. Your data will be kept but unlinked from the org.`)) return;
+    setMgmtError('');
+    try {
+      await deleteOrganization(organization.id);
+      await refreshOrganization();
+    } catch (err: any) {
+      setMgmtError(err.message ?? 'Failed to delete organization.');
     }
   };
 
@@ -380,6 +396,16 @@ export default function Organization() {
           >
             <RefreshCw size={16} className={dataLoading ? 'animate-spin' : ''} />
           </button>
+          {isAdmin && (
+            <button
+              onClick={handleDelete}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
+              title="Delete organization"
+            >
+              <Trash2 size={14} />
+              Delete Org
+            </button>
+          )}
           <button
             onClick={handleLeave}
             className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"

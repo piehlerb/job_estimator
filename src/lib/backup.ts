@@ -13,6 +13,9 @@ import {
   getAllJobs,
   getAllChipBlends,
   getAllChipInventory,
+  getAllTintInventory,
+  saveTintInventory,
+  deleteTintInventory,
   getTopCoatInventory,
   getBaseCoatInventory,
   getMiscInventory,
@@ -54,6 +57,7 @@ export async function exportAllData(): Promise<ExportData> {
     jobs,
     chipBlends,
     chipInventory,
+    tintInventory,
     topCoatInventory,
     baseCoatInventory,
     miscInventory,
@@ -67,6 +71,7 @@ export async function exportAllData(): Promise<ExportData> {
     getAllJobs(),
     getAllChipBlends(),
     getAllChipInventory(),
+    getAllTintInventory(),
     getTopCoatInventory(),
     getBaseCoatInventory(),
     getMiscInventory(),
@@ -89,6 +94,7 @@ export async function exportAllData(): Promise<ExportData> {
     jobs,
     chipBlends,
     chipInventory,
+    tintInventory,
     topCoatInventory,
     baseCoatInventory,
     miscInventory,
@@ -253,6 +259,21 @@ function validateChipInventory(inventory: unknown): string[] {
   return errors;
 }
 
+function validateTintInventory(inventory: unknown): string[] {
+  const errors: string[] = [];
+  if (!inventory || typeof inventory !== 'object') {
+    return ['Invalid tint inventory object'];
+  }
+  const i = inventory as Record<string, unknown>;
+
+  if (!isValidString(i.id)) errors.push('TintInventory missing valid id');
+  if (!isValidString(i.color)) errors.push('TintInventory missing valid color');
+  if (!isValidNumber(i.ounces)) errors.push('TintInventory missing valid ounces');
+  if (!isValidISODate(i.updatedAt)) errors.push('TintInventory missing valid updatedAt');
+
+  return errors;
+}
+
 function validateTopCoatInventory(inventory: unknown): string[] {
   const errors: string[] = [];
   if (!inventory || typeof inventory !== 'object') {
@@ -368,6 +389,13 @@ export function validateImportData(data: unknown): { valid: boolean; errors: str
     });
   }
 
+  if (Array.isArray(d.tintInventory)) {
+    d.tintInventory.forEach((inv, i) => {
+      const errs = validateTintInventory(inv);
+      errs.forEach(e => errors.push(`TintInventory[${i}]: ${e}`));
+    });
+  }
+
   if (d.topCoatInventory !== null) {
     const errs = validateTopCoatInventory(d.topCoatInventory);
     errs.forEach(e => errors.push(`TopCoatInventory: ${e}`));
@@ -411,6 +439,7 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
     localJobs,
     localChipBlends,
     localChipInventory,
+    localTintInventory,
     localTopCoatInventory,
     localBaseCoatInventory,
     localMiscInventory,
@@ -423,6 +452,7 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
     getAllJobs(),
     getAllChipBlends(),
     getAllChipInventory(),
+    getAllTintInventory(),
     getTopCoatInventory(),
     getBaseCoatInventory(),
     getMiscInventory(),
@@ -436,6 +466,7 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
   const localJobsMap = new Map(localJobs.map(j => [j.id, j]));
   const localChipBlendsMap = new Map(localChipBlends.map(b => [b.id, b]));
   const localChipInventoryMap = new Map(localChipInventory.map(i => [i.id, i]));
+  const localTintInventoryMap = new Map(localTintInventory.map(i => [i.id, i]));
 
   // Track which IDs are in import for delete detection
   const importSystemIds = new Set(importData.systems.map(s => s.id));
@@ -445,6 +476,7 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
   const importJobIds = new Set(importData.jobs.map(j => j.id));
   const importChipBlendIds = new Set(importData.chipBlends.map(b => b.id));
   const importChipInventoryIds = new Set(importData.chipInventory.map(i => i.id));
+  const importTintInventoryIds = new Set((importData.tintInventory || []).map(i => i.id));
 
   // Compare systems
   for (const importSystem of importData.systems) {
@@ -606,6 +638,27 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
     }
   }
 
+  // Compare tint inventory
+  for (const importInv of (importData.tintInventory || [])) {
+    const local = localTintInventoryMap.get(importInv.id);
+    if (!local) {
+      preview.toAdd.push({ entityType: 'TintInventory', entityName: importInv.color });
+    } else if (isNewer(importInv.updatedAt, local.updatedAt)) {
+      preview.toUpdate.push({
+        entityType: 'TintInventory',
+        entityName: importInv.color,
+        localUpdatedAt: local.updatedAt,
+        importUpdatedAt: importInv.updatedAt,
+      });
+    } else {
+      preview.toSkip.push({
+        entityType: 'TintInventory',
+        entityName: importInv.color,
+        reason: 'Local version is same or newer',
+      });
+    }
+  }
+
   // Compare top coat inventory (singleton)
   if (importData.topCoatInventory) {
     if (!localTopCoatInventory) {
@@ -703,6 +756,11 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
         preview.toDelete.push({ entityType: 'ChipInventory', entityName: local.blend });
       }
     }
+    for (const local of localTintInventory) {
+      if (!importTintInventoryIds.has(local.id)) {
+        preview.toDelete.push({ entityType: 'TintInventory', entityName: local.color });
+      }
+    }
   }
 
   return preview;
@@ -722,6 +780,7 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
     localJobs,
     localChipBlends,
     localChipInventory,
+    localTintInventory,
     localTopCoatInventory,
     localBaseCoatInventory,
     localMiscInventory,
@@ -734,6 +793,7 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
     getAllJobs(),
     getAllChipBlends(),
     getAllChipInventory(),
+    getAllTintInventory(),
     getTopCoatInventory(),
     getBaseCoatInventory(),
     getMiscInventory(),
@@ -747,6 +807,7 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
   const localJobsMap = new Map(localJobs.map(j => [j.id, j]));
   const localChipBlendsMap = new Map(localChipBlends.map(b => [b.id, b]));
   const localChipInventoryMap = new Map(localChipInventory.map(i => [i.id, i]));
+  const localTintInventoryMap = new Map(localTintInventory.map(i => [i.id, i]));
 
   // Track import IDs for deletion
   const importSystemIds = new Set(importData.systems.map(s => s.id));
@@ -755,6 +816,7 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
   const importProductIds = new Set((importData.products || []).map(p => p.id));
   const importJobIds = new Set(importData.jobs.map(j => j.id));
   const importChipInventoryIds = new Set(importData.chipInventory.map(i => i.id));
+  const importTintInventoryIds = new Set((importData.tintInventory || []).map(i => i.id));
 
   // Import systems
   for (const importSystem of importData.systems) {
@@ -864,6 +926,20 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
     }
   }
 
+  // Import tint inventory
+  for (const importInv of (importData.tintInventory || [])) {
+    const local = localTintInventoryMap.get(importInv.id);
+    if (!local) {
+      await saveTintInventory(importInv);
+      log.push({ entityType: 'TintInventory', entityName: importInv.color, action: 'add', reason: 'New record' });
+    } else if (isNewer(importInv.updatedAt, local.updatedAt)) {
+      await saveTintInventory(importInv);
+      log.push({ entityType: 'TintInventory', entityName: importInv.color, action: 'update', reason: 'Import is newer' });
+    } else {
+      log.push({ entityType: 'TintInventory', entityName: importInv.color, action: 'skip', reason: 'Local is same or newer' });
+    }
+  }
+
   // Import top coat inventory
   if (importData.topCoatInventory) {
     if (!localTopCoatInventory) {
@@ -940,6 +1016,12 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
       if (!importChipInventoryIds.has(local.id)) {
         await deleteChipInventory(local.id);
         log.push({ entityType: 'ChipInventory', entityName: local.blend, action: 'delete', reason: 'Not in import file' });
+      }
+    }
+    for (const local of localTintInventory) {
+      if (!importTintInventoryIds.has(local.id)) {
+        await deleteTintInventory(local.id);
+        log.push({ entityType: 'TintInventory', entityName: local.color, action: 'delete', reason: 'Not in import file' });
       }
     }
   }

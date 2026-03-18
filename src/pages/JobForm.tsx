@@ -19,8 +19,9 @@ import {
   getAllProducts,
   getAllBaseCoatColors,
   getAllJobsByGroupId,
+  getAllTintInventory,
 } from '../lib/db';
-import { BaseColor, ChipSystem, Costs, Pricing, Job, JobCalculation, JobStatus, Laborer, InstallDaySchedule, ActualDaySchedule, ActualCosts, ChipInventory, CoatingRemovalType, Product, JobProduct, BaseCoatColor, JobReminder } from '../types';
+import { BaseColor, ChipSystem, Costs, Pricing, Job, JobCalculation, JobStatus, Laborer, InstallDaySchedule, ActualDaySchedule, ActualCosts, ChipInventory, CoatingRemovalType, Product, JobProduct, BaseCoatColor, JobReminder, TintInventory } from '../types';
 import { calculateJobOutputs, calculateActualCosts } from '../lib/calculations';
 import InstallDayScheduleComponent from '../components/InstallDaySchedule';
 import { convertLegacyJobToSchedule } from '../lib/jobMigration';
@@ -73,6 +74,8 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
   const [showBlendDropdown, setShowBlendDropdown] = useState(false);
   const [chipInventory, setChipInventory] = useState<ChipInventory[]>([]);
   const [baseCoatColors, setBaseCoatColors] = useState<BaseCoatColor[]>([]);
+  const [tintInventory, setTintInventory] = useState<TintInventory[]>([]);
+  const [showTintColorDropdown, setShowTintColorDropdown] = useState(false);
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [showTagDropdown, setShowTagDropdown] = useState(false);
   const [availableCustomers, setAvailableCustomers] = useState<CustomerOption[]>([]);
@@ -147,6 +150,7 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
     notes: '',
     includeBasecoatTint: false,
     includeTopcoatTint: false,
+    tintColor: '',
     antiSlip: false,
     abrasionResistance: false,
     cyclo1Topcoat: false,
@@ -336,6 +340,7 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
       const inventory = await getAllChipInventory();
       const productCatalog = await getAllProducts();
       const baseCoatColorList = await getAllBaseCoatColors();
+      const tintInv = await getAllTintInventory();
       console.log('[JobForm] Data loaded:', { systems: allSystems.length, costs: !!storedCosts, pricing: !!storedPricing, laborers: laborers.length });
       setSystems(allSystems);
       setActiveLaborers(laborers);
@@ -343,6 +348,7 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
       setChipInventory(inventory);
       setAllProducts(productCatalog);
       setBaseCoatColors(baseCoatColorList);
+      setTintInventory(tintInv);
       const tagSet = new Set<string>();
       const customerMap = new Map<string, { name: string; address?: string; updatedAt: string }>();
 
@@ -434,6 +440,7 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
             notes: job.notes || '',
             includeBasecoatTint: job.includeBasecoatTint || false,
             includeTopcoatTint: job.includeTopcoatTint || false,
+            tintColor: job.tintColor || '',
             antiSlip: job.antiSlip || false,
             abrasionResistance: job.abrasionResistance || false,
             cyclo1Topcoat: job.cyclo1Topcoat || false,
@@ -1190,6 +1197,7 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
         notes: formData.notes || undefined,
         includeBasecoatTint: formData.includeBasecoatTint,
         includeTopcoatTint: formData.includeTopcoatTint,
+        tintColor: (formData.includeBasecoatTint || formData.includeTopcoatTint) ? (formData.tintColor || undefined) : undefined,
         antiSlip: formData.antiSlip,
         abrasionResistance: formData.abrasionResistance,
         cyclo1Topcoat: formData.cyclo1Topcoat,
@@ -1808,6 +1816,51 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
                 </label>
               </div>
             </div>
+
+            {(formData.includeBasecoatTint || formData.includeTopcoatTint) && (
+              <div>
+                <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Tint Color</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={formData.tintColor}
+                    onChange={(e) => {
+                      setFormData({ ...formData, tintColor: e.target.value });
+                      setShowTintColorDropdown(true);
+                    }}
+                    onFocus={() => setShowTintColorDropdown(true)}
+                    onBlur={() => setTimeout(() => setShowTintColorDropdown(false), 200)}
+                    placeholder="Select or type a new color..."
+                    className="w-full px-3 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime"
+                  />
+                  {showTintColorDropdown && tintInventory.length > 0 && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-slate-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                      {tintInventory
+                        .filter((t) => t.color.toLowerCase().includes(formData.tintColor.toLowerCase()))
+                        .map((t) => (
+                          <button
+                            key={t.id}
+                            type="button"
+                            onClick={() => {
+                              setFormData({ ...formData, tintColor: t.color });
+                              setShowTintColorDropdown(false);
+                            }}
+                            className="w-full px-3 py-2 text-left hover:bg-slate-100 text-sm"
+                          >
+                            {t.color}
+                            <span className="ml-2 text-slate-400 text-xs">{t.ounces} oz on hand</span>
+                          </button>
+                        ))}
+                      {formData.tintColor && !tintInventory.some((t) => t.color.toLowerCase() === formData.tintColor.toLowerCase()) && (
+                        <div className="px-3 py-2 text-sm text-slate-500 border-t border-slate-200">
+                          New color — add to inventory to track usage
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             <div>
               <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Anti-Slip</label>

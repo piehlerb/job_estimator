@@ -124,22 +124,24 @@ export async function joinOrganizationByCode(inviteCode: string): Promise<Organi
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
 
-  const code = inviteCode.trim().toUpperCase();
+  // Use a SECURITY DEFINER RPC to look up the invite + org, bypassing RLS.
+  // Direct joins from organization_invitations → organizations fail for non-members
+  // because the organizations RLS blocks access until the user is a member.
+  const { data: rows, error: rpcError } = await supabase
+    .rpc('lookup_invite_by_code', { p_invite_code: inviteCode.trim() });
 
-  // Look up the invitation
-  const { data: invite, error: inviteError } = await supabase
-    .from('organization_invitations')
-    .select('*, organizations(id, name, created_by, created_at, updated_at)')
-    .eq('invite_code', code)
-    .is('accepted_at', null)
-    .gt('expires_at', new Date().toISOString())
-    .maybeSingle();
+  if (rpcError) throw new Error(rpcError.message);
 
-  if (inviteError) throw new Error(inviteError.message);
-  if (!invite) throw new Error('Invalid or expired invite code.');
+  const row = rows?.[0];
+  if (!row) throw new Error('Invalid or expired invite code.');
 
-  const orgRow = (invite as any).organizations;
-  if (!orgRow) throw new Error('Organization not found.');
+  const orgRow = {
+    id: row.org_id,
+    name: row.org_name,
+    created_by: row.org_created_by,
+    created_at: row.org_created_at,
+    updated_at: row.org_updated_at,
+  };
 
   // Check user isn't already a member
   const { data: existing } = await supabase
@@ -158,8 +160,8 @@ export async function joinOrganizationByCode(inviteCode: string): Promise<Organi
       org_id: orgRow.id,
       user_id: user.id,
       email: user.email ?? '',
-      role: invite.role,
-      invited_by: invite.invited_by,
+      role: row.invite_role,
+      invited_by: row.invited_by_user,
     });
 
   if (memberError) throw new Error(memberError.message);
@@ -168,12 +170,20 @@ export async function joinOrganizationByCode(inviteCode: string): Promise<Organi
   await supabase
     .from('organization_invitations')
     .update({ accepted_by: user.id, accepted_at: new Date().toISOString() })
-    .eq('id', invite.id);
+    .eq('id', row.invitation_id);
 
   // Migrate all existing personal data to this org
   await migrateMyDataToOrg(orgRow.id);
 
   return mapOrg(orgRow);
+}
+
+// =====================================================
+// DELETE: Remove the entire organization (admin only)
+// =====================================================
+export async function deleteOrganization(orgId: string): Promise<void> {
+  const { error } = await supabase.rpc('delete_organization', { p_org_id: orgId });
+  if (error) throw new Error(error.message);
 }
 
 // =====================================================

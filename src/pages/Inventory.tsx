@@ -7,6 +7,9 @@ import {
   getAllChipInventory,
   saveChipInventory,
   deleteChipInventory,
+  getAllTintInventory,
+  saveTintInventory,
+  deleteTintInventory,
   getTopCoatInventory,
   saveTopCoatInventory,
   getBaseCoatInventory,
@@ -19,7 +22,7 @@ import {
   getDefaultPricing,
   ChipBlend,
 } from '../lib/db';
-import { Job, ChipInventory, TopCoatInventory, BaseCoatInventory, MiscInventory, Costs, Pricing } from '../types';
+import { Job, ChipInventory, TintInventory, TopCoatInventory, BaseCoatInventory, MiscInventory, Costs, Pricing } from '../types';
 import { calculateJobOutputs } from '../lib/calculations';
 import { normalizeChipBlendName } from '../lib/syncHelpers';
 
@@ -73,6 +76,11 @@ export default function Inventory() {
   const [baseBTanCommitment, setBaseBTanCommitment] = useState<CoatCommitment>({ committed: 0, potential: 0 });
   const [baseBClearCommitment, setBaseBClearCommitment] = useState<CoatCommitment>({ committed: 0, potential: 0 });
 
+  const [tintInventory, setTintInventory] = useState<TintInventory[]>([]);
+  const [tintCommitments, setTintCommitments] = useState<{ color: string; committed: number; potential: number }[]>([]);
+  const [newTintColor, setNewTintColor] = useState('');
+  const [newTintOunces, setNewTintOunces] = useState('');
+
   const [newChipBlend, setNewChipBlend] = useState('');
   const [newChipPounds, setNewChipPounds] = useState('');
   const [showBlendDropdown, setShowBlendDropdown] = useState(false);
@@ -84,9 +92,10 @@ export default function Inventory() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [blends, chips, topCoat, baseCoat, misc, jobs, currentCosts, currentPricing] = await Promise.all([
+      const [blends, chips, tints, topCoat, baseCoat, misc, jobs, currentCosts, currentPricing] = await Promise.all([
         getAllChipBlends(),
         getAllChipInventory(),
+        getAllTintInventory().catch(() => [] as TintInventory[]),
         getTopCoatInventory(),
         getBaseCoatInventory(),
         getMiscInventory(),
@@ -97,6 +106,7 @@ export default function Inventory() {
 
       setChipBlends(blends);
       setChipInventory(chips);
+      setTintInventory(tints);
       if (topCoat) setTopCoatInventory(topCoat);
       if (baseCoat) setBaseCoatInventory(baseCoat);
       if (misc) setMiscInventory(misc);
@@ -104,7 +114,7 @@ export default function Inventory() {
       // Calculate commitments from jobs that are today or in the future
       const costs = currentCosts || getDefaultCosts();
       const pricing = currentPricing || getDefaultPricing();
-      calculateCommitments(jobs, costs, pricing);
+      calculateCommitments(jobs, costs, pricing, tints);
     } catch (error) {
       console.error('Error loading inventory:', error);
     } finally {
@@ -112,7 +122,7 @@ export default function Inventory() {
     }
   };
 
-  const calculateCommitments = (jobs: Job[], currentCosts: Costs, currentPricing: Pricing) => {
+  const calculateCommitments = (jobs: Job[], currentCosts: Costs, currentPricing: Pricing, currentTintInventory?: TintInventory[]) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -197,6 +207,65 @@ export default function Inventory() {
     setChipCommitments(
       Object.entries(chipByBlend).map(([blend, values]) => ({
         blend,
+        committed: values.committed,
+        potential: values.potential,
+      }))
+    );
+
+    // Calculate tint commitments by color
+    const tintByColor: Record<string, { committed: number; potential: number }> = {};
+
+    const calculateTintForJobs = (jobList: Job[], type: 'committed' | 'potential') => {
+      jobList.forEach((job) => {
+        if (!job.tintColor || (!job.includeBasecoatTint && !job.includeTopcoatTint)) return;
+        const mergedCosts = getMergedCosts(job);
+        const mergedPricing = getMergedPricing(job);
+        const calc = calculateJobOutputs(
+          {
+            floorFootage: job.floorFootage,
+            verticalFootage: job.verticalFootage,
+            crackFillFactor: job.crackFillFactor,
+            travelDistance: job.travelDistance,
+            installDate: job.installDate,
+            installDays: job.installDays,
+            jobHours: job.jobHours,
+            totalPrice: job.totalPrice,
+            includeBasecoatTint: job.includeBasecoatTint || false,
+            includeTopcoatTint: job.includeTopcoatTint || false,
+            antiSlip: job.antiSlip || false,
+            abrasionResistance: job.abrasionResistance || false,
+            cyclo1Topcoat: job.cyclo1Topcoat || false,
+            cyclo1Coats: job.cyclo1Coats || 0,
+            coatingRemoval: job.coatingRemoval || 'None',
+            moistureMitigation: job.moistureMitigation || false,
+            tags: job.tags,
+          },
+          job.systemSnapshot,
+          mergedCosts,
+          job.laborersSnapshot,
+          mergedPricing
+        );
+        const color = job.tintColor;
+        if (!tintByColor[color]) tintByColor[color] = { committed: 0, potential: 0 };
+        tintByColor[color][type] += calc.tintNeeded;
+      });
+    };
+
+    calculateTintForJobs(wonJobs, 'committed');
+    calculateTintForJobs(wonAndPendingJobs, 'potential');
+
+    // Also include colors from inventory that have no commitments
+    if (currentTintInventory) {
+      currentTintInventory.forEach((inv) => {
+        if (!tintByColor[inv.color]) {
+          tintByColor[inv.color] = { committed: 0, potential: 0 };
+        }
+      });
+    }
+
+    setTintCommitments(
+      Object.entries(tintByColor).map(([color, values]) => ({
+        color,
         committed: values.committed,
         potential: values.potential,
       }))
@@ -322,6 +391,38 @@ export default function Inventory() {
       committed: (clearCommitted * 2) / 3,
       potential: (clearPotential * 2) / 3,
     });
+  };
+
+  const handleAddTintInventory = async () => {
+    if (!newTintColor.trim() || !newTintOunces) return;
+    const color = newTintColor.trim();
+    const inventory: TintInventory = {
+      id: generateId(),
+      color,
+      ounces: parseFloat(newTintOunces) || 0,
+      updatedAt: new Date().toISOString(),
+    };
+    await saveTintInventory(inventory);
+    setTintInventory([...tintInventory, inventory]);
+    if (!tintCommitments.find((t) => t.color === color)) {
+      setTintCommitments([...tintCommitments, { color, committed: 0, potential: 0 }]);
+    }
+    setNewTintColor('');
+    setNewTintOunces('');
+  };
+
+  const handleUpdateTintInventory = async (id: string, ounces: number) => {
+    const updated = tintInventory.map((inv) =>
+      inv.id === id ? { ...inv, ounces, updatedAt: new Date().toISOString() } : inv
+    );
+    setTintInventory(updated);
+    const item = updated.find((inv) => inv.id === id);
+    if (item) await saveTintInventory(item);
+  };
+
+  const handleDeleteTintInventory = async (id: string) => {
+    await deleteTintInventory(id);
+    setTintInventory(tintInventory.filter((inv) => inv.id !== id));
   };
 
   const handleAddChipInventory = async () => {
@@ -513,6 +614,106 @@ export default function Inventory() {
           <button
             onClick={handleAddChipInventory}
             disabled={!newChipBlend || !newChipPounds}
+            className="flex items-center gap-1 px-3 py-2 bg-gf-lime text-white rounded-lg text-sm font-medium hover:bg-gf-dark-green disabled:bg-slate-300"
+          >
+            <Plus size={16} />
+            Add
+          </button>
+        </div>
+      </div>
+
+      {/* Tint Inventory */}
+      <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6 mb-6">
+        <h2 className="text-xl font-bold text-slate-900 mb-4">Tint Inventory</h2>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-200">
+                <th className="text-left py-3 px-2 font-semibold">Color</th>
+                <th className="text-right py-3 px-2 font-semibold">On Hand (oz)</th>
+                <th className="text-right py-3 px-2 font-semibold">Committed</th>
+                <th className="text-right py-3 px-2 font-semibold">Available</th>
+                <th className="text-right py-3 px-2 font-semibold">Potential</th>
+                <th className="text-right py-3 px-2 font-semibold">Avail (Potential)</th>
+                <th className="py-3 px-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {tintInventory
+                .slice()
+                .sort((a, b) => a.color.localeCompare(b.color))
+                .map((inv) => {
+                  const commitment = tintCommitments.find((c) => c.color === inv.color);
+                  const committed = commitment?.committed || 0;
+                  const potential = commitment?.potential || 0;
+                  const available = inv.ounces - committed;
+                  const availablePotential = inv.ounces - potential;
+                  return (
+                    <tr key={inv.id} className="border-b border-slate-100">
+                      <td className="py-3 px-2 font-medium">{inv.color}</td>
+                      <td className="py-3 px-2 text-right">
+                        <input
+                          type="number"
+                          step="0.5"
+                          value={inv.ounces}
+                          onChange={(e) => handleUpdateTintInventory(inv.id, parseFloat(e.target.value) || 0)}
+                          className="w-24 px-2 py-1 border border-slate-300 rounded text-right"
+                        />
+                      </td>
+                      <td className="py-3 px-2 text-right">{committed.toFixed(1)}</td>
+                      <td className={`py-3 px-2 text-right font-semibold ${available < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                        {available.toFixed(1)}
+                      </td>
+                      <td className="py-3 px-2 text-right text-slate-500">{potential.toFixed(1)}</td>
+                      <td className={`py-3 px-2 text-right ${availablePotential < 0 ? 'text-red-400' : 'text-slate-500'}`}>
+                        {availablePotential.toFixed(1)}
+                      </td>
+                      <td className="py-3 px-2 text-right">
+                        <button
+                          onClick={() => handleDeleteTintInventory(inv.id)}
+                          className="text-red-500 hover:text-red-700"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              {tintInventory.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="py-4 text-center text-slate-400 text-sm">No tint colors added yet</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="mt-4 flex gap-2 items-end">
+          <div>
+            <label className="block text-xs text-slate-600 mb-1">Color Name</label>
+            <input
+              type="text"
+              value={newTintColor}
+              onChange={(e) => setNewTintColor(e.target.value)}
+              placeholder="e.g. Slate Gray"
+              className="w-48 px-3 py-2 border border-slate-300 rounded-lg text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-600 mb-1">Ounces</label>
+            <input
+              type="number"
+              step="0.5"
+              value={newTintOunces}
+              onChange={(e) => setNewTintOunces(e.target.value)}
+              placeholder="0"
+              className="w-24 px-3 py-2 border border-slate-300 rounded-lg text-sm"
+            />
+          </div>
+          <button
+            onClick={handleAddTintInventory}
+            disabled={!newTintColor.trim() || !newTintOunces}
             className="flex items-center gap-1 px-3 py-2 bg-gf-lime text-white rounded-lg text-sm font-medium hover:bg-gf-dark-green disabled:bg-slate-300"
           >
             <Plus size={16} />

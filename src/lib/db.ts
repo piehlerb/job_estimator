@@ -1,7 +1,7 @@
-import { ChipSystem, PricingVariable, Job, Costs, Laborer, ChipInventory, TopCoatInventory, BaseCoatInventory, MiscInventory, Pricing, Customer, Product, BaseCoatColor } from '../types';
+import { ChipSystem, PricingVariable, Job, Costs, Laborer, ChipInventory, TintInventory, TopCoatInventory, BaseCoatInventory, MiscInventory, Pricing, Customer, Product, BaseCoatColor } from '../types';
 
 const DB_NAME = 'JobEstimator';
-const DB_VERSION = 12; // Incremented for base coat colors store
+const DB_VERSION = 14; // Incremented again to ensure tintInventory store is created
 
 // Auto-sync flag - can be disabled for batch operations
 let autoSyncEnabled = true;
@@ -146,6 +146,9 @@ export async function initDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains('baseCoatColors')) {
         db.createObjectStore('baseCoatColors', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('tintInventory')) {
+        db.createObjectStore('tintInventory', { keyPath: 'id' });
       }
     };
   });
@@ -964,6 +967,74 @@ export async function deleteChipInventory(id: string): Promise<void> {
   await queueForSync('chipInventory', id, 'delete');
 
   // Trigger background sync
+  await triggerBackgroundSync();
+}
+
+// Tint Inventory
+export async function getAllTintInventory(): Promise<TintInventory[]> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['tintInventory'], 'readonly');
+    const store = transaction.objectStore('tintInventory');
+    const request = store.getAll();
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const results = request.result || [];
+      resolve(results.filter((inv: TintInventory) => !inv.deleted));
+    };
+  });
+}
+
+// Sync version - returns all records including deleted
+export async function getAllTintInventoryForSync(): Promise<TintInventory[]> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['tintInventory'], 'readonly');
+    const store = transaction.objectStore('tintInventory');
+    const request = store.getAll();
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result || []);
+  });
+}
+
+export async function saveTintInventory(inventory: TintInventory): Promise<void> {
+  const db = await getDB();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(['tintInventory'], 'readwrite');
+    const store = transaction.objectStore('tintInventory');
+    const request = store.put(inventory);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve();
+  });
+
+  await queueForSync('tintInventory', inventory.id, 'update');
+  await triggerBackgroundSync();
+}
+
+export async function deleteTintInventory(id: string): Promise<void> {
+  const db = await getDB();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(['tintInventory'], 'readwrite');
+    const store = transaction.objectStore('tintInventory');
+    const getRequest = store.get(id);
+
+    getRequest.onerror = () => reject(getRequest.error);
+    getRequest.onsuccess = () => {
+      const existing = getRequest.result;
+      if (existing) {
+        const putRequest = store.put({ ...existing, deleted: true, updatedAt: new Date().toISOString() });
+        putRequest.onerror = () => reject(putRequest.error);
+        putRequest.onsuccess = () => resolve();
+      } else {
+        resolve();
+      }
+    };
+  });
+
+  await queueForSync('tintInventory', id, 'delete');
   await triggerBackgroundSync();
 }
 

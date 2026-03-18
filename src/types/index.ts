@@ -218,6 +218,7 @@ export interface Job {
   // Tint options
   includeBasecoatTint?: boolean;
   includeTopcoatTint?: boolean;
+  tintColor?: string; // Selected tint color (shown when basecoat or topcoat tint is enabled)
   // Additive options
   antiSlip?: boolean;
   abrasionResistance?: boolean;
@@ -262,6 +263,15 @@ export interface Job {
   createdAt: string;
   updatedAt: string;
   synced: boolean;
+  deleted?: boolean;
+}
+
+// Tint inventory tracking (per color, in ounces)
+export interface TintInventory {
+  id: string;
+  color: string; // name of the tint color
+  ounces: number; // oz on hand
+  updatedAt: string;
   deleted?: boolean;
 }
 
@@ -372,6 +382,7 @@ export interface ExportData {
   jobs: Job[];
   chipBlends: ChipBlend[];
   chipInventory: ChipInventory[];
+  tintInventory: TintInventory[];
   topCoatInventory: TopCoatInventory | null;
   baseCoatInventory: BaseCoatInventory | null;
   miscInventory: MiscInventory | null;
