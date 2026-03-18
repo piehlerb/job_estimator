@@ -42,6 +42,14 @@ import {
 const SYNC_STATE_KEY = 'sync_state';
 const BATCH_SIZE = 50; // Process records in batches
 
+// Current organization context — set by AuthContext when user logs in.
+// When set, push attaches org_id to records and pull filters by org_id.
+let _currentOrgId: string | null = null;
+
+export function setSyncOrgContext(orgId: string | null): void {
+  _currentOrgId = orgId;
+}
+
 /**
  * Get last sync timestamp from IndexedDB
  */
@@ -348,11 +356,10 @@ export async function pullFromSupabase(): Promise<{
 
     for (const tableName of tablesToSync) {
       try {
-        // Build query
-        let query = supabase
-          .from(tableName)
-          .select('*')
-          .eq('user_id', user.id);
+        // Build query — filter by org when in org context, otherwise personal records only
+        let query = _currentOrgId
+          ? supabase.from(tableName).select('*').eq('org_id', _currentOrgId)
+          : supabase.from(tableName).select('*').eq('user_id', user.id).is('org_id', null);
 
         // If we have a last sync time, only pull updated records
         if (lastSync) {
