@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, Save } from 'lucide-react';
+import { Plus, Trash2, Save, ClipboardList } from 'lucide-react';
+import JobSummaryModal from '../components/JobSummaryModal';
 import {
   getAllJobs,
   getAllChipBlends,
@@ -85,6 +86,12 @@ export default function Inventory() {
   const [newChipPounds, setNewChipPounds] = useState('');
   const [showBlendDropdown, setShowBlendDropdown] = useState(false);
 
+  // Data for Job Summary modal
+  const [allJobs, setAllJobs] = useState<Job[]>([]);
+  const [summaryCurrentCosts, setSummaryCurrentCosts] = useState<Costs>(getDefaultCosts());
+  const [summaryCurrentPricing, setSummaryCurrentPricing] = useState<Pricing>(getDefaultPricing());
+  const [showJobSummary, setShowJobSummary] = useState(false);
+
   useEffect(() => {
     loadData();
   }, []);
@@ -115,6 +122,11 @@ export default function Inventory() {
       const costs = currentCosts || getDefaultCosts();
       const pricing = currentPricing || getDefaultPricing();
       calculateCommitments(jobs, costs, pricing, tints);
+
+      // Save for Job Summary modal
+      setAllJobs(jobs);
+      setSummaryCurrentCosts(costs);
+      setSummaryCurrentPricing(pricing);
     } catch (error) {
       console.error('Error loading inventory:', error);
     } finally {
@@ -495,7 +507,16 @@ export default function Inventory() {
 
   return (
     <div className="p-6 md:p-8 max-w-6xl mx-auto">
-      <h1 className="text-3xl font-bold text-slate-900 mb-8">Inventory</h1>
+      <div className="flex items-center justify-between mb-8">
+        <h1 className="text-3xl font-bold text-slate-900">Inventory</h1>
+        <button
+          onClick={() => setShowJobSummary(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-gf-lime text-white rounded-lg font-medium hover:bg-gf-dark-green transition-colors"
+        >
+          <ClipboardList size={18} />
+          Job Summary
+        </button>
+      </div>
 
       {/* Chip Inventory */}
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6 mb-6">
@@ -987,6 +1008,18 @@ export default function Inventory() {
           </table>
         </div>
       </div>
+
+      <JobSummaryModal
+        isOpen={showJobSummary}
+        onClose={() => setShowJobSummary(false)}
+        jobs={allJobs}
+        baseCoatInventory={baseCoatInventory}
+        topCoatInventory={topCoatInventory}
+        chipInventory={chipInventory}
+        tintInventory={tintInventory}
+        currentCosts={summaryCurrentCosts}
+        currentPricing={summaryCurrentPricing}
+      />
     </div>
   );
 }
