@@ -377,6 +377,41 @@ export interface ImportPreview {
   errors: string[];
 }
 
+// =====================================================
+// ORGANIZATION TYPES
+// =====================================================
+
+export interface Organization {
+  id: string;
+  name: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OrganizationMember {
+  id: string;
+  orgId: string;
+  userId: string;
+  email: string;
+  role: 'admin' | 'member';
+  invitedBy?: string;
+  joinedAt: string;
+}
+
+export interface OrganizationInvitation {
+  id: string;
+  orgId: string;
+  email?: string;
+  role: 'admin' | 'member';
+  inviteCode: string;
+  invitedBy: string;
+  acceptedBy?: string;
+  acceptedAt?: string;
+  expiresAt: string;
+  createdAt: string;
+}
+
 // Sync types
 export type SyncStatus = 'idle' | 'syncing' | 'success' | 'error';
 export type SyncDirection = 'push' | 'pull' | 'both';

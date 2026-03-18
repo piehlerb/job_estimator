@@ -1,16 +1,23 @@
 /**
  * Auth Context
- * Provides authentication state to the entire app
+ * Provides authentication state and organization context to the entire app.
  */
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { getCurrentUser, onAuthStateChange } from '../lib/auth';
+import { getMyOrganization } from '../lib/organizationService';
+import { setSyncOrgContext } from '../lib/sync';
+import type { Organization } from '../types';
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
   isAuthenticated: boolean;
+  organization: Organization | null;
+  orgRole: 'admin' | 'member' | null;
+  orgLoading: boolean;
+  refreshOrganization: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -22,30 +29,70 @@ interface AuthProviderProps {
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [organization, setOrganization] = useState<Organization | null>(null);
+  const [orgRole, setOrgRole] = useState<'admin' | 'member' | null>(null);
+  const [orgLoading, setOrgLoading] = useState(false);
+
+  const loadOrganization = useCallback(async () => {
+    setOrgLoading(true);
+    try {
+      const result = await getMyOrganization();
+      if (result) {
+        setOrganization(result.org);
+        setOrgRole(result.role);
+        setSyncOrgContext(result.org.id);
+      } else {
+        setOrganization(null);
+        setOrgRole(null);
+        setSyncOrgContext(null);
+      }
+    } catch (err) {
+      console.warn('[Auth] Failed to load organization:', err);
+      setOrganization(null);
+      setOrgRole(null);
+      setSyncOrgContext(null);
+    } finally {
+      setOrgLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     // Check for existing session on mount
     getCurrentUser().then((currentUser) => {
       setUser(currentUser);
       setLoading(false);
+      if (currentUser) {
+        loadOrganization();
+      }
     });
 
     // Listen for auth state changes
-    const unsubscribe = onAuthStateChange((user) => {
-      setUser(user);
+    const unsubscribe = onAuthStateChange((authUser) => {
+      setUser(authUser);
       setLoading(false);
+      if (authUser) {
+        loadOrganization();
+      } else {
+        // Signed out — clear org context
+        setOrganization(null);
+        setOrgRole(null);
+        setSyncOrgContext(null);
+      }
     });
 
-    // Cleanup subscription on unmount
     return () => {
       unsubscribe();
     };
-  }, []);
+  }, [loadOrganization]);
 
-  const value = {
+  const value: AuthContextType = {
     user,
     loading,
     isAuthenticated: user !== null,
+    organization,
+    orgRole,
+    orgLoading,
+    refreshOrganization: loadOrganization,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

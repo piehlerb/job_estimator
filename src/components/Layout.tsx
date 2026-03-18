@@ -1,4 +1,4 @@
-import { Menu, X, Wifi, WifiOff, Cog, Users, DollarSign, Home, Plus, Package, CalendarDays, LogOut, User, RefreshCw, Layers, SlidersHorizontal, BarChart3, Contact, ShoppingBag } from 'lucide-react';
+import { Menu, X, Wifi, WifiOff, Cog, Users, DollarSign, Home, Plus, Package, CalendarDays, LogOut, User, RefreshCw, Layers, SlidersHorizontal, BarChart3, Contact, ShoppingBag, Building2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useSyncStatus } from '../contexts/SyncContext';
 import { SyncStatusIndicator } from './SyncStatusIndicator';
@@ -9,7 +9,7 @@ interface LayoutProps {
   children: React.ReactNode;
   sidebarOpen: boolean;
   onSidebarToggle: () => void;
-  onNavigate: (page: 'dashboard' | 'new-job' | 'edit-job' | 'chip-systems' | 'chip-blends' | 'laborers' | 'costs' | 'pricing' | 'settings' | 'inventory' | 'calendar' | 'reporting' | 'customers' | 'products') => void;
+  onNavigate: (page: 'dashboard' | 'new-job' | 'edit-job' | 'chip-systems' | 'chip-blends' | 'laborers' | 'costs' | 'pricing' | 'settings' | 'inventory' | 'calendar' | 'reporting' | 'customers' | 'products' | 'organization') => void;
   isOnline: boolean;
   onManualSync?: () => void;
 }
@@ -22,7 +22,7 @@ export default function Layout({
   isOnline,
   onManualSync,
 }: LayoutProps) {
-  const { user } = useAuth();
+  const { user, organization, orgRole } = useAuth();
   const { isSyncing, lastSyncTime } = useSyncStatus();
 
   const handleLogout = async () => {
@@ -180,6 +180,24 @@ export default function Layout({
           </nav>
 
           <div className="p-2 md:p-4 border-t border-gray-900 space-y-2">
+            {/* Organization indicator (if authenticated) */}
+            {user && (
+              <button
+                onClick={() => onNavigate('organization')}
+                className="w-full flex items-center gap-2 px-3 py-2 md:px-4 rounded-lg bg-gray-900/50 hover:bg-gray-900 transition-colors text-left"
+              >
+                <Building2 size={14} className={organization ? 'text-gf-electric' : 'text-slate-500'} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-slate-300 truncate">
+                    {organization ? organization.name : 'Personal Account'}
+                  </p>
+                  {organization && (
+                    <p className="text-xs text-slate-500 capitalize">{orgRole}</p>
+                  )}
+                </div>
+              </button>
+            )}
+
             {/* Sync Status (if authenticated) */}
             {user && (
               <div className="px-3 py-2 md:px-4 rounded-lg bg-gray-900/50">
