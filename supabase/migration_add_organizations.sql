@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS organization_members (
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   email TEXT NOT NULL,
   role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('admin', 'member')),
+  access_level TEXT NOT NULL DEFAULT 'full' CHECK (access_level IN ('full', 'inventory_only')),
   invited_by UUID REFERENCES auth.users(id),
   joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE(org_id, user_id)
@@ -179,7 +180,7 @@ DROP POLICY IF EXISTS "Admins can update their org"    ON organizations;
 
 CREATE POLICY "Members can view their org"
   ON organizations FOR SELECT
-  USING (is_org_member(id));
+  USING (is_org_member(id) OR auth.uid() = created_by);
 
 CREATE POLICY "Users can create orgs"
   ON organizations FOR INSERT

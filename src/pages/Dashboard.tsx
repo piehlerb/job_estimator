@@ -104,6 +104,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
             cyclo1Coats: job.cyclo1Coats || 0,
             coatingRemoval: job.coatingRemoval || 'None',
             moistureMitigation: job.moistureMitigation || false,
+            tags: job.tags,
           },
           job.systemSnapshot,
           mergedCosts,

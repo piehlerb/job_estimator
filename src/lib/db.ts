@@ -562,8 +562,15 @@ export function getDefaultPricing(): Pricing {
     gasGeneratorGallonsPerHour: 1.2,
     gasHeaterGallonsPerHour: 1,
     travelGasMpg: 10,
-    useSuggestedDiscountCap: true,
-    suggestedDiscountCapSqft: 500,
+    useSuggestedDiscountCap: true,  // DEPRECATED: use discountConfig
+    suggestedDiscountCapSqft: 500,  // DEPRECATED: use discountConfig
+    discountConfig: {
+      mode: 'per_sqft' as const,
+      perSqftAmount: 1,
+      perSqftMaxSqft: 500,
+      tagDiscounts: [],
+      tagAggregation: 'sum' as const,
+    },
     coatingRemovalPaintPerSqft: 1.00,
     coatingRemovalEpoxyPerSqft: 2.00,
     moistureMitigationPerSqft: 3.00,

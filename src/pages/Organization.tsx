@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Building2, UserPlus, Users, Copy, Check, Trash2,
-  LogOut, ShieldCheck, Shield, Plus, RefreshCw, KeyRound
+  LogOut, ShieldCheck, Shield, Plus, RefreshCw, KeyRound, Lock
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -13,9 +13,10 @@ import {
   generateInviteCode,
   revokeInvitation,
   updateMemberRole,
+  updateMemberAccessLevel,
   removeMember,
 } from '../lib/organizationService';
-import type { OrganizationMember, OrganizationInvitation } from '../types';
+import type { OrganizationMember, OrganizationInvitation, OrgAccessLevel } from '../types';
 
 export default function Organization() {
   const { user, organization, orgRole, orgLoading, refreshOrganization } = useAuth();
@@ -164,6 +165,20 @@ export default function Organization() {
       await loadOrgData();
     } catch (err: any) {
       setMgmtError(err.message ?? 'Failed to update role.');
+    }
+  };
+
+  // =====================================================
+  // Change access level
+  // =====================================================
+  const handleAccessLevelChange = async (userId: string, accessLevel: OrgAccessLevel) => {
+    if (!organization) return;
+    setMgmtError('');
+    try {
+      await updateMemberAccessLevel(organization.id, userId, accessLevel);
+      await loadOrgData();
+    } catch (err: any) {
+      setMgmtError(err.message ?? 'Failed to update access level.');
     }
   };
 
@@ -403,6 +418,7 @@ export default function Organization() {
                 <tr>
                   <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide">Email</th>
                   <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide">Role</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide">Access</th>
                   <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide">Joined</th>
                   {isAdmin && <th className="px-4 py-2.5" />}
                 </tr>
@@ -438,6 +454,29 @@ export default function Organization() {
                           }`}>
                             {member.role === 'admin' ? <ShieldCheck size={10} /> : <Shield size={10} />}
                             {member.role}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {isAdmin && !isSelf ? (
+                          <select
+                            value={member.accessLevel ?? 'full'}
+                            onChange={(e) =>
+                              handleAccessLevelChange(member.userId, e.target.value as OrgAccessLevel)
+                            }
+                            className="text-xs border border-slate-200 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-gf-electric/40"
+                          >
+                            <option value="full">Full Access</option>
+                            <option value="inventory_only">Inventory Only</option>
+                          </select>
+                        ) : (
+                          <span className={`inline-flex items-center gap-1 text-xs font-medium rounded-full px-2 py-0.5 ${
+                            (member.accessLevel ?? 'full') === 'full'
+                              ? 'text-green-700 bg-green-50 border border-green-200'
+                              : 'text-purple-700 bg-purple-50 border border-purple-200'
+                          }`}>
+                            <Lock size={10} />
+                            {(member.accessLevel ?? 'full') === 'full' ? 'Full Access' : 'Inventory Only'}
                           </span>
                         )}
                       </td>

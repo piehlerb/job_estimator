@@ -22,7 +22,8 @@ export default function Layout({
   isOnline,
   onManualSync,
 }: LayoutProps) {
-  const { user, organization, orgRole } = useAuth();
+  const { user, organization, orgRole, orgAccessLevel } = useAuth();
+  const isInventoryOnly = !!organization && orgAccessLevel === 'inventory_only';
   const { isSyncing, lastSyncTime } = useSyncStatus();
 
   const handleLogout = async () => {
@@ -74,21 +75,25 @@ export default function Layout({
           </div>
 
           <nav className="flex-1 p-2 md:p-4 space-y-1 md:space-y-2">
-            <button
-              onClick={() => onNavigate('dashboard')}
-              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
-            >
-              <Home size={18} className="md:w-5 md:h-5" />
-              <span>Dashboard</span>
-            </button>
+            {!isInventoryOnly && (
+              <button
+                onClick={() => onNavigate('dashboard')}
+                className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
+              >
+                <Home size={18} className="md:w-5 md:h-5" />
+                <span>Dashboard</span>
+              </button>
+            )}
 
-            <button
-              onClick={() => onNavigate('new-job')}
-              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
-            >
-              <Plus size={18} className="md:w-5 md:h-5" />
-              <span>New Job</span>
-            </button>
+            {!isInventoryOnly && (
+              <button
+                onClick={() => onNavigate('new-job')}
+                className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
+              >
+                <Plus size={18} className="md:w-5 md:h-5" />
+                <span>New Job</span>
+              </button>
+            )}
 
             <button
               onClick={() => onNavigate('inventory')}
@@ -98,85 +103,105 @@ export default function Layout({
               <span>Inventory</span>
             </button>
 
-            <button
-              onClick={() => onNavigate('calendar')}
-              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
-            >
-              <CalendarDays size={18} className="md:w-5 md:h-5" />
-              <span>Calendar</span>
-            </button>
+            {!isInventoryOnly && (
+              <button
+                onClick={() => onNavigate('calendar')}
+                className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
+              >
+                <CalendarDays size={18} className="md:w-5 md:h-5" />
+                <span>Calendar</span>
+              </button>
+            )}
 
-            <button
-              onClick={() => onNavigate('reporting')}
-              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
-            >
-              <BarChart3 size={18} className="md:w-5 md:h-5" />
-              <span>Reporting</span>
-            </button>
+            {!isInventoryOnly && (
+              <button
+                onClick={() => onNavigate('reporting')}
+                className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
+              >
+                <BarChart3 size={18} className="md:w-5 md:h-5" />
+                <span>Reporting</span>
+              </button>
+            )}
 
-            <button
-              onClick={() => onNavigate('customers')}
-              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
-            >
-              <Contact size={18} className="md:w-5 md:h-5" />
-              <span>Customers</span>
-            </button>
+            {!isInventoryOnly && (
+              <button
+                onClick={() => onNavigate('customers')}
+                className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
+              >
+                <Contact size={18} className="md:w-5 md:h-5" />
+                <span>Customers</span>
+              </button>
+            )}
 
-            <button
-              onClick={() => onNavigate('products')}
-              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
-            >
-              <ShoppingBag size={18} className="md:w-5 md:h-5" />
-              <span>Products</span>
-            </button>
+            {!isInventoryOnly && (
+              <button
+                onClick={() => onNavigate('products')}
+                className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
+              >
+                <ShoppingBag size={18} className="md:w-5 md:h-5" />
+                <span>Products</span>
+              </button>
+            )}
 
-            <button
-              onClick={() => onNavigate('chip-systems')}
-              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
-            >
-              <Cog size={18} className="md:w-5 md:h-5" />
-              <span>Chip Systems</span>
-            </button>
+            {!isInventoryOnly && (
+              <button
+                onClick={() => onNavigate('chip-systems')}
+                className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
+              >
+                <Cog size={18} className="md:w-5 md:h-5" />
+                <span>Chip Systems</span>
+              </button>
+            )}
 
-            <button
-              onClick={() => onNavigate('chip-blends')}
-              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
-            >
-              <Layers size={18} className="md:w-5 md:h-5" />
-              <span>Chip Blends</span>
-            </button>
+            {!isInventoryOnly && (
+              <button
+                onClick={() => onNavigate('chip-blends')}
+                className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
+              >
+                <Layers size={18} className="md:w-5 md:h-5" />
+                <span>Chip Blends</span>
+              </button>
+            )}
 
-            <button
-              onClick={() => onNavigate('laborers')}
-              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
-            >
-              <Users size={18} className="md:w-5 md:h-5" />
-              <span>Laborers</span>
-            </button>
+            {!isInventoryOnly && (
+              <button
+                onClick={() => onNavigate('laborers')}
+                className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
+              >
+                <Users size={18} className="md:w-5 md:h-5" />
+                <span>Laborers</span>
+              </button>
+            )}
 
-            <button
-              onClick={() => onNavigate('costs')}
-              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
-            >
-              <DollarSign size={18} className="md:w-5 md:h-5" />
-              <span>Costs</span>
-            </button>
+            {!isInventoryOnly && (
+              <button
+                onClick={() => onNavigate('costs')}
+                className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
+              >
+                <DollarSign size={18} className="md:w-5 md:h-5" />
+                <span>Costs</span>
+              </button>
+            )}
 
-            <button
-              onClick={() => onNavigate('pricing')}
-              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
-            >
-              <DollarSign size={18} className="md:w-5 md:h-5" />
-              <span>Pricing</span>
-            </button>
+            {!isInventoryOnly && (
+              <button
+                onClick={() => onNavigate('pricing')}
+                className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
+              >
+                <DollarSign size={18} className="md:w-5 md:h-5" />
+                <span>Pricing</span>
+              </button>
+            )}
 
-            <button
-              onClick={() => onNavigate('settings')}
-              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
-            >
-              <SlidersHorizontal size={18} className="md:w-5 md:h-5" />
-              <span>Settings</span>
-            </button>
+            {!isInventoryOnly && (
+              <button
+                onClick={() => onNavigate('settings')}
+                className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
+              >
+                <SlidersHorizontal size={18} className="md:w-5 md:h-5" />
+                <span>Settings</span>
+              </button>
+            )}
           </nav>
 
           <div className="p-2 md:p-4 border-t border-gray-900 space-y-2">

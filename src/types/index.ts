@@ -60,6 +60,22 @@ export interface PricingVariable {
   deleted?: boolean;
 }
 
+export type DiscountMode = 'per_sqft' | 'by_tag' | 'none';
+
+export interface TagDiscount {
+  id: string;
+  tag: string;    // Job tag to match
+  amount: number; // Positive dollar amount of discount
+}
+
+export interface DiscountConfig {
+  mode: DiscountMode;
+  perSqftAmount?: number;         // Dollars off per sqft (default 1.00)
+  perSqftMaxSqft?: number;        // Cap on sqft (0 = no cap, default 500)
+  tagDiscounts?: TagDiscount[];   // For 'by_tag' mode
+  tagAggregation?: 'sum' | 'max'; // How to combine multiple matching tags
+}
+
 // Pricing configuration for job pricing elements
 export interface Pricing {
   id: string;
@@ -74,8 +90,9 @@ export interface Pricing {
   gasGeneratorGallonsPerHour?: number; // Gas gallons/hour for generator (default 1.2)
   gasHeaterGallonsPerHour?: number; // Gas gallons/hour for heater (default 1)
   travelGasMpg?: number; // MPG used for travel gas calculation (default 10)
-  useSuggestedDiscountCap?: boolean; // Toggle cap on suggested discount (default true)
-  suggestedDiscountCapSqft?: number; // Maximum sqft used for suggested discount (default 500)
+  useSuggestedDiscountCap?: boolean; // DEPRECATED: use discountConfig instead
+  suggestedDiscountCapSqft?: number; // DEPRECATED: use discountConfig instead
+  discountConfig?: DiscountConfig;   // Flexible discount configuration (replaces above two fields)
   coatingRemovalPaintPerSqft: number; // Price per sqft for paint removal
   coatingRemovalEpoxyPerSqft: number; // Price per sqft for epoxy removal
   moistureMitigationPerSqft: number; // Price per sqft for moisture mitigation
@@ -389,12 +406,15 @@ export interface Organization {
   updatedAt: string;
 }
 
+export type OrgAccessLevel = 'full' | 'inventory_only';
+
 export interface OrganizationMember {
   id: string;
   orgId: string;
   userId: string;
   email: string;
   role: 'admin' | 'member';
+  accessLevel: OrgAccessLevel; // Controls which pages the member can access
   invitedBy?: string;
   joinedAt: string;
 }

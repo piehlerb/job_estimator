@@ -24,13 +24,25 @@ import { getAllJobs, updateJob } from './lib/db';
 
 type Page = 'dashboard' | 'new-job' | 'edit-job' | 'job-sheet' | 'chip-systems' | 'chip-blends' | 'laborers' | 'costs' | 'pricing' | 'settings' | 'inventory' | 'calendar' | 'reporting' | 'customers' | 'products' | 'organization';
 
+// Pages accessible to inventory_only org members
+const INVENTORY_ONLY_PAGES: Page[] = ['inventory', 'organization'];
+
 function App() {
   const [currentPage, setCurrentPage] = useState<Page>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [editingJobId, setEditingJobId] = useState<string | null>(null);
   const [offlineMode, setOfflineMode] = useState(false);
   const isOnline = useOnlineStatus();
-  const { user, loading } = useAuth();
+  const { user, loading, orgAccessLevel, organization } = useAuth();
+
+  // Redirect inventory_only users away from restricted pages
+  useEffect(() => {
+    if (organization && orgAccessLevel === 'inventory_only') {
+      if (!INVENTORY_ONLY_PAGES.includes(currentPage)) {
+        setCurrentPage('inventory');
+      }
+    }
+  }, [orgAccessLevel, organization, currentPage]);
   const notifiedThisSessionRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -159,6 +171,10 @@ function App() {
   }, [user, offlineMode]);
 
   const handleNavigation = (page: Page, jobId?: string) => {
+    // Block navigation to restricted pages for inventory_only members
+    if (organization && orgAccessLevel === 'inventory_only' && !INVENTORY_ONLY_PAGES.includes(page)) {
+      return;
+    }
     setCurrentPage(page);
     if (jobId) setEditingJobId(jobId);
     setSidebarOpen(false);

@@ -19,6 +19,53 @@ interface JobInputs {
   moistureMitigation: boolean;
   disableGasHeater?: boolean;
   installSchedule?: InstallDaySchedule[]; // Optional per-day schedule
+  tags?: string[]; // Job tags, used for tag-based discount calculation
+}
+
+/**
+ * Computes the suggested discount (as a negative dollar amount) based on
+ * pricing.discountConfig. Falls back to legacy useSuggestedDiscountCap /
+ * suggestedDiscountCapSqft fields if discountConfig is absent.
+ */
+function computeSuggestedDiscount(
+  floorFootage: number,
+  tags: string[] | undefined,
+  pricing: Pricing
+): number {
+  const config = pricing.discountConfig;
+
+  if (!config) {
+    // Backward compat: use legacy fields
+    const useCap = pricing.useSuggestedDiscountCap ?? true;
+    const capSqft = pricing.suggestedDiscountCapSqft ?? 500;
+    const cappedFloor = useCap ? Math.min(floorFootage, capSqft) : floorFootage;
+    return cappedFloor * -1;
+  }
+
+  if (config.mode === 'none') return 0;
+
+  if (config.mode === 'per_sqft') {
+    const amount = config.perSqftAmount ?? 1;
+    const maxSqft = config.perSqftMaxSqft ?? 500;
+    const effectiveSqft = maxSqft > 0 ? Math.min(floorFootage, maxSqft) : floorFootage;
+    return effectiveSqft * amount * -1;
+  }
+
+  if (config.mode === 'by_tag') {
+    const tagDiscounts = config.tagDiscounts ?? [];
+    const jobTags = tags ?? [];
+    const matchingAmounts = tagDiscounts
+      .filter(td => jobTags.includes(td.tag))
+      .map(td => td.amount);
+    if (matchingAmounts.length === 0) return 0;
+    const aggregation = config.tagAggregation ?? 'sum';
+    const total = aggregation === 'sum'
+      ? matchingAmounts.reduce((sum, d) => sum + d, 0)
+      : Math.max(...matchingAmounts);
+    return total * -1;
+  }
+
+  return 0;
 }
 
 export function calculateJobOutputs(
@@ -210,11 +257,8 @@ export function calculateJobOutputs(
   // Margin per day: (totalPrice - totalCosts) / installDays
   const marginPerDay = installDays > 0 ? jobMargin / installDays : 0;
 
-  // Suggested discount: floorFootage * -1, optionally capped by settings
-  const useSuggestedDiscountCap = pricing.useSuggestedDiscountCap ?? true;
-  const suggestedDiscountCapSqft = pricing.suggestedDiscountCapSqft ?? 500;
-  const cappedFloor = useSuggestedDiscountCap ? Math.min(floorFootage, suggestedDiscountCapSqft) : floorFootage;
-  const suggestedDiscount = cappedFloor * -1;
+  // Suggested discount: determined by pricing.discountConfig (or legacy fields)
+  const suggestedDiscount = computeSuggestedDiscount(floorFootage, inputs.tags, pricing);
 
   // Suggested crack price: crackFillCost * configurable multiplier
   const crackFillPriceMultiplier = pricing.suggestedCrackFillPriceMultiplier ?? 3;

@@ -9,7 +9,7 @@ import {
   updateBaseCoatColor,
   deleteBaseCoatColor,
 } from '../lib/db';
-import { Pricing, BaseCoatColor } from '../types';
+import { Pricing, BaseCoatColor, DiscountConfig, DiscountMode, TagDiscount } from '../types';
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -20,6 +20,7 @@ export default function Settings() {
   const [baseCoatColors, setBaseCoatColors] = useState<BaseCoatColor[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingDiscount, setSavingDiscount] = useState(false);
   const [isAddingColor, setIsAddingColor] = useState(false);
   const [editingColorId, setEditingColorId] = useState<string | null>(null);
   const [colorName, setColorName] = useState('');
@@ -32,10 +33,17 @@ export default function Settings() {
     gasGeneratorGallonsPerHour: '',
     gasHeaterGallonsPerHour: '',
     travelGasMpg: '',
-    useSuggestedDiscountCap: true,
-    suggestedDiscountCapSqft: '',
     gasHeaterMonths: [] as number[],
   });
+
+  // Discount config state
+  const [discountMode, setDiscountMode] = useState<DiscountMode>('per_sqft');
+  const [perSqftAmount, setPerSqftAmount] = useState('1');
+  const [perSqftMaxSqft, setPerSqftMaxSqft] = useState('500');
+  const [tagDiscounts, setTagDiscounts] = useState<TagDiscount[]>([]);
+  const [tagAggregation, setTagAggregation] = useState<'sum' | 'max'>('sum');
+  const [newTagStr, setNewTagStr] = useState('');
+  const [newTagAmount, setNewTagAmount] = useState('');
 
   const initializedRef = useRef(false);
 
@@ -66,12 +74,29 @@ export default function Settings() {
         gasGeneratorGallonsPerHour: (mergedPricing.gasGeneratorGallonsPerHour ?? 1.2).toString(),
         gasHeaterGallonsPerHour: (mergedPricing.gasHeaterGallonsPerHour ?? 1).toString(),
         travelGasMpg: (mergedPricing.travelGasMpg ?? 10).toString(),
-        useSuggestedDiscountCap: mergedPricing.useSuggestedDiscountCap ?? true,
-        suggestedDiscountCapSqft: (mergedPricing.suggestedDiscountCapSqft ?? 500).toString(),
         gasHeaterMonths: (mergedPricing.gasHeaterMonths && mergedPricing.gasHeaterMonths.length > 0)
           ? mergedPricing.gasHeaterMonths
           : [11, 12, 1, 2, 3],
       });
+
+      // Load discount config, migrating from legacy fields if needed
+      if (mergedPricing.discountConfig) {
+        const dc = mergedPricing.discountConfig;
+        setDiscountMode(dc.mode);
+        setPerSqftAmount((dc.perSqftAmount ?? 1).toString());
+        setPerSqftMaxSqft((dc.perSqftMaxSqft ?? 500).toString());
+        setTagDiscounts(dc.tagDiscounts ?? []);
+        setTagAggregation(dc.tagAggregation ?? 'sum');
+      } else {
+        // Migrate from legacy fields
+        const useCap = mergedPricing.useSuggestedDiscountCap ?? true;
+        const capSqft = mergedPricing.suggestedDiscountCapSqft ?? 500;
+        setDiscountMode('per_sqft');
+        setPerSqftAmount('1');
+        setPerSqftMaxSqft(useCap ? capSqft.toString() : '0');
+        setTagDiscounts([]);
+        setTagAggregation('sum');
+      }
     } else {
       setForm({
         minimumMarginBuffer: '2000',
@@ -81,10 +106,13 @@ export default function Settings() {
         gasGeneratorGallonsPerHour: '1.2',
         gasHeaterGallonsPerHour: '1',
         travelGasMpg: '10',
-        useSuggestedDiscountCap: true,
-        suggestedDiscountCapSqft: '500',
         gasHeaterMonths: [11, 12, 1, 2, 3],
       });
+      setDiscountMode('per_sqft');
+      setPerSqftAmount('1');
+      setPerSqftMaxSqft('500');
+      setTagDiscounts([]);
+      setTagAggregation('sum');
     }
 
     const normalizeName = (name: string) => name.trim().toLowerCase();
@@ -144,8 +172,6 @@ export default function Settings() {
         gasGeneratorGallonsPerHour: parseFloat(form.gasGeneratorGallonsPerHour) || 1.2,
         gasHeaterGallonsPerHour: parseFloat(form.gasHeaterGallonsPerHour) || 1,
         travelGasMpg: parseFloat(form.travelGasMpg) || 10,
-        useSuggestedDiscountCap: form.useSuggestedDiscountCap,
-        suggestedDiscountCapSqft: parseFloat(form.suggestedDiscountCapSqft) || 500,
         gasHeaterMonths: form.gasHeaterMonths.length > 0 ? form.gasHeaterMonths : [11, 12, 1, 2, 3],
         updatedAt: new Date().toISOString(),
       };
@@ -157,6 +183,50 @@ export default function Settings() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleSaveDiscount = async () => {
+    setSavingDiscount(true);
+    try {
+      const discountConfig: DiscountConfig = {
+        mode: discountMode,
+        perSqftAmount: parseFloat(perSqftAmount) || 1,
+        perSqftMaxSqft: parseFloat(perSqftMaxSqft) || 0,
+        tagDiscounts,
+        tagAggregation,
+      };
+
+      const updatedPricing: Pricing = {
+        ...pricing,
+        discountConfig,
+        updatedAt: new Date().toISOString(),
+      };
+
+      await savePricing(updatedPricing);
+      setPricing(updatedPricing);
+    } catch (error) {
+      console.error('Error saving discount settings:', error);
+    } finally {
+      setSavingDiscount(false);
+    }
+  };
+
+  const handleAddTagDiscount = () => {
+    const tag = newTagStr.trim();
+    const amount = parseFloat(newTagAmount);
+    if (!tag) { alert('Please enter a tag name.'); return; }
+    if (isNaN(amount) || amount <= 0) { alert('Please enter a valid discount amount.'); return; }
+    if (tagDiscounts.some(td => td.tag.toLowerCase() === tag.toLowerCase())) {
+      alert('A discount for that tag already exists.');
+      return;
+    }
+    setTagDiscounts([...tagDiscounts, { id: generateId(), tag, amount }]);
+    setNewTagStr('');
+    setNewTagAmount('');
+  };
+
+  const handleRemoveTagDiscount = (id: string) => {
+    setTagDiscounts(tagDiscounts.filter(td => td.id !== id));
   };
 
   const resetColorForm = () => {
@@ -258,6 +328,7 @@ export default function Settings() {
     <div className="p-6 md:p-8 max-w-5xl mx-auto space-y-6">
       <h1 className="text-3xl font-bold text-slate-900">Settings</h1>
 
+      {/* Pricing Controls */}
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
         <h3 className="text-lg font-semibold text-slate-900 mb-2">Pricing Controls</h3>
         <p className="text-sm text-slate-600 mb-6">
@@ -333,32 +404,6 @@ export default function Settings() {
               <p className="text-xs text-slate-500 mt-1">Used for travel fuel cost (estimate trip + install-day round trips).</p>
             </div>
             <div>
-              <label className="block text-sm font-semibold text-slate-900 mb-2">Suggested Discount Cap (Sqft)</label>
-              <div className="flex items-center gap-2 mb-2">
-                <input
-                  id="useSuggestedDiscountCap"
-                  type="checkbox"
-                  checked={form.useSuggestedDiscountCap}
-                  onChange={(e) => setForm({ ...form, useSuggestedDiscountCap: e.target.checked })}
-                  className="w-4 h-4 text-gf-dark-green border-slate-300 rounded focus:ring-gf-lime"
-                />
-                <label htmlFor="useSuggestedDiscountCap" className="text-sm text-slate-700">Enable cap</label>
-              </div>
-              <input
-                type="number"
-                step="1"
-                min="0"
-                placeholder="500"
-                disabled={!form.useSuggestedDiscountCap}
-                value={form.suggestedDiscountCapSqft}
-                onChange={(e) => setForm({ ...form, suggestedDiscountCapSqft: e.target.value })}
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent disabled:bg-slate-100 disabled:text-slate-400"
-              />
-              <p className="text-xs text-slate-500 mt-1">When enabled, suggested discount uses min(floor sqft, cap).</p>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
               <label className="block text-sm font-semibold text-slate-900 mb-2">Gas Generator (Gallons/Hour)</label>
               <input
                 type="number"
@@ -371,6 +416,8 @@ export default function Settings() {
               />
               <p className="text-xs text-slate-500 mt-1">Used for generator fuel cost (gallons per hour).</p>
             </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-semibold text-slate-900 mb-2">Gas Heater (Gallons/Hour)</label>
               <input
@@ -425,6 +472,199 @@ export default function Settings() {
         </form>
       </div>
 
+      {/* Discounts */}
+      <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
+        <h3 className="text-lg font-semibold text-slate-900 mb-2">Discounts</h3>
+        <p className="text-sm text-slate-600 mb-6">
+          Configure the standard discount applied when calculating suggested pricing.
+        </p>
+
+        {/* Mode selector */}
+        <div className="flex flex-wrap gap-2 mb-6">
+          {([
+            { value: 'per_sqft', label: 'Per Square Foot' },
+            { value: 'by_tag', label: 'By Tag' },
+            { value: 'none', label: 'No Discount' },
+          ] as { value: DiscountMode; label: string }[]).map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => setDiscountMode(option.value)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                discountMode === option.value
+                  ? 'bg-gf-lime text-white border-gf-lime'
+                  : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Per Square Foot options */}
+        {discountMode === 'per_sqft' && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-900 mb-2">Discount Amount ($ per sqft)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="1"
+                  value={perSqftAmount}
+                  onChange={(e) => setPerSqftAmount(e.target.value)}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
+                />
+                <p className="text-xs text-slate-500 mt-1">Dollar amount discounted per square foot.</p>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-900 mb-2">Max Sqft Cap</label>
+                <input
+                  type="number"
+                  step="1"
+                  min="0"
+                  placeholder="500"
+                  value={perSqftMaxSqft}
+                  onChange={(e) => setPerSqftMaxSqft(e.target.value)}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
+                />
+                <p className="text-xs text-slate-500 mt-1">Maximum sqft used in discount calculation. Set to 0 for no cap.</p>
+              </div>
+            </div>
+            <p className="text-sm text-slate-600 bg-slate-50 rounded-lg p-3">
+              <span className="font-medium">Preview: </span>
+              Discount = min(floor sqft{parseFloat(perSqftMaxSqft) > 0 ? `, ${perSqftMaxSqft} sqft cap` : ''}) × ${perSqftAmount || '1'}/sqft
+            </p>
+          </div>
+        )}
+
+        {/* By Tag options */}
+        {discountMode === 'by_tag' && (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-semibold text-slate-900 mb-2">Aggregation Method</label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="tagAggregation"
+                    value="sum"
+                    checked={tagAggregation === 'sum'}
+                    onChange={() => setTagAggregation('sum')}
+                    className="w-4 h-4 text-gf-dark-green border-slate-300 focus:ring-gf-lime"
+                  />
+                  <span className="text-sm text-slate-700">Sum — add all matching tag discounts together</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="tagAggregation"
+                    value="max"
+                    checked={tagAggregation === 'max'}
+                    onChange={() => setTagAggregation('max')}
+                    className="w-4 h-4 text-gf-dark-green border-slate-300 focus:ring-gf-lime"
+                  />
+                  <span className="text-sm text-slate-700">Max — use only the largest matching discount</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Tag discount table */}
+            {tagDiscounts.length > 0 && (
+              <div className="border border-slate-200 rounded-lg overflow-hidden">
+                <table className="w-full">
+                  <thead className="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                      <th className="text-left px-4 py-3 text-sm font-semibold text-slate-900">Tag</th>
+                      <th className="text-right px-4 py-3 text-sm font-semibold text-slate-900">Discount ($)</th>
+                      <th className="text-right px-4 py-3 text-sm font-semibold text-slate-900">Remove</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {tagDiscounts.map((td) => (
+                      <tr key={td.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-4 py-3 text-slate-900 font-mono text-sm">{td.tag}</td>
+                        <td className="px-4 py-3 text-slate-900 text-right">${td.amount.toFixed(2)}</td>
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveTagDiscount(td.id)}
+                            className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Remove"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Add new tag row */}
+            <div className="flex items-end gap-3">
+              <div className="flex-1">
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Tag Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g. senior, military"
+                  value={newTagStr}
+                  onChange={(e) => setNewTagStr(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddTagDiscount(); } }}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime text-sm"
+                />
+              </div>
+              <div className="w-36">
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Amount ($)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="50"
+                  value={newTagAmount}
+                  onChange={(e) => setNewTagAmount(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddTagDiscount(); } }}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime text-sm"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleAddTagDiscount}
+                className="flex items-center gap-1.5 px-4 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors text-sm"
+              >
+                <Plus size={15} />
+                Add
+              </button>
+            </div>
+
+            {tagDiscounts.length === 0 && (
+              <p className="text-sm text-slate-500 italic">No tag discounts configured yet. Add one above.</p>
+            )}
+          </div>
+        )}
+
+        {/* No discount */}
+        {discountMode === 'none' && (
+          <p className="text-sm text-slate-600 bg-slate-50 rounded-lg p-3">
+            No standard discount will be applied to suggested pricing calculations.
+          </p>
+        )}
+
+        <div className="pt-5">
+          <button
+            type="button"
+            onClick={handleSaveDiscount}
+            disabled={savingDiscount}
+            className="px-6 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors disabled:opacity-50"
+          >
+            {savingDiscount ? 'Saving...' : 'Save Discounts'}
+          </button>
+        </div>
+      </div>
+
+      {/* Base Coat Colors */}
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
         <div className="flex items-center justify-between mb-4">
           <div>

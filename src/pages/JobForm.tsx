@@ -602,6 +602,7 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
       moistureMitigation: formData.moistureMitigation,
       disableGasHeater: formData.disableGasHeater,
       installSchedule: installSchedule.length > 0 ? installSchedule : undefined,
+      tags: formData.tags.split(',').map((t) => t.trim()).filter(Boolean),
     };
 
     const calc = calculateJobOutputs(inputs, systemToUse, costsToUse, laborersToUse, pricingToUse);
@@ -926,6 +927,7 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
         moistureMitigation: job.moistureMitigation || false,
         disableGasHeater: job.disableGasHeater || false,
         installSchedule: job.installSchedule,
+        tags: job.tags,
       };
       const calc = calculateJobOutputs(inputs, sys, c, job.laborersSnapshot, p);
       totalCosts += calc.totalCosts;

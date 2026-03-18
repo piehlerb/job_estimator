@@ -78,6 +78,7 @@ export default function Reporting() {
             coatingRemoval: job.coatingRemoval || 'None',
             moistureMitigation: job.moistureMitigation || false,
             installSchedule: job.installSchedule,
+            tags: job.tags,
           },
           job.systemSnapshot,
           mergedCosts,

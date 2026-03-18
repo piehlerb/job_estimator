@@ -45,6 +45,7 @@ export default function JobSheet({ jobId, onBack }: JobSheetProps) {
             coatingRemoval: loadedJob.coatingRemoval || 'None',
             moistureMitigation: loadedJob.moistureMitigation || false,
             installSchedule: loadedJob.installSchedule,
+            tags: loadedJob.tags,
           },
           loadedJob.systemSnapshot,
           loadedJob.costsSnapshot,

@@ -8,7 +8,7 @@ import type { User } from '@supabase/supabase-js';
 import { getCurrentUser, onAuthStateChange } from '../lib/auth';
 import { getMyOrganization } from '../lib/organizationService';
 import { setSyncOrgContext } from '../lib/sync';
-import type { Organization } from '../types';
+import type { Organization, OrgAccessLevel } from '../types';
 
 interface AuthContextType {
   user: User | null;
@@ -16,6 +16,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   organization: Organization | null;
   orgRole: 'admin' | 'member' | null;
+  orgAccessLevel: OrgAccessLevel | null;
   orgLoading: boolean;
   refreshOrganization: () => Promise<void>;
 }
@@ -31,6 +32,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [loading, setLoading] = useState(true);
   const [organization, setOrganization] = useState<Organization | null>(null);
   const [orgRole, setOrgRole] = useState<'admin' | 'member' | null>(null);
+  const [orgAccessLevel, setOrgAccessLevel] = useState<OrgAccessLevel | null>(null);
   const [orgLoading, setOrgLoading] = useState(false);
 
   const loadOrganization = useCallback(async () => {
@@ -40,10 +42,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
       if (result) {
         setOrganization(result.org);
         setOrgRole(result.role);
+        setOrgAccessLevel(result.accessLevel);
         setSyncOrgContext(result.org.id);
       } else {
         setOrganization(null);
         setOrgRole(null);
+        setOrgAccessLevel(null);
         setSyncOrgContext(null);
       }
     } catch (err) {
@@ -76,6 +80,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         // Signed out — clear org context
         setOrganization(null);
         setOrgRole(null);
+        setOrgAccessLevel(null);
         setSyncOrgContext(null);
       }
     });
@@ -91,6 +96,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     isAuthenticated: user !== null,
     organization,
     orgRole,
+    orgAccessLevel,
     orgLoading,
     refreshOrganization: loadOrganization,
   };
