@@ -72,6 +72,24 @@ async function getLastSyncTimestamp(): Promise<string | null> {
 }
 
 /**
+ * Clear last sync timestamp (forces a full pull on next sync)
+ */
+export async function clearLastSyncTimestamp(): Promise<void> {
+  try {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('metadata', 'readwrite');
+      const store = tx.objectStore('metadata');
+      const request = store.delete(SYNC_STATE_KEY);
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve();
+    });
+  } catch (error) {
+    console.error('Error clearing last sync timestamp:', error);
+  }
+}
+
+/**
  * Save last sync timestamp to IndexedDB
  */
 async function setLastSyncTimestamp(timestamp: string): Promise<void> {
@@ -232,11 +250,15 @@ export async function pushToSupabase(): Promise<{
 
 /**
  * Push ALL data to Supabase (full sync - use for initial sync or force sync)
+ * @param bumpTimestamps - When true, sets updated_at to now on every record so other
+ *   devices will pull them even if their lastSync is newer than the original timestamps.
+ *   Use only for one-time repairs (e.g. backfilling org_id).
  */
-export async function pushAllToSupabase(): Promise<{
+export async function pushAllToSupabase(options?: { bumpTimestamps?: boolean }): Promise<{
   recordsPushed: number;
   errors: string[];
 }> {
+  const bumpTimestamps = options?.bumpTimestamps ?? false;
   const errors: string[] = [];
   let recordsPushed = 0;
 
@@ -279,6 +301,7 @@ export async function pushAllToSupabase(): Promise<{
         console.log(`[Sync] Syncing ${records.length} record(s) to ${tableName}`);
 
         // Convert to snake_case and add user_id + org_id
+        const nowIso = new Date().toISOString();
         const recordsToSync = records.map((record: any) => {
           const converted = objectToSnakeCase(record);
           const { chip_size, ...cleanRecord } = converted;
@@ -286,7 +309,9 @@ export async function pushAllToSupabase(): Promise<{
             ...cleanRecord,
             user_id: user.id,
             org_id: _currentOrgId,
-            synced_at: new Date().toISOString(),
+            // Optionally bump updated_at so other devices' lastSync filters pick up these records
+            ...(bumpTimestamps ? { updated_at: nowIso } : {}),
+            synced_at: nowIso,
             deleted: record.deleted || false,
           };
         });

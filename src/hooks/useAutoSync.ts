@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useRef } from 'react';
-import { syncWithSupabase, pushAllToSupabase } from '../lib/sync';
+import { syncWithSupabase, pushAllToSupabase, clearLastSyncTimestamp } from '../lib/sync';
 import { useAuth } from '../contexts/AuthContext';
 import { useSyncStatus } from '../contexts/SyncContext';
 import type { SyncResult } from '../types';
@@ -100,24 +100,32 @@ export function useAutoSync(options: UseAutoSyncOptions = {}) {
 
   // Effect: Sync on mount (app startup) — wait for org context to be established first
   useEffect(() => {
-    if (user && enabled && !orgLoading) {
+    if (!user || !enabled || orgLoading) return;
+
+    const startup = async () => {
       console.log('App started, performing initial sync...');
 
-      // One-time repair: if user is in an org and records were previously pushed without org_id,
-      // do a full push to stamp org_id on all existing Supabase rows.
+      // One-time repair: records previously pushed without org_id have org_id = NULL in
+      // Supabase, so other devices can't pull them. Push everything with bumpTimestamps=true
+      // so the updated_at values are "now" — ensuring the other device's lastSync filter
+      // doesn't exclude them. Then clear our own lastSync to force a full pull this session.
       const repairKey = `org_id_repair_done_${user.id}`;
       if (!localStorage.getItem(repairKey)) {
         console.log('[Sync] Running one-time org_id repair push...');
-        pushAllToSupabase().then(() => {
+        try {
+          await pushAllToSupabase({ bumpTimestamps: true });
+          await clearLastSyncTimestamp(); // force full pull on this device too
           localStorage.setItem(repairKey, '1');
           console.log('[Sync] org_id repair complete');
-        }).catch((err) => {
+        } catch (err) {
           console.warn('[Sync] org_id repair push failed:', err);
-        });
+        }
       }
 
       performSync(true); // Silent sync on startup
-    }
+    };
+
+    startup();
   }, [user, enabled, orgLoading]);
 
   // Effect: Set up periodic sync interval
