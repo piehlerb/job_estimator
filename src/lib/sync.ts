@@ -173,7 +173,7 @@ export async function pushToSupabase(): Promise<{
           `[Sync] Pushing ${changedRecords.length} changed record(s) to ${tableName}`
         );
 
-        // Convert to snake_case and add user_id
+        // Convert to snake_case and add user_id + org_id
         const recordsToSync = changedRecords.map((record: any) => {
           const converted = objectToSnakeCase(record);
           // Remove any fields that don't belong (like old chip_size)
@@ -181,6 +181,7 @@ export async function pushToSupabase(): Promise<{
           return {
             ...cleanRecord,
             user_id: user.id,
+            org_id: _currentOrgId,
             synced_at: new Date().toISOString(),
             // Preserve deleted flag if present
             deleted: record.deleted || false,
@@ -277,13 +278,14 @@ export async function pushAllToSupabase(): Promise<{
         const tableName = getSupabaseTableName(store);
         console.log(`[Sync] Syncing ${records.length} record(s) to ${tableName}`);
 
-        // Convert to snake_case and add user_id
+        // Convert to snake_case and add user_id + org_id
         const recordsToSync = records.map((record: any) => {
           const converted = objectToSnakeCase(record);
           const { chip_size, ...cleanRecord } = converted;
           return {
             ...cleanRecord,
             user_id: user.id,
+            org_id: _currentOrgId,
             synced_at: new Date().toISOString(),
             deleted: record.deleted || false,
           };

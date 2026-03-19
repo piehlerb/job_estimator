@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useRef } from 'react';
-import { syncWithSupabase } from '../lib/sync';
+import { syncWithSupabase, pushAllToSupabase } from '../lib/sync';
 import { useAuth } from '../contexts/AuthContext';
 import { useSyncStatus } from '../contexts/SyncContext';
 import type { SyncResult } from '../types';
@@ -24,7 +24,7 @@ export function useAutoSync(options: UseAutoSyncOptions = {}) {
     onSyncError,
   } = options;
 
-  const { user } = useAuth();
+  const { user, orgLoading } = useAuth();
   const {
     isSyncing,
     setIsSyncing,
@@ -98,13 +98,27 @@ export function useAutoSync(options: UseAutoSyncOptions = {}) {
     return performSync(false);
   };
 
-  // Effect: Sync on mount (app startup)
+  // Effect: Sync on mount (app startup) — wait for org context to be established first
   useEffect(() => {
-    if (user && enabled) {
+    if (user && enabled && !orgLoading) {
       console.log('App started, performing initial sync...');
+
+      // One-time repair: if user is in an org and records were previously pushed without org_id,
+      // do a full push to stamp org_id on all existing Supabase rows.
+      const repairKey = `org_id_repair_done_${user.id}`;
+      if (!localStorage.getItem(repairKey)) {
+        console.log('[Sync] Running one-time org_id repair push...');
+        pushAllToSupabase().then(() => {
+          localStorage.setItem(repairKey, '1');
+          console.log('[Sync] org_id repair complete');
+        }).catch((err) => {
+          console.warn('[Sync] org_id repair push failed:', err);
+        });
+      }
+
       performSync(true); // Silent sync on startup
     }
-  }, [user, enabled]);
+  }, [user, enabled, orgLoading]);
 
   // Effect: Set up periodic sync interval
   useEffect(() => {
