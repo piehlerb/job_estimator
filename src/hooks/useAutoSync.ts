@@ -109,7 +109,7 @@ export function useAutoSync(options: UseAutoSyncOptions = {}) {
       // Supabase, so other devices can't pull them. Push everything with bumpTimestamps=true
       // so the updated_at values are "now" — ensuring the other device's lastSync filter
       // doesn't exclude them. Then clear our own lastSync to force a full pull this session.
-      const repairKey = `org_id_repair_done_${user.id}`;
+      const repairKey = `org_id_repair_v2_done_${user.id}`;
       if (!localStorage.getItem(repairKey)) {
         console.log('[Sync] Running one-time org_id repair push...');
         try {
