@@ -163,6 +163,7 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
     actualCrackPrice: '',
     actualFloorPricePerSqft: '',
     actualFloorPrice: '',
+    actualVerticalPricePerSqft: '',
     actualVerticalPrice: '',
     actualAntiSlipPrice: '',
     actualAbrasionResistancePrice: '',
@@ -453,6 +454,7 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
             actualCrackPrice: job.actualCrackPrice?.toString() || '',
             actualFloorPricePerSqft: job.actualFloorPricePerSqft?.toString() || '',
             actualFloorPrice: job.actualFloorPrice?.toString() || '',
+            actualVerticalPricePerSqft: job.actualVerticalPricePerSqft?.toString() || '',
             actualVerticalPrice: job.actualVerticalPrice?.toString() || '',
             actualAntiSlipPrice: job.actualAntiSlipPrice?.toString() || '',
             actualAbrasionResistancePrice: job.actualAbrasionResistancePrice?.toString() || '',
@@ -627,6 +629,10 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
       actualCrackPrice: calculation.suggestedCrackPrice.toFixed(2),
       actualFloorPricePerSqft: calculation.suggestedFloorPricePerSqft.toFixed(2),
       actualFloorPrice: calculation.suggestedFloorPrice.toFixed(2),
+      actualVerticalPricePerSqft: (() => {
+        const vf = parseFloat(formData.verticalFootage) || 0;
+        return vf > 0 ? (calculation.suggestedVerticalPrice / vf).toFixed(2) : '';
+      })(),
       actualVerticalPrice: calculation.suggestedVerticalPrice.toFixed(2),
       actualAntiSlipPrice: calculation.suggestedAntiSlipPrice.toFixed(2),
       actualAbrasionResistancePrice: calculation.suggestedAbrasionResistancePrice.toFixed(2),
@@ -646,6 +652,10 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
     let floorPricePerSqft = parseFloat(updated.actualFloorPricePerSqft) || 0;
     const floorFootage = parseFloat(updated.floorFootage) || 0;
 
+    let verticalPrice = parseFloat(updated.actualVerticalPrice) || 0;
+    let verticalPricePerSqft = parseFloat(updated.actualVerticalPricePerSqft) || 0;
+    const verticalFootage = parseFloat(updated.verticalFootage) || 0;
+
     // Handle floor price / per sqft linkage
     if (updatedField === 'actualFloorPricePerSqft') {
       floorPrice = floorPricePerSqft * floorFootage;
@@ -655,10 +665,19 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
       updated.actualFloorPricePerSqft = floorPricePerSqft.toFixed(2);
     }
 
+    // Handle vertical price / per sqft linkage
+    if (updatedField === 'actualVerticalPricePerSqft') {
+      verticalPrice = verticalPricePerSqft * verticalFootage;
+      updated.actualVerticalPrice = verticalPrice.toFixed(2);
+    } else if (updatedField === 'actualVerticalPrice') {
+      verticalPricePerSqft = verticalFootage > 0 ? verticalPrice / verticalFootage : 0;
+      updated.actualVerticalPricePerSqft = verticalPricePerSqft.toFixed(2);
+    }
+
     const total = (parseFloat(updated.actualDiscount) || 0)
       + (parseFloat(updated.actualCrackPrice) || 0)
       + floorPrice
-      + (parseFloat(updated.actualVerticalPrice) || 0)
+      + verticalPrice
       + (parseFloat(updated.actualAntiSlipPrice) || 0)
       + (parseFloat(updated.actualAbrasionResistancePrice) || 0)
       + (parseFloat(updated.actualCoatingRemovalPrice) || 0)
@@ -1155,6 +1174,22 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
 
       const laborersToSave = getSelectedLaborers();
 
+      if (laborersToSave.length === 0) {
+        const proceed = window.confirm('No laborers are assigned to any install days. Save anyway?');
+        if (!proceed) {
+          setSaving(false);
+          return;
+        }
+      }
+
+      if (hasMissingActuals) {
+        const proceed = window.confirm('Some actual pricing fields are empty. Save anyway?');
+        if (!proceed) {
+          setSaving(false);
+          return;
+        }
+      }
+
       // Calculate total hours from schedule
       const totalHours = installSchedule.reduce((sum, day) => sum + day.hours, 0);
 
@@ -1210,6 +1245,7 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
         actualCrackPrice: parseFloat(formData.actualCrackPrice) || undefined,
         actualFloorPricePerSqft: parseFloat(formData.actualFloorPricePerSqft) || undefined,
         actualFloorPrice: parseFloat(formData.actualFloorPrice) || undefined,
+        actualVerticalPricePerSqft: parseFloat(formData.actualVerticalPricePerSqft) || undefined,
         actualVerticalPrice: parseFloat(formData.actualVerticalPrice) || undefined,
         actualAntiSlipPrice: parseFloat(formData.actualAntiSlipPrice) || undefined,
         actualAbrasionResistancePrice: parseFloat(formData.actualAbrasionResistancePrice) || undefined,
@@ -1317,6 +1353,29 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
       };
     }
   };
+
+  const noLaborersSelected = installSchedule.length === 0 || installSchedule.every(day => day.laborerIds.length === 0);
+
+  // Visual cues: highlight any actual pricing field where the suggested value > 0 (field is relevant for this job)
+  const relevantActuals = calculation ? {
+    crackPrice: calculation.suggestedCrackPrice > 0,
+    floorPrice: calculation.suggestedFloorPrice > 0,
+    verticalPrice: calculation.suggestedVerticalPrice > 0,
+    antiSlipPrice: calculation.suggestedAntiSlipPrice > 0,
+    abrasionResistancePrice: calculation.suggestedAbrasionResistancePrice > 0,
+    coatingRemovalPrice: calculation.suggestedCoatingRemovalPrice > 0,
+    moistureMitigationPrice: calculation.suggestedMoistureMitigationPrice > 0,
+  } : null;
+  // Save-time warning: warn if actual is zero/empty when suggested > 0
+  const hasMissingActuals = calculation ? (
+    (calculation.suggestedCrackPrice > 0 && !(parseFloat(formData.actualCrackPrice) > 0)) ||
+    (calculation.suggestedFloorPrice > 0 && !(parseFloat(formData.actualFloorPrice) > 0)) ||
+    (calculation.suggestedVerticalPrice > 0 && !(parseFloat(formData.actualVerticalPrice) > 0)) ||
+    (calculation.suggestedAntiSlipPrice > 0 && !(parseFloat(formData.actualAntiSlipPrice) > 0)) ||
+    (calculation.suggestedAbrasionResistancePrice > 0 && !(parseFloat(formData.actualAbrasionResistancePrice) > 0)) ||
+    (calculation.suggestedCoatingRemovalPrice > 0 && !(parseFloat(formData.actualCoatingRemovalPrice) > 0)) ||
+    (calculation.suggestedMoistureMitigationPrice > 0 && !(parseFloat(formData.actualMoistureMitigationPrice) > 0))
+  ) : false;
 
   if (loading) {
     return <div className="p-6 text-center">Loading...</div>;
@@ -2052,6 +2111,7 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
                   : activeLaborers;
               })()}
               onChange={setInstallSchedule}
+              defaultDayHours={pricing.defaultDayHours ?? 8}
             />
           </div>
 
@@ -2220,6 +2280,12 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
               {/* Actual Pricing - editable */}
               <div className="bg-green-50 rounded-lg p-3 sm:p-4 border border-green-200 mb-4 sm:mb-6">
                 <h4 className="text-xs sm:text-sm font-semibold text-green-800 mb-2 sm:mb-3 uppercase tracking-wide">Actual Pricing</h4>
+                {noLaborersSelected && (
+                  <div className="mb-3 flex items-center gap-2 px-3 py-2 bg-yellow-50 border border-yellow-300 rounded-lg text-xs text-yellow-800">
+                    <span className="font-semibold">⚠ No laborers assigned.</span>
+                    <span>Labor costs will be $0. Assign laborers in the Daily Schedule above.</span>
+                  </div>
+                )}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 md:gap-4 mb-3 sm:mb-4">
                   <div>
                     <label className="text-xs text-green-600">Discount</label>
@@ -2227,53 +2293,59 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
                       onChange={(e) => recalcActualTotal('actualDiscount', e.target.value)}
                       className="w-full text-sm sm:text-base font-semibold text-green-900 bg-transparent border-b border-green-300 focus:outline-none focus:border-green-600 p-0" />
                   </div>
-                  <div>
+                  <div className={relevantActuals?.crackPrice ? 'rounded px-1 -mx-1 bg-orange-50' : ''}>
                     <label className="text-xs text-green-600">Crack Price</label>
                     <input type="number" step="0.01" value={formData.actualCrackPrice}
                       onChange={(e) => recalcActualTotal('actualCrackPrice', e.target.value)}
-                      className="w-full text-sm sm:text-base font-semibold text-green-900 bg-transparent border-b border-green-300 focus:outline-none focus:border-green-600 p-0" />
+                      className={`w-full text-sm sm:text-base font-semibold text-green-900 bg-transparent border-b focus:outline-none p-0 ${relevantActuals?.crackPrice ? 'border-orange-400 focus:border-orange-500' : 'border-green-300 focus:border-green-600'}`} />
                   </div>
-                  <div>
+                  <div className={relevantActuals?.floorPrice ? 'rounded px-1 -mx-1 bg-orange-50' : ''}>
                     <label className="text-xs text-green-600">Floor $/sqft</label>
                     <input type="number" step="0.01" value={formData.actualFloorPricePerSqft}
                       onChange={(e) => recalcActualTotal('actualFloorPricePerSqft', e.target.value)}
-                      className="w-full text-sm sm:text-base font-semibold text-green-900 bg-transparent border-b border-green-300 focus:outline-none focus:border-green-600 p-0" />
+                      className={`w-full text-sm sm:text-base font-semibold text-green-900 bg-transparent border-b focus:outline-none p-0 ${relevantActuals?.floorPrice ? 'border-orange-400 focus:border-orange-500' : 'border-green-300 focus:border-green-600'}`} />
                   </div>
-                  <div>
+                  <div className={relevantActuals?.floorPrice ? 'rounded px-1 -mx-1 bg-orange-50' : ''}>
                     <label className="text-xs text-green-600">Floor Price</label>
                     <input type="number" step="0.01" value={formData.actualFloorPrice}
                       onChange={(e) => recalcActualTotal('actualFloorPrice', e.target.value)}
-                      className="w-full text-sm sm:text-base font-semibold text-green-900 bg-transparent border-b border-green-300 focus:outline-none focus:border-green-600 p-0" />
+                      className={`w-full text-sm sm:text-base font-semibold text-green-900 bg-transparent border-b focus:outline-none p-0 ${relevantActuals?.floorPrice ? 'border-orange-400 focus:border-orange-500' : 'border-green-300 focus:border-green-600'}`} />
                   </div>
-                  <div>
+                  <div className={relevantActuals?.verticalPrice ? 'rounded px-1 -mx-1 bg-orange-50' : ''}>
+                    <label className="text-xs text-green-600">Vertical $/sqft</label>
+                    <input type="number" step="0.01" value={formData.actualVerticalPricePerSqft}
+                      onChange={(e) => recalcActualTotal('actualVerticalPricePerSqft', e.target.value)}
+                      className={`w-full text-sm sm:text-base font-semibold text-green-900 bg-transparent border-b focus:outline-none p-0 ${relevantActuals?.verticalPrice ? 'border-orange-400 focus:border-orange-500' : 'border-green-300 focus:border-green-600'}`} />
+                  </div>
+                  <div className={relevantActuals?.verticalPrice ? 'rounded px-1 -mx-1 bg-orange-50' : ''}>
                     <label className="text-xs text-green-600">Vertical Price</label>
                     <input type="number" step="0.01" value={formData.actualVerticalPrice}
                       onChange={(e) => recalcActualTotal('actualVerticalPrice', e.target.value)}
-                      className="w-full text-sm sm:text-base font-semibold text-green-900 bg-transparent border-b border-green-300 focus:outline-none focus:border-green-600 p-0" />
+                      className={`w-full text-sm sm:text-base font-semibold text-green-900 bg-transparent border-b focus:outline-none p-0 ${relevantActuals?.verticalPrice ? 'border-orange-400 focus:border-orange-500' : 'border-green-300 focus:border-green-600'}`} />
                   </div>
-                  <div>
+                  <div className={relevantActuals?.antiSlipPrice ? 'rounded px-1 -mx-1 bg-orange-50' : ''}>
                     <label className="text-xs text-green-600">Anti-Slip Price</label>
                     <input type="number" step="0.01" value={formData.actualAntiSlipPrice}
                       onChange={(e) => recalcActualTotal('actualAntiSlipPrice', e.target.value)}
-                      className="w-full text-sm sm:text-base font-semibold text-green-900 bg-transparent border-b border-green-300 focus:outline-none focus:border-green-600 p-0" />
+                      className={`w-full text-sm sm:text-base font-semibold text-green-900 bg-transparent border-b focus:outline-none p-0 ${relevantActuals?.antiSlipPrice ? 'border-orange-400 focus:border-orange-500' : 'border-green-300 focus:border-green-600'}`} />
                   </div>
-                  <div>
+                  <div className={relevantActuals?.abrasionResistancePrice ? 'rounded px-1 -mx-1 bg-orange-50' : ''}>
                     <label className="text-xs text-green-600">Abrasion Resistance</label>
                     <input type="number" step="0.01" value={formData.actualAbrasionResistancePrice}
                       onChange={(e) => recalcActualTotal('actualAbrasionResistancePrice', e.target.value)}
-                      className="w-full text-sm sm:text-base font-semibold text-green-900 bg-transparent border-b border-green-300 focus:outline-none focus:border-green-600 p-0" />
+                      className={`w-full text-sm sm:text-base font-semibold text-green-900 bg-transparent border-b focus:outline-none p-0 ${relevantActuals?.abrasionResistancePrice ? 'border-orange-400 focus:border-orange-500' : 'border-green-300 focus:border-green-600'}`} />
                   </div>
-                  <div>
+                  <div className={relevantActuals?.coatingRemovalPrice ? 'rounded px-1 -mx-1 bg-orange-50' : ''}>
                     <label className="text-xs text-green-600">Coating Removal</label>
                     <input type="number" step="0.01" value={formData.actualCoatingRemovalPrice}
                       onChange={(e) => recalcActualTotal('actualCoatingRemovalPrice', e.target.value)}
-                      className="w-full text-sm sm:text-base font-semibold text-green-900 bg-transparent border-b border-green-300 focus:outline-none focus:border-green-600 p-0" />
+                      className={`w-full text-sm sm:text-base font-semibold text-green-900 bg-transparent border-b focus:outline-none p-0 ${relevantActuals?.coatingRemovalPrice ? 'border-orange-400 focus:border-orange-500' : 'border-green-300 focus:border-green-600'}`} />
                   </div>
-                  <div>
+                  <div className={relevantActuals?.moistureMitigationPrice ? 'rounded px-1 -mx-1 bg-orange-50' : ''}>
                     <label className="text-xs text-green-600">Moisture Mitigation</label>
                     <input type="number" step="0.01" value={formData.actualMoistureMitigationPrice}
                       onChange={(e) => recalcActualTotal('actualMoistureMitigationPrice', e.target.value)}
-                      className="w-full text-sm sm:text-base font-semibold text-green-900 bg-transparent border-b border-green-300 focus:outline-none focus:border-green-600 p-0" />
+                      className={`w-full text-sm sm:text-base font-semibold text-green-900 bg-transparent border-b focus:outline-none p-0 ${relevantActuals?.moistureMitigationPrice ? 'border-orange-400 focus:border-orange-500' : 'border-green-300 focus:border-green-600'}`} />
                   </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 sm:gap-4 pt-3 sm:pt-4 border-t border-green-200">
@@ -2559,6 +2631,7 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
                     : activeLaborers
                   }
                   onChange={(s) => setActualInstallSchedule(s as ActualDaySchedule[])}
+                  defaultDayHours={pricing.defaultDayHours ?? 8}
                 />
               </div>
 

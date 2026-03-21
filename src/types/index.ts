@@ -100,6 +100,8 @@ export interface Pricing {
   floorPriceMax?: number; // DEPRECATED: Moved to ChipSystem - kept for backward compatibility
   minimumMarginBuffer?: number; // Buffer added to costs for suggested pricing (default 2000)
   minimumJobPrice?: number; // Minimum total suggested job price (default 2500)
+  chipReclaimRate?: number; // Percentage of chip reclaimed after a job (0-100, default 0)
+  defaultDayHours?: number; // Default hours per install day (default 8)
   createdAt: string;
   updatedAt: string;
 }
@@ -233,6 +235,7 @@ export interface Job {
   actualCrackPrice?: number;
   actualFloorPricePerSqft?: number;
   actualFloorPrice?: number;
+  actualVerticalPricePerSqft?: number;
   actualVerticalPrice?: number;
   actualAntiSlipPrice?: number;
   actualAbrasionResistancePrice?: number;

@@ -34,6 +34,8 @@ export default function Settings() {
     gasHeaterGallonsPerHour: '',
     travelGasMpg: '',
     gasHeaterMonths: [] as number[],
+    chipReclaimRate: '',
+    defaultDayHours: '',
   });
 
   // Discount config state
@@ -77,6 +79,8 @@ export default function Settings() {
         gasHeaterMonths: (mergedPricing.gasHeaterMonths && mergedPricing.gasHeaterMonths.length > 0)
           ? mergedPricing.gasHeaterMonths
           : [11, 12, 1, 2, 3],
+        chipReclaimRate: (mergedPricing.chipReclaimRate ?? 0).toString(),
+        defaultDayHours: (mergedPricing.defaultDayHours ?? 8).toString(),
       });
 
       // Load discount config, migrating from legacy fields if needed
@@ -107,6 +111,8 @@ export default function Settings() {
         gasHeaterGallonsPerHour: '1',
         travelGasMpg: '10',
         gasHeaterMonths: [11, 12, 1, 2, 3],
+        chipReclaimRate: '0',
+        defaultDayHours: '8',
       });
       setDiscountMode('per_sqft');
       setPerSqftAmount('1');
@@ -173,6 +179,8 @@ export default function Settings() {
         gasHeaterGallonsPerHour: parseFloat(form.gasHeaterGallonsPerHour) || 1,
         travelGasMpg: parseFloat(form.travelGasMpg) || 10,
         gasHeaterMonths: form.gasHeaterMonths.length > 0 ? form.gasHeaterMonths : [11, 12, 1, 2, 3],
+        chipReclaimRate: parseFloat(form.chipReclaimRate) || 0,
+        defaultDayHours: parseFloat(form.defaultDayHours) || 8,
         updatedAt: new Date().toISOString(),
       };
 
@@ -430,6 +438,36 @@ export default function Settings() {
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
               />
               <p className="text-xs text-slate-500 mt-1">Used for heater fuel cost (gallons per hour).</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-semibold text-slate-900 mb-2">Chip Reclaim Rate (%)</label>
+              <input
+                type="number"
+                step="1"
+                min="0"
+                max="100"
+                placeholder="0"
+                value={form.chipReclaimRate}
+                onChange={(e) => setForm({ ...form, chipReclaimRate: e.target.value })}
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
+              />
+              <p className="text-xs text-slate-500 mt-1">Percentage of chip recovered after each job (0 = no reclaim, 50 = half recovered).</p>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-900 mb-2">Default Day Length (hours)</label>
+              <input
+                type="number"
+                step="0.5"
+                min="0.5"
+                max="24"
+                placeholder="8"
+                value={form.defaultDayHours}
+                onChange={(e) => setForm({ ...form, defaultDayHours: e.target.value })}
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
+              />
+              <p className="text-xs text-slate-500 mt-1">Default hours assigned to each new install day.</p>
             </div>
           </div>
           <div>

@@ -9,6 +9,7 @@ interface InstallDayScheduleProps {
   schedule: DaySchedule[];
   availableLaborers: Laborer[];
   onChange: (schedule: DaySchedule[]) => void;
+  defaultDayHours?: number;
 }
 
 export default function InstallDayScheduleComponent({
@@ -16,6 +17,7 @@ export default function InstallDayScheduleComponent({
   schedule,
   availableLaborers,
   onChange,
+  defaultDayHours = 8,
 }: InstallDayScheduleProps) {
   const [localSchedule, setLocalSchedule] = useState<DaySchedule[]>(schedule);
 
@@ -29,7 +31,7 @@ export default function InstallDayScheduleComponent({
       newSchedule.push(
         existing || {
           day: i,
-          hours: 8, // Default 8 hours
+          hours: defaultDayHours,
           laborerIds: [],
         }
       );
@@ -37,7 +39,7 @@ export default function InstallDayScheduleComponent({
 
     setLocalSchedule(newSchedule);
     onChange(newSchedule);
-  }, [installDays]);
+  }, [installDays, defaultDayHours]);
 
   const updateDayHours = (day: number, hours: number) => {
     const updated = localSchedule.map(s =>

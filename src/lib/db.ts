@@ -581,6 +581,8 @@ export function getDefaultPricing(): Pricing {
     floorPriceMax: 8.00,
     minimumMarginBuffer: 2000,
     minimumJobPrice: 2500,
+    chipReclaimRate: 0,
+    defaultDayHours: 8,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
