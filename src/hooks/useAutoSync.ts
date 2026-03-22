@@ -122,6 +122,22 @@ export function useAutoSync(options: UseAutoSyncOptions = {}) {
         }
       }
 
+      // Auto cloud backup: once per day
+      const backupKey = `last_cloud_backup_${user.id}`;
+      const lastBackup = localStorage.getItem(backupKey);
+      const oneDayMs = 24 * 60 * 60 * 1000;
+      if (!lastBackup || Date.now() - new Date(lastBackup).getTime() > oneDayMs) {
+        try {
+          const { saveCloudBackup } = await import('../lib/cloudBackup');
+          await saveCloudBackup('auto');
+          localStorage.setItem(backupKey, new Date().toISOString());
+          console.log('[Backup] Daily cloud backup saved');
+        } catch (err) {
+          console.warn('[Backup] Auto cloud backup failed:', err);
+          // Non-fatal — don't block startup
+        }
+      }
+
       performSync(true); // Silent sync on startup
     };
 

@@ -51,6 +51,10 @@ export function setSyncOrgContext(orgId: string | null): void {
   _currentOrgId = orgId;
 }
 
+export function getSyncOrgContext(): string | null {
+  return _currentOrgId;
+}
+
 /**
  * Get last sync timestamp from IndexedDB
  */
