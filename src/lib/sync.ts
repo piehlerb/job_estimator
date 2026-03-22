@@ -477,11 +477,11 @@ export async function syncWithSupabase(): Promise<SyncResult> {
   const startTime = new Date().toISOString();
 
   try {
-    // First, pull remote changes
-    const pullResult = await pullFromSupabase();
-
-    // Then, push local changes
+    // Push local changes first — ensures user's saves aren't overwritten by a stale pull
     const pushResult = await pushToSupabase();
+
+    // Then pull remote changes
+    const pullResult = await pullFromSupabase();
 
     // Update last sync timestamp
     await setLastSyncTimestamp(startTime);

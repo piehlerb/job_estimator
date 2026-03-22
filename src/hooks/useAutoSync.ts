@@ -113,7 +113,7 @@ export function useAutoSync(options: UseAutoSyncOptions = {}) {
       if (!localStorage.getItem(repairKey)) {
         console.log('[Sync] Running one-time org_id repair push...');
         try {
-          await pushAllToSupabase({ bumpTimestamps: true });
+          await pushAllToSupabase(); // No timestamp bumping — preserves original updatedAt so conflict resolution works correctly
           await clearLastSyncTimestamp(); // force full pull on this device too
           localStorage.setItem(repairKey, '1');
           console.log('[Sync] org_id repair complete');
