@@ -1,4 +1,4 @@
-import { Menu, X, Wifi, WifiOff, Cog, Users, DollarSign, Home, Plus, Package, CalendarDays, LogOut, User, RefreshCw, Layers, SlidersHorizontal, BarChart3, Contact, ShoppingBag, Building2 } from 'lucide-react';
+import { Menu, X, Wifi, WifiOff, Cog, Users, DollarSign, Home, Plus, Package, CalendarDays, LogOut, User, RefreshCw, Layers, SlidersHorizontal, BarChart3, Contact, ShoppingBag, Building2, HardDrive } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useSyncStatus } from '../contexts/SyncContext';
 import { SyncStatusIndicator } from './SyncStatusIndicator';
@@ -9,7 +9,7 @@ interface LayoutProps {
   children: React.ReactNode;
   sidebarOpen: boolean;
   onSidebarToggle: () => void;
-  onNavigate: (page: 'dashboard' | 'new-job' | 'edit-job' | 'chip-systems' | 'chip-blends' | 'laborers' | 'costs' | 'pricing' | 'settings' | 'inventory' | 'calendar' | 'reporting' | 'customers' | 'products' | 'organization') => void;
+  onNavigate: (page: 'dashboard' | 'new-job' | 'edit-job' | 'chip-systems' | 'chip-blends' | 'laborers' | 'costs' | 'pricing' | 'settings' | 'inventory' | 'calendar' | 'reporting' | 'customers' | 'products' | 'organization' | 'backup') => void;
   isOnline: boolean;
   onManualSync?: () => void;
 }
@@ -200,6 +200,16 @@ export default function Layout({
               >
                 <SlidersHorizontal size={18} className="md:w-5 md:h-5" />
                 <span>Settings</span>
+              </button>
+            )}
+
+            {!isInventoryOnly && (
+              <button
+                onClick={() => onNavigate('backup')}
+                className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
+              >
+                <HardDrive size={18} className="md:w-5 md:h-5" />
+                <span>Backup</span>
               </button>
             )}
           </nav>
