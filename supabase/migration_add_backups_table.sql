@@ -22,8 +22,8 @@ CREATE POLICY "Users can manage their own backups" ON backups
   FOR ALL USING (
     auth.uid() = user_id
     OR EXISTS (
-      SELECT 1 FROM org_members
-      WHERE org_members.org_id = backups.org_id
-        AND org_members.user_id = auth.uid()
+      SELECT 1 FROM organization_members
+      WHERE organization_members.org_id = backups.org_id
+        AND organization_members.user_id = auth.uid()
     )
   );
