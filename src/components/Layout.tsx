@@ -74,7 +74,7 @@ export default function Layout({
             </div>
           </div>
 
-          <nav className="flex-1 overflow-y-auto p-2 md:p-4 space-y-1 md:space-y-2">
+          <nav className="flex-1 overflow-y-auto scrollbar-hide p-2 md:p-4 space-y-1 md:space-y-2">
             {!isInventoryOnly && (
               <button
                 onClick={() => onNavigate('dashboard')}
