@@ -1,4 +1,4 @@
-import { Plus, Trash2, FileText, Search, Bell, Check, X, ChevronDown, ChevronRight, Link, Shuffle, PhoneCall } from 'lucide-react';
+import { Plus, Trash2, FileText, Search, Bell, Check, X, ChevronDown, ChevronRight, Link, Shuffle, PhoneCall, SlidersHorizontal } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { getAllJobs, deleteJob, updateJob, getDefaultCosts, getCosts, getPricing, getDefaultPricing } from '../lib/db';
 import { Job, JobCalculation, Costs, Pricing, JobStatus, JobReminder } from '../types';
@@ -43,7 +43,8 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
   const [updatingReminder, setUpdatingReminder] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [dashboardPricing, setDashboardPricing] = useState<Pricing>(getDefaultPricing());
-  const [showNeedsContact, setShowNeedsContact] = useState(true);
+  const [viewMode, setViewMode] = useState<'jobs' | 'needs-contact'>('jobs');
+  const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => {
     loadJobs();
@@ -439,346 +440,286 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
     }
   };
 
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    const isDefaultStatus = statusFilter.length === 2 && statusFilter.includes('Pending') && statusFilter.includes('Won');
+    if (!isDefaultStatus) count++;
+    if (probabilityFilter > 0) count++;
+    if (chipBlendFilter) count++;
+    if (selectedTagFilters.length > 0) count++;
+    return count;
+  }, [statusFilter, probabilityFilter, chipBlendFilter, selectedTagFilters]);
+
   return (
-    <div className="p-3 sm:p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 mb-4 sm:mb-6 md:mb-8">
-        <div>
-          <h2 className="text-2xl sm:text-3xl font-bold text-slate-900">Dashboard</h2>
-          <p className="text-sm sm:text-base text-slate-600 mt-1">
-            {filteredAndSortedJobs.length} of {jobsWithCalc.length} jobs shown
-          </p>
+    <div className="max-w-7xl mx-auto">
+      {/* Sticky header + toolbar */}
+      <div className="sticky top-0 z-10 bg-white border-b border-slate-200">
+        {/* Header row */}
+        <div className="flex items-center justify-between px-3 sm:px-6 py-2.5 sm:py-3">
+          <div className="flex items-baseline gap-2.5">
+            <h2 className="text-lg sm:text-xl font-bold text-slate-900">Dashboard</h2>
+            <span className="text-xs text-slate-400">{filteredAndSortedJobs.length}/{jobsWithCalc.length}</span>
+          </div>
+          <button
+            onClick={onNewJob}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors text-sm"
+          >
+            <Plus size={15} />
+            New Job
+          </button>
         </div>
-        <button
-          onClick={onNewJob}
-          className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors text-sm sm:text-base"
-        >
-          <Plus size={18} className="sm:w-5 sm:h-5" />
-          New Job
-        </button>
+        {/* Tab row */}
+        <div className="flex border-b border-slate-100">
+          <button
+            onClick={() => setViewMode('jobs')}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-medium transition-colors ${
+              viewMode === 'jobs'
+                ? 'text-gf-dark-green border-b-2 border-gf-lime -mb-px'
+                : 'text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            Jobs
+            <span className={`text-[10px] font-bold ${viewMode === 'jobs' ? 'text-gf-dark-green' : 'text-slate-300'}`}>({filteredAndSortedJobs.length})</span>
+          </button>
+          <button
+            onClick={() => setViewMode('needs-contact')}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-medium transition-colors ${
+              viewMode === 'needs-contact'
+                ? 'text-orange-600 border-b-2 border-orange-400 -mb-px'
+                : 'text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            <PhoneCall size={12} />
+            Contact
+            {needsContactJobs.length > 0 && (
+              <span className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold ${
+                viewMode === 'needs-contact' ? 'bg-orange-100 text-orange-700' : 'bg-orange-100 text-orange-600'
+              }`}>{needsContactJobs.length}</span>
+            )}
+          </button>
+        </div>
+        {/* Toolbar row */}
+        <div className="flex items-center gap-2 px-3 sm:px-6 py-2">
+          <div className="relative flex-1">
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-7 pr-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gf-lime"
+            />
+          </div>
+          {viewMode === 'jobs' && (
+            <>
+              <button
+                onClick={() => setShowFilters(p => !p)}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-colors shrink-0 ${
+                  showFilters || activeFilterCount > 0
+                    ? 'bg-gf-lime/10 text-gf-dark-green border border-gf-lime/40'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                <SlidersHorizontal size={13} />
+                <span className="hidden sm:inline">Filters</span>
+                {activeFilterCount > 0 && (
+                  <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-gf-lime text-white text-[10px] font-bold">{activeFilterCount}</span>
+                )}
+              </button>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as 'date' | 'price' | 'margin')}
+                className="px-2 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gf-lime shrink-0"
+              >
+                <option value="date">Recent</option>
+                <option value="price">Price ↓</option>
+                <option value="margin">Margin ↓</option>
+              </select>
+            </>
+          )}
+          <button
+            type="button"
+            onClick={() => setShowReminders((prev) => !prev)}
+            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-colors shrink-0 ${
+              remindersNeedingAttentionCount > 0
+                ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            <Bell size={13} />
+            {remindersNeedingAttentionCount > 0 && <span className="font-bold">{remindersNeedingAttentionCount}</span>}
+          </button>
+        </div>
       </div>
 
-      {/* Needs Contact Section */}
-      {needsContactJobs.length > 0 && (
-        <div className="bg-white rounded-lg shadow-sm border border-orange-200 overflow-hidden mb-4 sm:mb-6">
-          <button
-            onClick={() => setShowNeedsContact(prev => !prev)}
-            className="w-full flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 text-left hover:bg-orange-50 transition-colors"
-          >
-            <div className="flex items-center gap-2.5">
-              <PhoneCall size={16} className="text-orange-500 shrink-0" />
-              <span className="text-sm sm:text-base font-semibold text-slate-900">Needs Contact</span>
-              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-orange-100 text-orange-700 text-xs font-bold">
-                {needsContactJobs.length}
-              </span>
-            </div>
-            {showNeedsContact ? <ChevronDown size={16} className="text-slate-400" /> : <ChevronRight size={16} className="text-slate-400" />}
-          </button>
-          {showNeedsContact && (
-            <div className="border-t border-orange-100 divide-y divide-slate-100">
-              {needsContactJobs.map(({ job, daysSince }) => (
-                <button
-                  key={job.id}
-                  onClick={() => onEditJob(job.id)}
-                  className="w-full flex items-center justify-between px-4 sm:px-6 py-2.5 text-left hover:bg-slate-50 transition-colors"
-                >
-                  <span className="text-sm text-slate-800 font-medium truncate pr-4">
-                    {job.name || 'Untitled Job'}
-                    {job.customerName && <span className="text-slate-400 font-normal"> — {job.customerName}</span>}
-                  </span>
-                  <span className="text-xs text-orange-600 font-semibold shrink-0">{daysSince}d ago</span>
+      {/* Collapsible filter panel */}
+      {showFilters && (
+        <div className="bg-slate-50 border-b border-slate-200 px-3 sm:px-6 py-3 space-y-3">
+          {/* Status + Probability in one row */}
+          <div className="flex flex-wrap gap-x-6 gap-y-2">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Status</span>
+              {ALL_STATUSES.map((status) => (
+                <button key={status} onClick={() => handleStatusToggle(status)}
+                  className={`px-2.5 py-0.5 rounded-full text-xs font-medium transition-colors ${statusFilter.includes(status) ? getStatusColor(status) : 'bg-white border border-slate-200 text-slate-400'}`}>
+                  {status}
                 </button>
               ))}
+            </div>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Prob</span>
+              {[0, 20, 40, 60, 80, 100].map(p => (
+                <button key={p} onClick={() => setProbabilityFilter(p)}
+                  className={`px-2.5 py-0.5 rounded-full text-xs font-medium transition-colors ${probabilityFilter === p ? 'bg-blue-100 text-blue-800' : 'bg-white border border-slate-200 text-slate-400 hover:bg-slate-100'}`}>
+                  {p === 0 ? 'Any' : `≥${p}%`}
+                </button>
+              ))}
+            </div>
+          </div>
+          {/* Chip blend */}
+          {availableChipBlends.length > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide shrink-0">Chip</span>
+              <select value={chipBlendFilter} onChange={(e) => setChipBlendFilter(e.target.value)}
+                className="px-2 py-1 border border-slate-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-gf-lime bg-white">
+                <option value="">All Blends</option>
+                {availableChipBlends.map((blend) => <option key={blend} value={blend}>{blend}</option>)}
+              </select>
+            </div>
+          )}
+          {/* Tags */}
+          {availableTags.length > 0 && (
+            <div className="flex items-start gap-2 flex-wrap">
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide shrink-0 pt-0.5">Tags</span>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <button onClick={() => setTagMatchMode('any')}
+                  className={`px-2 py-0.5 rounded text-xs font-medium ${tagMatchMode === 'any' ? 'bg-gf-lime/20 text-gf-dark-green' : 'text-slate-400 hover:text-slate-600'}`}>any</button>
+                <button onClick={() => setTagMatchMode('all')}
+                  className={`px-2 py-0.5 rounded text-xs font-medium ${tagMatchMode === 'all' ? 'bg-gf-lime/20 text-gf-dark-green' : 'text-slate-400 hover:text-slate-600'}`}>all</button>
+                <span className="text-slate-200">|</span>
+                {availableTags.map((tag) => (
+                  <button key={tag} onClick={() => handleTagToggle(tag)}
+                    className={`px-2.5 py-0.5 rounded-full text-xs font-medium transition-colors ${selectedTagFilters.includes(tag) ? 'bg-indigo-100 text-indigo-800' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-100'}`}>
+                    {tag}
+                  </button>
+                ))}
+                {selectedTagFilters.length > 0 && (
+                  <button onClick={() => setSelectedTagFilters([])} className="text-xs text-slate-400 hover:text-slate-600 underline">clear</button>
+                )}
+              </div>
             </div>
           )}
         </div>
       )}
 
-      <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
-        {/* Filters and Sort Section */}
-        <div className="p-3 sm:p-4 md:p-6 border-b border-slate-200">
-          <div className="flex flex-col gap-3">
-            {/* Title, Search, and Sort */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-2">
-              <h3 className="text-base sm:text-lg font-semibold text-slate-900">Jobs</h3>
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <div className="relative flex-1 sm:w-56">
-                  <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                  <input
-                    type="text"
-                    placeholder="Search jobs..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-8 pr-3 py-1.5 sm:py-2 border border-slate-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-gf-lime"
-                  />
-                </div>
-                <label className="text-xs sm:text-sm text-slate-600 font-medium">Sort:</label>
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as 'date' | 'price' | 'margin')}
-                  className="flex-1 sm:flex-none px-2 sm:px-3 py-1.5 sm:py-2 border border-slate-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-gf-lime"
-                >
-                  <option value="date">Recent</option>
-                  <option value="price">Price (High to Low)</option>
-                  <option value="margin">Margin (High to Low)</option>
-                </select>
-                <button
-                  type="button"
-                  onClick={() => setShowReminders((prev) => !prev)}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
-                    remindersNeedingAttentionCount > 0
-                      ? 'bg-red-100 text-red-800 hover:bg-red-200'
-                      : showReminders
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  <Bell size={14} />
-                  Reminders
-                </button>
-              </div>
+      {/* Needs Contact tab content */}
+      {viewMode === 'needs-contact' && (
+        <div className="bg-white divide-y divide-slate-100">
+          {needsContactJobs.length === 0 ? (
+            <div className="p-8 text-center">
+              <PhoneCall size={24} className="mx-auto mb-2 text-slate-300" />
+              <p className="text-sm text-slate-500">No pending jobs need contact right now.</p>
             </div>
-
-            {/* Filters Row */}
-            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-              {/* Status Filter */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <label className="text-xs sm:text-sm text-slate-600 font-medium">Status:</label>
-                <div className="flex gap-1.5 flex-wrap">
-                  {ALL_STATUSES.map((status) => (
-                    <button
-                      key={status}
-                      onClick={() => handleStatusToggle(status)}
-                      className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
-                        statusFilter.includes(status)
-                          ? getStatusColor(status)
-                          : 'bg-slate-100 text-slate-400'
-                      }`}
-                    >
-                      {status}
-                    </button>
-                  ))}
+          ) : (
+            needsContactJobs.map(({ job, daysSince }) => (
+              <button key={job.id} onClick={() => onEditJob(job.id)}
+                className="w-full flex items-center gap-3 px-3 sm:px-6 py-3 text-left hover:bg-orange-50/60 active:bg-orange-50 transition-colors">
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-slate-900 truncate">{job.name || 'Untitled Job'}</div>
+                  {job.customerName && <div className="text-xs text-slate-400">{job.customerName}</div>}
                 </div>
-              </div>
-
-              {/* Probability Filter */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <label className="text-xs sm:text-sm text-slate-600 font-medium">Min Prob:</label>
-                <div className="flex gap-1.5 flex-wrap">
-                  {[0, 20, 40, 60, 80, 100].map(p => (
-                    <button
-                      key={p}
-                      onClick={() => setProbabilityFilter(p)}
-                      className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
-                        probabilityFilter === p
-                          ? 'bg-blue-100 text-blue-800'
-                          : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
-                      }`}
-                    >
-                      {p === 0 ? 'Any' : `≥${p}%`}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Chip Blend Filter */}
-              {availableChipBlends.length > 0 && (
-                <div className="flex items-center gap-2">
-                  <label className="text-xs sm:text-sm text-slate-600 font-medium">Chip:</label>
-                  <select
-                    value={chipBlendFilter}
-                    onChange={(e) => setChipBlendFilter(e.target.value)}
-                    className="px-2 sm:px-3 py-1.5 sm:py-2 border border-slate-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-gf-lime"
-                  >
-                    <option value="">All Blends</option>
-                    {availableChipBlends.map((blend) => (
-                      <option key={blend} value={blend}>{blend}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {/* Tag Filter */}
-              {availableTags.length > 0 && (
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <label className="text-xs sm:text-sm text-slate-600 font-medium">Tags:</label>
-                    <button
-                      type="button"
-                      onClick={() => setTagMatchMode('any')}
-                      className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
-                        tagMatchMode === 'any' ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-500'
-                      }`}
-                    >
-                      Any
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setTagMatchMode('all')}
-                      className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
-                        tagMatchMode === 'all' ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-500'
-                      }`}
-                    >
-                      All
-                    </button>
-                    {selectedTagFilters.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setSelectedTagFilters([])}
-                        className="px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
-                      >
-                        Clear
-                      </button>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {availableTags.map((tag) => (
-                      <button
-                        key={tag}
-                        type="button"
-                        onClick={() => handleTagToggle(tag)}
-                        className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
-                          selectedTagFilters.includes(tag)
-                            ? 'bg-indigo-100 text-indigo-800'
-                            : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                        }`}
-                      >
-                        {tag}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-        {loading ? (
-          <div className="p-6 sm:p-8 text-center">
-            <p className="text-sm sm:text-base text-slate-600">Loading jobs...</p>
-          </div>
-        ) : filteredAndSortedJobs.length === 0 ? (
-          <div className="p-6 sm:p-8 text-center">
-            <p className="text-sm sm:text-base text-slate-600 mb-4">
-              {jobsWithCalc.length === 0
-                ? "No jobs yet. Create your first job to get started!"
-                : "No jobs match the current filters."}
-            </p>
-            {jobsWithCalc.length === 0 && (
-              <button
-                onClick={onNewJob}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors text-sm"
-              >
-                <Plus size={18} />
-                Create Job
+                <span className={`text-sm font-bold shrink-0 ${daysSince > 60 ? 'text-red-500' : 'text-orange-500'}`}>{daysSince}d</span>
               </button>
-            )}
-          </div>
-        ) : (
-          <>
-            {/* Mobile Card View */}
-            <div className="md:hidden divide-y divide-slate-200">
-              {displayItems.map((item) => {
-                if (item.type === 'group') {
-                  const isExpanded = expandedGroups.has(item.groupId);
-                  const isBundled = item.groupType === 'bundled';
-                  const aggMarginPct = item.aggregateTotalPrice > 0 ? ((item.aggregateTotalPrice - item.aggregateTotalCosts) / item.aggregateTotalPrice) * 100 : 0;
-                  return (
-                    <div key={item.groupId}>
-                      {/* Group header (mobile) */}
-                      <div
-                        className={`p-3 sm:p-4 cursor-pointer transition-colors ${isBundled ? 'bg-blue-50 hover:bg-blue-100' : 'bg-purple-50 hover:bg-purple-100'}`}
-                        onClick={() => toggleGroup(item.groupId)}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2 min-w-0">
-                            {isExpanded ? <ChevronDown size={14} className="flex-shrink-0 text-slate-500" /> : <ChevronRight size={14} className="flex-shrink-0 text-slate-500" />}
-                            {isBundled ? <Link size={13} className="flex-shrink-0 text-blue-600" /> : <Shuffle size={13} className="flex-shrink-0 text-purple-600" />}
-                            <span className="text-sm font-semibold text-slate-900 truncate">{item.customerName}</span>
-                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${isBundled ? 'bg-blue-200 text-blue-800' : 'bg-purple-200 text-purple-800'}`}>
-                              {isBundled ? `Bundle (${item.jobs.length})` : `${item.jobs.length} Options`}
-                            </span>
-                          </div>
-                        </div>
-                        {isBundled && (
-                          <div className="mt-1.5 pl-9 grid grid-cols-3 gap-2 text-xs">
-                            <div><p className="text-slate-500">Combined Cost</p><p className="font-medium">${item.aggregateTotalCosts.toFixed(0)}</p></div>
-                            <div><p className="text-slate-500">Combined Price</p><p className="font-semibold">${item.aggregateTotalPrice.toFixed(0)}</p></div>
-                            <div><p className="text-slate-500">Margin</p><p className={`font-semibold ${aggMarginPct >= 30 ? 'text-green-600' : 'text-orange-600'}`}>{aggMarginPct.toFixed(0)}%</p></div>
-                          </div>
-                        )}
-                      </div>
-                      {/* Group children (mobile) */}
-                      {isExpanded && item.jobs.map(({ job, calc }) => {
-                        const marginPct = job.totalPrice > 0 ? ((job.totalPrice - calc.totalCosts) / job.totalPrice) * 100 : 0;
-                        return (
-                          <div
-                            key={job.id}
-                            className={`p-3 sm:p-4 hover:bg-slate-50 transition-colors cursor-pointer border-l-4 ${isBundled ? 'border-blue-300' : 'border-purple-300'}`}
-                            onClick={() => onEditJob(job.id)}
-                          >
-                            <div className="flex items-start justify-between mb-2">
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-0.5">
-                                  <h4 className="text-sm font-semibold text-slate-900 truncate">{job.name || 'Untitled Job'}</h4>
-                                  <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${getStatusColor(job.status)}`}>{job.status}</span>
-                                </div>
-                                <p className="text-xs text-slate-500">{new Date(job.createdAt).toLocaleDateString()}</p>
-                              </div>
-                              <div className="flex items-center gap-1 ml-2">
-                                <button onClick={(e) => { e.stopPropagation(); onViewJobSheet(job.id); }} className="p-1.5 text-green-600 hover:bg-green-50 rounded transition-colors" title="Job Sheet"><FileText size={16} /></button>
-                                <button onClick={(e) => { e.stopPropagation(); handleDeleteJob(job.id); }} className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"><Trash2 size={16} /></button>
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-3 gap-2 text-xs">
-                              <div><p className="text-slate-500">Cost</p><p className="font-medium text-slate-900">${calc.totalCosts.toFixed(0)}</p></div>
-                              <div><p className="text-slate-500">Price</p><p className="font-semibold text-slate-900">${job.totalPrice.toFixed(0)}</p></div>
-                              <div><p className="text-slate-500">Margin</p><p className={`font-semibold ${marginPct >= 30 ? 'text-green-600' : 'text-orange-600'}`}>{marginPct.toFixed(0)}%</p></div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                }
+            ))
+          )}
+        </div>
+      )}
 
-                const { job, calc } = item.jobWithCalc;
-                const marginPct = job.totalPrice > 0 ? ((job.totalPrice - calc.totalCosts) / job.totalPrice) * 100 : 0;
+      {/* Job list */}
+      {viewMode === 'needs-contact' ? null : loading ? (
+        <div className="p-8 text-center text-sm text-slate-500">Loading jobs...</div>
+      ) : filteredAndSortedJobs.length === 0 ? (
+        <div className="p-8 text-center">
+          <p className="text-sm text-slate-500 mb-4">
+            {jobsWithCalc.length === 0 ? "No jobs yet. Create your first job to get started!" : "No jobs match the current filters."}
+          </p>
+          {jobsWithCalc.length === 0 && (
+            <button onClick={onNewJob} className="inline-flex items-center gap-2 px-4 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors text-sm">
+              <Plus size={16} /> Create Job
+            </button>
+          )}
+        </div>
+      ) : (
+        <>
+          {/* Mobile list - compact 2-line rows */}
+          <div className="md:hidden bg-white divide-y divide-slate-100">
+            {displayItems.map((item) => {
+              if (item.type === 'group') {
+                const isExpanded = expandedGroups.has(item.groupId);
+                const isBundled = item.groupType === 'bundled';
+                const aggMarginPct = item.aggregateTotalPrice > 0 ? ((item.aggregateTotalPrice - item.aggregateTotalCosts) / item.aggregateTotalPrice) * 100 : 0;
                 return (
-                  <div
-                    key={job.id}
-                    className="p-3 sm:p-4 hover:bg-slate-50 transition-colors"
-                    onClick={() => onEditJob(job.id)}
-                  >
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <h4 className="text-sm font-semibold text-slate-900 truncate">{job.name || 'Untitled Job'}</h4>
-                          <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${getStatusColor(job.status)}`}>
-                            {job.status}
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-500">{new Date(job.createdAt).toLocaleDateString()}</p>
-                        {(job.tags || []).length > 0 && (
-                          <div className="mt-1 flex flex-wrap gap-1">
-                            {(job.tags || []).slice(0, 3).map((tag) => (
-                              <span key={tag} className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-medium">{tag}</span>
-                            ))}
+                  <div key={item.groupId}>
+                    <div
+                      className={`flex items-center gap-2 px-3 py-2.5 cursor-pointer ${isBundled ? 'bg-blue-50' : 'bg-purple-50'}`}
+                      onClick={() => toggleGroup(item.groupId)}
+                    >
+                      {isExpanded ? <ChevronDown size={13} className="text-slate-400 shrink-0" /> : <ChevronRight size={13} className="text-slate-400 shrink-0" />}
+                      {isBundled ? <Link size={12} className="text-blue-500 shrink-0" /> : <Shuffle size={12} className="text-purple-500 shrink-0" />}
+                      <span className="text-sm font-semibold text-slate-800 truncate flex-1">{item.customerName}</span>
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${isBundled ? 'bg-blue-200 text-blue-800' : 'bg-purple-200 text-purple-800'}`}>
+                        {isBundled ? `${item.jobs.length}×` : `${item.jobs.length} opts`}
+                      </span>
+                      {isBundled && <span className={`text-xs font-bold ${aggMarginPct >= 30 ? 'text-green-600' : 'text-orange-500'}`}>{aggMarginPct.toFixed(0)}%</span>}
+                    </div>
+                    {isExpanded && item.jobs.map(({ job, calc }) => {
+                      const marginPct = job.totalPrice > 0 ? ((job.totalPrice - calc.totalCosts) / job.totalPrice) * 100 : 0;
+                      return (
+                        <div key={job.id}
+                          className={`flex items-center gap-2 px-3 py-2.5 cursor-pointer hover:bg-slate-50 border-l-[3px] ${isBundled ? 'border-blue-300' : 'border-purple-300'}`}
+                          onClick={() => onEditJob(job.id)}>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-sm font-medium text-slate-900 truncate">{job.name || 'Untitled Job'}</span>
+                              <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium ${getStatusColor(job.status)}`}>{job.status}</span>
+                            </div>
+                            <div className="text-xs text-slate-400">${job.totalPrice.toFixed(0)} · <span className={marginPct >= 30 ? 'text-green-600' : 'text-orange-500'}>{marginPct.toFixed(0)}%</span></div>
                           </div>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1 ml-2">
-                        <button onClick={(e) => { e.stopPropagation(); onViewJobSheet(job.id); }} className="p-1.5 text-green-600 hover:bg-green-50 rounded transition-colors" title="Job Sheet"><FileText size={16} /></button>
-                        <button onClick={(e) => { e.stopPropagation(); handleDeleteJob(job.id); }} className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"><Trash2 size={16} /></button>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 text-xs">
-                      <div><p className="text-slate-500">Cost</p><p className="font-medium text-slate-900">${calc.totalCosts.toFixed(0)}</p></div>
-                      <div><p className="text-slate-500">Price</p><p className="font-semibold text-slate-900">${job.totalPrice.toFixed(0)}</p></div>
-                      <div><p className="text-slate-500">Actual Margin</p><p className={`font-semibold ${marginPct >= 30 ? 'text-green-600' : 'text-orange-600'}`}>{marginPct.toFixed(0)}%</p></div>
-                    </div>
+                          <div className="flex items-center gap-0.5">
+                            <button onClick={(e) => { e.stopPropagation(); onViewJobSheet(job.id); }} className="p-1.5 text-slate-400 hover:text-green-600 rounded"><FileText size={14} /></button>
+                            <button onClick={(e) => { e.stopPropagation(); handleDeleteJob(job.id); }} className="p-1.5 text-slate-400 hover:text-red-500 rounded"><Trash2 size={14} /></button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 );
-              })}
-            </div>
+              }
+              const { job, calc } = item.jobWithCalc;
+              const marginPct = job.totalPrice > 0 ? ((job.totalPrice - calc.totalCosts) / job.totalPrice) * 100 : 0;
+              return (
+                <div key={job.id}
+                  className="flex items-center gap-2 px-3 py-2.5 cursor-pointer hover:bg-slate-50 active:bg-slate-100"
+                  onClick={() => onEditJob(job.id)}>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm font-medium text-slate-900 truncate">{job.name || 'Untitled Job'}</span>
+                      <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium ${getStatusColor(job.status)}`}>{job.status}</span>
+                    </div>
+                    <div className="text-xs text-slate-400">
+                      {job.customerName && <span className="mr-1.5">{job.customerName} ·</span>}
+                      ${job.totalPrice.toFixed(0)} · <span className={marginPct >= 30 ? 'text-green-600' : 'text-orange-500'}>{marginPct.toFixed(0)}%</span>
+                      {(job.tags || []).length > 0 && <span className="ml-1.5 text-slate-300">· {(job.tags || []).slice(0, 2).join(', ')}</span>}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-0.5">
+                    <button onClick={(e) => { e.stopPropagation(); onViewJobSheet(job.id); }} className="p-1.5 text-slate-400 hover:text-green-600 rounded"><FileText size={14} /></button>
+                    <button onClick={(e) => { e.stopPropagation(); handleDeleteJob(job.id); }} className="p-1.5 text-slate-400 hover:text-red-500 rounded"><Trash2 size={14} /></button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
 
             {/* Desktop Table View */}
             <div className="hidden md:block overflow-x-auto">
@@ -914,7 +855,6 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
             </div>
           </>
         )}
-      </div>
 
       {showReminders && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4">
