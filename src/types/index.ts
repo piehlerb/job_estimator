@@ -181,6 +181,7 @@ export interface ActualCosts {
   actualTopCost: number;
   actualCyclo1Cost: number;
   actualTintCost: number;
+  actualCrackRepairCost: number;
   actualGasGeneratorCost: number;
   actualGasHeaterCost: number;
   actualGasTravelCost: number;
@@ -248,6 +249,7 @@ export interface Job {
   actualCyclo1Gallons?: number;
   actualTintOz?: number;         // Combined base + top tint, in oz
   actualChipBoxes?: number;
+  actualCrackRepairOz?: number;
   // Products added to this job
   products?: JobProduct[];
   reminders?: JobReminder[];

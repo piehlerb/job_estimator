@@ -374,6 +374,7 @@ interface ActualCostParams {
   actualCyclo1Gallons: number;
   actualTintOz: number;
   actualChipBoxes: number;
+  actualCrackRepairOz: number;
   chipBoxCost: number;
   totalPrice: number;
   installDays: number;
@@ -395,6 +396,7 @@ export function calculateActualCosts(
     actualCyclo1Gallons,
     actualTintOz,
     actualChipBoxes,
+    actualCrackRepairOz,
     chipBoxCost,
     totalPrice,
     installDays,
@@ -406,6 +408,7 @@ export function calculateActualCosts(
   const {
     baseCostPerGal,
     topCostPerGal,
+    crackFillCost: crackFillCostPerGal,
     gasCost,
     consumablesCost,
     cyclo1CostPerGal,
@@ -417,6 +420,7 @@ export function calculateActualCosts(
   const actualTopCost = actualTopCoatGallons * topCostPerGal;
   const actualCyclo1Cost = actualCyclo1Gallons * cyclo1CostPerGal;
   const actualTintCost = actualTintOz > 0 ? (actualTintOz / 32) * tintCostPerQuart : 0;
+  const actualCrackRepairCost = actualCrackRepairOz > 0 ? (actualCrackRepairOz / 128) * crackFillCostPerGal : 0;
 
   const actualTotalHours = actualSchedule.reduce((sum, day) => sum + day.hours, 0);
 
@@ -449,7 +453,7 @@ export function calculateActualCosts(
   const actualRoyaltyCost = totalPrice * 0.05;
 
   const actualTotalCosts = actualChipCost + actualBaseCost + actualTopCost + actualCyclo1Cost
-    + actualTintCost + actualGasGeneratorCost + actualGasHeaterCost + actualGasTravelCost
+    + actualTintCost + actualCrackRepairCost + actualGasGeneratorCost + actualGasHeaterCost + actualGasTravelCost
     + actualLaborCost + actualConsumablesCost + actualRoyaltyCost;
 
   const actualMargin = totalPrice - actualTotalCosts;
@@ -461,6 +465,7 @@ export function calculateActualCosts(
     actualTopCost,
     actualCyclo1Cost,
     actualTintCost,
+    actualCrackRepairCost,
     actualGasGeneratorCost,
     actualGasHeaterCost,
     actualGasTravelCost,

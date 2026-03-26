@@ -96,6 +96,7 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
     actualCyclo1Gallons: '',
     actualTintOz: '',
     actualChipBoxes: '',
+    actualCrackRepairOz: '',
   });
   const [actualCalculation, setActualCalculation] = useState<ActualCosts | null>(null);
   const actualsInitialized = useRef(false);
@@ -208,6 +209,7 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
         actualCyclo1Gallons: parseFloat(actualMaterials.actualCyclo1Gallons) || 0,
         actualTintOz: parseFloat(actualMaterials.actualTintOz) || 0,
         actualChipBoxes: parseFloat(actualMaterials.actualChipBoxes) || 0,
+        actualCrackRepairOz: parseFloat(actualMaterials.actualCrackRepairOz) || 0,
         chipBoxCost,
         totalPrice: parseFloat(formData.totalPrice) || 0,
         installDays: parseFloat(formData.installDays) || 1,
@@ -488,6 +490,7 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
             actualCyclo1Gallons: job.actualCyclo1Gallons?.toString() || '',
             actualTintOz: job.actualTintOz?.toString() || '',
             actualChipBoxes: job.actualChipBoxes?.toString() || '',
+            actualCrackRepairOz: job.actualCrackRepairOz?.toString() || '',
           });
           // Load products from existing job
           if (job.products && job.products.length > 0) {
@@ -1258,6 +1261,7 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
         actualCyclo1Gallons: parseFloat(actualMaterials.actualCyclo1Gallons) || undefined,
         actualTintOz: parseFloat(actualMaterials.actualTintOz) || undefined,
         actualChipBoxes: parseFloat(actualMaterials.actualChipBoxes) || undefined,
+        actualCrackRepairOz: parseFloat(actualMaterials.actualCrackRepairOz) || undefined,
         products: jobProducts.length > 0 ? jobProducts : undefined,
         reminders: reminders.length > 0
           ? [...reminders].sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime())
@@ -2715,6 +2719,23 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
                       className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime"
                     />
                   </div>
+                  {calculation && calculation.crackFillGallons > 0 && (
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Crack Repair (oz)
+                        <span className="ml-1 text-slate-400 font-normal">est. {(calculation.crackFillGallons * 128).toFixed(0)}</span>
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        placeholder={(calculation.crackFillGallons * 128).toFixed(0)}
+                        value={actualMaterials.actualCrackRepairOz}
+                        onChange={(e) => setActualMaterials(prev => ({ ...prev, actualCrackRepairOz: e.target.value }))}
+                        className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime"
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -2739,6 +2760,7 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
                           { label: 'Top Coat', est: calculation.topCost, act: actualCalculation.actualTopCost },
                           { label: 'Cyclo1', est: calculation.cyclo1Cost, act: actualCalculation.actualCyclo1Cost },
                           { label: 'Tint', est: calculation.tintCost, act: actualCalculation.actualTintCost },
+                          ...(calculation.crackFillCost > 0 ? [{ label: 'Crack Repair', est: calculation.crackFillCost, act: actualCalculation.actualCrackRepairCost }] : []),
                           {
                             label: 'Gas',
                             est: calculation.gasGeneratorCost + calculation.gasHeaterCost + calculation.gasTravelCost,
