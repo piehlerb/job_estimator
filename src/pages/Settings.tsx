@@ -36,6 +36,7 @@ export default function Settings() {
     gasHeaterMonths: [] as number[],
     chipReclaimRate: '',
     defaultDayHours: '',
+    staleContactDays: '',
   });
 
   // Discount config state
@@ -81,6 +82,7 @@ export default function Settings() {
           : [11, 12, 1, 2, 3],
         chipReclaimRate: (mergedPricing.chipReclaimRate ?? 0).toString(),
         defaultDayHours: (mergedPricing.defaultDayHours ?? 8).toString(),
+        staleContactDays: (mergedPricing.staleContactDays ?? 30).toString(),
       });
 
       // Load discount config, migrating from legacy fields if needed
@@ -113,6 +115,7 @@ export default function Settings() {
         gasHeaterMonths: [11, 12, 1, 2, 3],
         chipReclaimRate: '0',
         defaultDayHours: '8',
+        staleContactDays: '30',
       });
       setDiscountMode('per_sqft');
       setPerSqftAmount('1');
@@ -181,6 +184,7 @@ export default function Settings() {
         gasHeaterMonths: form.gasHeaterMonths.length > 0 ? form.gasHeaterMonths : [11, 12, 1, 2, 3],
         chipReclaimRate: parseFloat(form.chipReclaimRate) || 0,
         defaultDayHours: parseFloat(form.defaultDayHours) || 8,
+        staleContactDays: parseFloat(form.staleContactDays) || 30,
         updatedAt: new Date().toISOString(),
       };
 
@@ -468,6 +472,19 @@ export default function Settings() {
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
               />
               <p className="text-xs text-slate-500 mt-1">Default hours assigned to each new install day.</p>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-900 mb-2">Needs Contact (days)</label>
+              <input
+                type="number"
+                step="1"
+                min="1"
+                placeholder="30"
+                value={form.staleContactDays}
+                onChange={(e) => setForm({ ...form, staleContactDays: e.target.value })}
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
+              />
+              <p className="text-xs text-slate-500 mt-1">Pending jobs with no scheduled reminder and no contact in this many days appear in the dashboard "Needs Contact" list.</p>
             </div>
           </div>
           <div>

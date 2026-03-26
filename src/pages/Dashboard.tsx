@@ -1,4 +1,4 @@
-import { Plus, Trash2, FileText, Search, Bell, Check, X, ChevronDown, ChevronRight, Link, Shuffle } from 'lucide-react';
+import { Plus, Trash2, FileText, Search, Bell, Check, X, ChevronDown, ChevronRight, Link, Shuffle, PhoneCall } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { getAllJobs, deleteJob, updateJob, getDefaultCosts, getCosts, getPricing, getDefaultPricing } from '../lib/db';
 import { Job, JobCalculation, Costs, Pricing, JobStatus, JobReminder } from '../types';
@@ -42,6 +42,8 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
   const [selectedReminder, setSelectedReminder] = useState<ReminderItem | null>(null);
   const [updatingReminder, setUpdatingReminder] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [dashboardPricing, setDashboardPricing] = useState<Pricing>(getDefaultPricing());
+  const [showNeedsContact, setShowNeedsContact] = useState(true);
 
   useEffect(() => {
     loadJobs();
@@ -71,6 +73,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
       ]);
       const costs = currentCosts || getDefaultCosts();
       const pricing = currentPricing || getDefaultPricing();
+      setDashboardPricing({ ...getDefaultPricing(), ...pricing });
 
       // Calculate values for each job using their snapshots
       const withCalc = allJobs.map((job) => {
@@ -329,6 +332,38 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
     return remindersByDue.filter((reminder) => new Date(reminder.dueAt).getTime() < startOfTomorrow.getTime()).length;
   }, [remindersByDue]);
 
+  const needsContactJobs = useMemo(() => {
+    const staleContactDays = dashboardPricing.staleContactDays ?? 30;
+    const cutoffMs = staleContactDays * 24 * 60 * 60 * 1000;
+    const now = Date.now();
+
+    const getLastContactDate = (job: Job): Date => {
+      const completed = (job.reminders || []).filter(r => r.completed);
+      if (completed.length > 0) {
+        const mostRecent = completed.reduce((latest, r) =>
+          new Date(r.dueAt) > new Date(latest.dueAt) ? r : latest
+        );
+        return new Date(mostRecent.dueAt);
+      }
+      return new Date(job.estimateDate || job.createdAt);
+    };
+
+    return jobsWithCalc
+      .filter(({ job }) => {
+        if (job.status !== 'Pending') return false;
+        const hasScheduledReminder = (job.reminders || []).some(
+          r => !r.completed && new Date(r.dueAt).getTime() > now
+        );
+        if (hasScheduledReminder) return false;
+        return (now - getLastContactDate(job).getTime()) > cutoffMs;
+      })
+      .map(({ job }) => ({
+        job,
+        daysSince: Math.floor((now - getLastContactDate(job).getTime()) / (24 * 60 * 60 * 1000)),
+      }))
+      .sort((a, b) => b.daysSince - a.daysSince);
+  }, [jobsWithCalc, dashboardPricing]);
+
   const selectedReminderDetails = useMemo(() => {
     if (!selectedReminder) return null;
     const jobEntry = jobsWithCalc.find(({ job }) => job.id === selectedReminder.jobId);
@@ -421,6 +456,42 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
           New Job
         </button>
       </div>
+
+      {/* Needs Contact Section */}
+      {needsContactJobs.length > 0 && (
+        <div className="bg-white rounded-lg shadow-sm border border-orange-200 overflow-hidden mb-4 sm:mb-6">
+          <button
+            onClick={() => setShowNeedsContact(prev => !prev)}
+            className="w-full flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 text-left hover:bg-orange-50 transition-colors"
+          >
+            <div className="flex items-center gap-2.5">
+              <PhoneCall size={16} className="text-orange-500 shrink-0" />
+              <span className="text-sm sm:text-base font-semibold text-slate-900">Needs Contact</span>
+              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-orange-100 text-orange-700 text-xs font-bold">
+                {needsContactJobs.length}
+              </span>
+            </div>
+            {showNeedsContact ? <ChevronDown size={16} className="text-slate-400" /> : <ChevronRight size={16} className="text-slate-400" />}
+          </button>
+          {showNeedsContact && (
+            <div className="border-t border-orange-100 divide-y divide-slate-100">
+              {needsContactJobs.map(({ job, daysSince }) => (
+                <button
+                  key={job.id}
+                  onClick={() => onEditJob(job.id)}
+                  className="w-full flex items-center justify-between px-4 sm:px-6 py-2.5 text-left hover:bg-slate-50 transition-colors"
+                >
+                  <span className="text-sm text-slate-800 font-medium truncate pr-4">
+                    {job.name || 'Untitled Job'}
+                    {job.customerName && <span className="text-slate-400 font-normal"> — {job.customerName}</span>}
+                  </span>
+                  <span className="text-xs text-orange-600 font-semibold shrink-0">{daysSince}d ago</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
         {/* Filters and Sort Section */}

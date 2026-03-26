@@ -102,6 +102,7 @@ export interface Pricing {
   minimumJobPrice?: number; // Minimum total suggested job price (default 2500)
   chipReclaimRate?: number; // Percentage of chip reclaimed after a job (0-100, default 0)
   defaultDayHours?: number; // Default hours per install day (default 8)
+  staleContactDays?: number; // Days without contact before a job appears in "Needs Contact" (default 30)
   createdAt: string;
   updatedAt: string;
 }

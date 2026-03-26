@@ -583,6 +583,7 @@ export function getDefaultPricing(): Pricing {
     minimumJobPrice: 2500,
     chipReclaimRate: 0,
     defaultDayHours: 8,
+    staleContactDays: 30,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
