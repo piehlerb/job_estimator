@@ -10,7 +10,7 @@ import { getSyncOrgContext } from './sync';
 import { exportAllData } from './backup';
 import type { ExportData } from '../types';
 
-const MAX_BACKUPS = 30;
+const MAX_BACKUPS = 5;
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
