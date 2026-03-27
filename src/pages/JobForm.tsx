@@ -21,7 +21,7 @@ import {
   getAllJobsByGroupId,
   getAllTintInventory,
 } from '../lib/db';
-import { BaseColor, ChipSystem, Costs, Pricing, Job, JobCalculation, JobStatus, Laborer, InstallDaySchedule, ActualDaySchedule, ActualCosts, ChipInventory, CoatingRemovalType, Product, JobProduct, BaseCoatColor, JobReminder, TintInventory } from '../types';
+import { BaseColor, ChipSystem, Costs, Pricing, Job, JobCalculation, JobStatus, Laborer, InstallDaySchedule, ActualDaySchedule, ActualCosts, ChipInventory, CoatingRemovalType, Product, JobProduct, BaseCoatColor, JobReminder, JobFollowUp, TintInventory } from '../types';
 import { calculateJobOutputs, calculateActualCosts } from '../lib/calculations';
 import InstallDayScheduleComponent from '../components/InstallDaySchedule';
 import { convertLegacyJobToSchedule } from '../lib/jobMigration';
@@ -111,6 +111,14 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
     details: '',
     dueDate: '',
     dueTime: '',
+  });
+
+  // Follow-ups state
+  const [followUps, setFollowUps] = useState<JobFollowUp[]>([]);
+  const [showFollowUpForm, setShowFollowUpForm] = useState(false);
+  const [followUpForm, setFollowUpForm] = useState({
+    date: new Date().toISOString().slice(0, 10),
+    notes: '',
   });
 
   // Snapshot comparison state
@@ -499,6 +507,9 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
           }
           if (job.reminders && job.reminders.length > 0) {
             setReminders(job.reminders);
+          }
+          if (job.followUps && job.followUps.length > 0) {
+            setFollowUps(job.followUps);
           }
           // Load sibling jobs if this job belongs to a group
           if (job.groupId) {
@@ -924,6 +935,26 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
       alert('Error deleting reminder. Please try again.');
     }
   };
+
+  const handleLogFollowUp = () => {
+    if (!followUpForm.date) return;
+    const now = new Date().toISOString();
+    const newFollowUp: JobFollowUp = {
+      id: generateId(),
+      date: followUpForm.date,
+      notes: followUpForm.notes.trim() || undefined,
+      createdAt: now,
+      updatedAt: now,
+    };
+    setFollowUps(prev => [...prev, newFollowUp]);
+    setFollowUpForm({ date: new Date().toISOString().slice(0, 10), notes: '' });
+    setShowFollowUpForm(false);
+  };
+
+  const handleDeleteFollowUp = (id: string) => {
+    setFollowUps(prev => prev.filter(f => f.id !== id));
+  };
+
   // Load bundle aggregate whenever groupJobs change (for bundled type)
   useEffect(() => {
     if (!existingJob?.groupId || existingJob?.groupType !== 'bundled' || groupJobs.length === 0) {
@@ -1265,6 +1296,9 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
         products: jobProducts.length > 0 ? jobProducts : undefined,
         reminders: reminders.length > 0
           ? [...reminders].sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime())
+          : undefined,
+        followUps: followUps.length > 0
+          ? [...followUps].sort((a, b) => a.date.localeCompare(b.date))
           : undefined,
         // Update snapshots if user chose to use current values, otherwise preserve original
         // Laborers can be edited, so always save current selection
@@ -2869,6 +2903,94 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
                     ))}
                 </div>
               )}
+
+              {/* Follow-ups section */}
+              <div className="mt-5 pt-4 border-t border-slate-200">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h3 className="text-sm sm:text-base font-semibold text-slate-900">Follow-ups</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">Log contacts and interactions with this customer.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFollowUpForm({ date: new Date().toISOString().slice(0, 10), notes: '' });
+                      setShowFollowUpForm(true);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-medium bg-gf-lime text-white rounded-lg hover:bg-gf-dark-green transition-colors"
+                  >
+                    <Plus size={14} />
+                    Log Follow-up
+                  </button>
+                </div>
+
+                {showFollowUpForm && (
+                  <div className="mb-3 p-3 bg-white border border-gf-lime rounded-lg space-y-2">
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <label className="block text-xs font-medium text-slate-700 mb-1">Date *</label>
+                        <input
+                          type="date"
+                          value={followUpForm.date}
+                          onChange={(e) => setFollowUpForm({ ...followUpForm, date: e.target.value })}
+                          className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700 mb-1">Notes</label>
+                      <textarea
+                        value={followUpForm.notes}
+                        onChange={(e) => setFollowUpForm({ ...followUpForm, notes: e.target.value })}
+                        placeholder="What happened? (optional)"
+                        rows={2}
+                        className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent resize-none"
+                      />
+                    </div>
+                    <div className="flex gap-2 justify-end">
+                      <button
+                        type="button"
+                        onClick={() => setShowFollowUpForm(false)}
+                        className="px-3 py-1.5 text-xs font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleLogFollowUp}
+                        className="px-3 py-1.5 text-xs font-medium text-white bg-gf-lime rounded-lg hover:bg-gf-dark-green transition-colors"
+                      >
+                        Save
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {followUps.length === 0 && !showFollowUpForm ? (
+                  <p className="text-sm text-slate-500 italic">No follow-ups logged.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {[...followUps]
+                      .sort((a, b) => b.date.localeCompare(a.date))
+                      .map((fu) => (
+                        <div key={fu.id} className="flex items-start justify-between gap-3 p-3 bg-white border border-slate-200 rounded-lg">
+                          <div className="flex-1">
+                            <p className="text-sm font-semibold text-slate-900">{new Date(fu.date + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                            {fu.notes && <p className="text-xs text-slate-500 mt-0.5 whitespace-pre-wrap">{fu.notes}</p>}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteFollowUp(fu.id)}
+                            className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Delete follow-up"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

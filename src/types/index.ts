@@ -164,6 +164,14 @@ export interface JobReminder {
   updatedAt: string;
 }
 
+export interface JobFollowUp {
+  id: string;
+  date: string; // YYYY-MM-DD — when the contact actually happened
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface InstallDaySchedule {
   day: number;
   hours: number;
@@ -254,6 +262,7 @@ export interface Job {
   // Products added to this job
   products?: JobProduct[];
   reminders?: JobReminder[];
+  followUps?: JobFollowUp[];
   // Snapshot of costs at time of job creation (so old jobs don't change)
   costsSnapshot: Costs;
   // Snapshot of pricing at time of job creation

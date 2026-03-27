@@ -339,12 +339,20 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
     const now = Date.now();
 
     const getLastContactDate = (job: Job): Date => {
-      const completed = (job.reminders || []).filter(r => r.completed);
-      if (completed.length > 0) {
-        const mostRecent = completed.reduce((latest, r) =>
-          new Date(r.dueAt) > new Date(latest.dueAt) ? r : latest
-        );
-        return new Date(mostRecent.dueAt);
+      const candidates: Date[] = [];
+
+      // Completed reminders count as contact
+      (job.reminders || []).filter(r => r.completed).forEach(r => {
+        candidates.push(new Date(r.dueAt));
+      });
+
+      // Logged follow-ups count as contact
+      (job.followUps || []).forEach(f => {
+        candidates.push(new Date(f.date + 'T12:00:00'));
+      });
+
+      if (candidates.length > 0) {
+        return candidates.reduce((latest, d) => d > latest ? d : latest);
       }
       return new Date(job.estimateDate || job.createdAt);
     };
