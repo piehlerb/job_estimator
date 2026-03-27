@@ -1,6 +1,6 @@
 export type BaseColor = string;
 
-export type JobStatus = 'Won' | 'Lost' | 'Pending';
+export type JobStatus = 'Won' | 'Lost' | 'Pending' | 'Verbal';
 
 export interface ChipSystem {
   id: string;

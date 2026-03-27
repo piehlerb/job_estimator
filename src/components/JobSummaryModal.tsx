@@ -250,6 +250,7 @@ export default function JobSummaryModal({
   const statusBadgeClass = (status: string) => {
     if (status === 'Won') return 'inline-block px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700';
     if (status === 'Pending') return 'inline-block px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-700';
+    if (status === 'Verbal') return 'inline-block px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700';
     return 'inline-block px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600';
   };
 

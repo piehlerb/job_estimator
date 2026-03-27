@@ -10,20 +10,21 @@ function generateId(): string {
 interface CustomerWithStats extends Customer {
   jobs: number;
   won: number;
+  verbal: number;
   pending: number;
   lost: number;
   totalContractValue: number;
   lastInstallDate?: string;
 }
 
-const ALL_STATUSES: JobStatus[] = ['Pending', 'Won', 'Lost'];
+const ALL_STATUSES: JobStatus[] = ['Pending', 'Verbal', 'Won', 'Lost'];
 
 export default function Customers() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<JobStatus[]>(['Pending', 'Won', 'Lost']);
+  const [statusFilter, setStatusFilter] = useState<JobStatus[]>(['Pending', 'Verbal', 'Won', 'Lost']);
 
   // Form state
   const [showForm, setShowForm] = useState(false);
@@ -70,6 +71,7 @@ export default function Customers() {
         ...customer,
         jobs: customerJobs.length,
         won: customerJobs.filter((j) => j.status === 'Won').length,
+        verbal: customerJobs.filter((j) => j.status === 'Verbal').length,
         pending: customerJobs.filter((j) => j.status === 'Pending').length,
         lost: customerJobs.filter((j) => j.status === 'Lost').length,
         totalContractValue: customerJobs.reduce((sum, j) => sum + j.totalPrice, 0),
@@ -277,6 +279,9 @@ export default function Customers() {
                     Won
                   </th>
                   <th className="px-4 lg:px-6 py-3 text-right text-sm font-semibold text-slate-700">
+                    Verbal
+                  </th>
+                  <th className="px-4 lg:px-6 py-3 text-right text-sm font-semibold text-slate-700">
                     Pending
                   </th>
                   <th className="px-4 lg:px-6 py-3 text-right text-sm font-semibold text-slate-700">
@@ -318,6 +323,9 @@ export default function Customers() {
                       </td>
                       <td className="px-4 lg:px-6 py-4 text-sm text-right text-green-700">
                         {customer.won}
+                      </td>
+                      <td className="px-4 lg:px-6 py-4 text-sm text-right text-blue-700">
+                        {customer.verbal}
                       </td>
                       <td className="px-4 lg:px-6 py-4 text-sm text-right text-amber-700">
                         {customer.pending}

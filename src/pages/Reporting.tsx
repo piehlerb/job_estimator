@@ -12,6 +12,7 @@ interface TagAggregate {
   tag: string;
   jobs: number;
   won: number;
+  verbal: number;
   pending: number;
   lost: number;
   totalPrice: number;
@@ -19,14 +20,14 @@ interface TagAggregate {
   totalMargin: number;
 }
 
-const ALL_STATUSES: JobStatus[] = ['Pending', 'Won', 'Lost'];
+const ALL_STATUSES: JobStatus[] = ['Pending', 'Verbal', 'Won', 'Lost'];
 type DateRangePreset = 'all' | '30d' | '90d' | 'ytd' | 'custom';
 type DateFieldMode = 'install' | 'created';
 
 export default function Reporting() {
   const [jobsWithCalc, setJobsWithCalc] = useState<JobWithCalc[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState<JobStatus[]>(['Pending', 'Won', 'Lost']);
+  const [statusFilter, setStatusFilter] = useState<JobStatus[]>(['Pending', 'Verbal', 'Won', 'Lost']);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tagMatchMode, setTagMatchMode] = useState<'any' | 'all'>('any');
   const [dateRangePreset, setDateRangePreset] = useState<DateRangePreset>('all');
@@ -188,6 +189,7 @@ export default function Reporting() {
             tag,
             jobs: 0,
             won: 0,
+            verbal: 0,
             pending: 0,
             lost: 0,
             totalPrice: 0,
@@ -203,6 +205,7 @@ export default function Reporting() {
         entry.totalMargin += job.totalPrice - calc.totalCosts;
 
         if (job.status === 'Won') entry.won += 1;
+        if (job.status === 'Verbal') entry.verbal += 1;
         if (job.status === 'Pending') entry.pending += 1;
         if (job.status === 'Lost') entry.lost += 1;
       });
@@ -392,6 +395,7 @@ export default function Reporting() {
                       <th className="px-4 lg:px-6 py-3 text-left text-sm font-semibold text-slate-700">Tag</th>
                       <th className="px-4 lg:px-6 py-3 text-right text-sm font-semibold text-slate-700">Jobs</th>
                       <th className="px-4 lg:px-6 py-3 text-right text-sm font-semibold text-slate-700">Won</th>
+                      <th className="px-4 lg:px-6 py-3 text-right text-sm font-semibold text-slate-700">Verbal</th>
                       <th className="px-4 lg:px-6 py-3 text-right text-sm font-semibold text-slate-700">Pending</th>
                       <th className="px-4 lg:px-6 py-3 text-right text-sm font-semibold text-slate-700">Lost</th>
                       <th className="px-4 lg:px-6 py-3 text-right text-sm font-semibold text-slate-700">Revenue</th>
@@ -407,6 +411,7 @@ export default function Reporting() {
                           <td className="px-4 lg:px-6 py-4 text-sm font-medium text-slate-900">{row.tag}</td>
                           <td className="px-4 lg:px-6 py-4 text-sm text-right text-slate-700">{row.jobs}</td>
                           <td className="px-4 lg:px-6 py-4 text-sm text-right text-green-700">{row.won}</td>
+                          <td className="px-4 lg:px-6 py-4 text-sm text-right text-blue-700">{row.verbal}</td>
                           <td className="px-4 lg:px-6 py-4 text-sm text-right text-amber-700">{row.pending}</td>
                           <td className="px-4 lg:px-6 py-4 text-sm text-right text-red-700">{row.lost}</td>
                           <td className="px-4 lg:px-6 py-4 text-sm text-right text-slate-700">{formatCurrency(row.totalPrice)}</td>

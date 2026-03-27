@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { getAllJobs } from '../lib/db';
 import { Job, JobStatus, JobReminder } from '../types';
 
-type FilterType = 'All' | 'Won' | 'Pending';
+type FilterType = 'All' | 'Won' | 'Verbal' | 'Pending';
 
 interface CalendarProps {
   onEditJob: (id: string) => void;
@@ -36,10 +36,10 @@ export default function Calendar({ onEditJob }: CalendarProps) {
     }
   };
 
-  // Filter jobs based on status (All = Won + Pending, excludes Lost)
+  // Filter jobs based on status (All = Won + Verbal + Pending, excludes Lost)
   const filteredJobs = jobs.filter((job) => {
     if (filter === 'All') {
-      return job.status === 'Won' || job.status === 'Pending';
+      return job.status === 'Won' || job.status === 'Verbal' || job.status === 'Pending';
     }
     return job.status === filter;
   });
@@ -112,6 +112,8 @@ export default function Calendar({ onEditJob }: CalendarProps) {
         return 'bg-green-100 text-green-800 border-green-200';
       case 'Pending':
         return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'Verbal':
+        return 'bg-blue-100 text-blue-800 border-blue-200';
       default:
         return 'bg-slate-100 text-slate-800 border-slate-200';
     }
@@ -136,7 +138,7 @@ export default function Calendar({ onEditJob }: CalendarProps) {
 
       {/* Filter buttons */}
       <div className="flex gap-2 mb-6">
-        {(['All', 'Won', 'Pending'] as FilterType[]).map((filterOption) => (
+        {(['All', 'Won', 'Verbal', 'Pending'] as FilterType[]).map((filterOption) => (
           <button
             key={filterOption}
             onClick={() => setFilter(filterOption)}
@@ -146,6 +148,8 @@ export default function Calendar({ onEditJob }: CalendarProps) {
                   ? 'bg-green-600 text-white'
                   : filterOption === 'Pending'
                   ? 'bg-yellow-500 text-white'
+                  : filterOption === 'Verbal'
+                  ? 'bg-blue-600 text-white'
                   : 'bg-gf-lime text-white'
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}

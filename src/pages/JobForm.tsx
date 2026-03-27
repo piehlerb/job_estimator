@@ -445,7 +445,7 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
             tags: (job.tags || []).join(', '),
             baseColor: job.baseColor || '',
             status: job.status || 'Pending',
-            probability: (job.probability?.toString()) ?? (job.status === 'Won' ? '100' : job.status === 'Lost' ? '0' : '20'),
+            probability: (job.probability?.toString()) ?? (job.status === 'Won' ? '100' : job.status === 'Lost' ? '0' : job.status === 'Verbal' ? '80' : '20'),
             estimateDate: job.estimateDate || job.createdAt.split('T')[0],
             decisionDate: job.decisionDate || '',
             notes: job.notes || '',
@@ -751,7 +751,7 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
   };
 
   const handleStatusChange = (newStatus: JobStatus) => {
-    const probMap: Record<JobStatus, string> = { Won: '100', Lost: '0', Pending: '20' };
+    const probMap: Record<JobStatus, string> = { Won: '100', Lost: '0', Pending: '20', Verbal: '80' };
     setFormData(prev => ({ ...prev, status: newStatus, probability: probMap[newStatus] }));
   };
 
@@ -1667,7 +1667,7 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
                 <div className="flex-1">
                   <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Status</label>
                   <div className="flex flex-wrap gap-3 sm:gap-4">
-                    {(['Pending', 'Won', 'Lost'] as JobStatus[]).map((status) => (
+                    {(['Pending', 'Verbal', 'Won', 'Lost'] as JobStatus[]).map((status) => (
                       <label key={status} className="flex items-center gap-2 cursor-pointer">
                         <input
                           type="radio"
@@ -1680,6 +1680,7 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
                         <span className={`text-xs sm:text-sm ${
                           status === 'Won' ? 'text-green-700' :
                           status === 'Lost' ? 'text-red-700' :
+                          status === 'Verbal' ? 'text-blue-700' :
                           'text-slate-700'
                         }`}>{status}</span>
                       </label>
@@ -3216,6 +3217,7 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
                           <span className={`flex-shrink-0 px-2 py-0.5 rounded-full text-xs font-medium ${
                             j.status === 'Won' ? 'bg-green-100 text-green-800' :
                             j.status === 'Lost' ? 'bg-red-100 text-red-800' :
+                            j.status === 'Verbal' ? 'bg-blue-100 text-blue-800' :
                             'bg-yellow-100 text-yellow-800'
                           }`}>
                             {j.status}

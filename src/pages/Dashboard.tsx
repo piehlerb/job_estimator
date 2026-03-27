@@ -24,15 +24,15 @@ interface ReminderItem {
   dueAt: string;
 }
 
-const ALL_STATUSES: JobStatus[] = ['Pending', 'Won', 'Lost'];
+const ALL_STATUSES: JobStatus[] = ['Pending', 'Verbal', 'Won', 'Lost'];
 
 export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: DashboardProps) {
   const [jobsWithCalc, setJobsWithCalc] = useState<JobWithCalc[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState<'date' | 'price' | 'margin'>('date');
 
-  // Filter state - default to showing Pending and Won
-  const [statusFilter, setStatusFilter] = useState<JobStatus[]>(['Pending', 'Won']);
+  // Filter state - default to showing Pending, Verbal, and Won
+  const [statusFilter, setStatusFilter] = useState<JobStatus[]>(['Pending', 'Verbal', 'Won']);
   const [probabilityFilter, setProbabilityFilter] = useState<number>(0);
   const [chipBlendFilter, setChipBlendFilter] = useState<string>('');
   const [selectedTagFilters, setSelectedTagFilters] = useState<string[]>([]);
@@ -359,7 +359,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
 
     return jobsWithCalc
       .filter(({ job }) => {
-        if (job.status !== 'Pending') return false;
+        if (job.status !== 'Pending' && job.status !== 'Verbal') return false;
         const hasScheduledReminder = (job.reminders || []).some(
           r => !r.completed && new Date(r.dueAt).getTime() > now
         );
@@ -444,13 +444,14 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
       case 'Won': return 'bg-green-100 text-green-800';
       case 'Lost': return 'bg-red-100 text-red-800';
       case 'Pending': return 'bg-yellow-100 text-yellow-800';
+      case 'Verbal': return 'bg-blue-100 text-blue-800';
       default: return 'bg-slate-100 text-slate-800';
     }
   };
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
-    const isDefaultStatus = statusFilter.length === 2 && statusFilter.includes('Pending') && statusFilter.includes('Won');
+    const isDefaultStatus = statusFilter.length === 3 && statusFilter.includes('Pending') && statusFilter.includes('Verbal') && statusFilter.includes('Won');
     if (!isDefaultStatus) count++;
     if (probabilityFilter > 0) count++;
     if (chipBlendFilter) count++;

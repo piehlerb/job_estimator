@@ -484,7 +484,7 @@ export default function Settings() {
                 onChange={(e) => setForm({ ...form, staleContactDays: e.target.value })}
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
               />
-              <p className="text-xs text-slate-500 mt-1">Pending jobs with no scheduled reminder and no contact in this many days appear in the dashboard "Needs Contact" list.</p>
+              <p className="text-xs text-slate-500 mt-1">Pending and Verbal jobs with no scheduled reminder and no contact in this many days appear in the dashboard "Needs Contact" list.</p>
             </div>
           </div>
           <div>
