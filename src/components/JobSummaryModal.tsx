@@ -193,8 +193,6 @@ export default function JobSummaryModal({
   // Aggregate totals for non-ignored jobs
   const totals = useMemo(() => {
     const activeRows = jobMaterials.filter((r) => !ignoredJobIds.has(r.job.id));
-    const reclaimRate = (currentPricing.chipReclaimRate ?? 0) / 100;
-
     const baseA = activeRows.reduce((s, r) => s + r.baseA, 0);
     const baseBGrey = activeRows.reduce((s, r) => s + r.baseBGrey, 0);
     const baseBTan = activeRows.reduce((s, r) => s + r.baseBTan, 0);
@@ -205,8 +203,7 @@ export default function JobSummaryModal({
     const chipByBlend: Record<string, number> = {};
     for (const r of activeRows) {
       if (r.chipBlend && r.chipLbs > 0) {
-        const netLbs = r.chipLbs * (1 - reclaimRate);
-        chipByBlend[r.chipBlend] = (chipByBlend[r.chipBlend] || 0) + netLbs;
+        chipByBlend[r.chipBlend] = (chipByBlend[r.chipBlend] || 0) + r.chipLbs;
       }
     }
 
@@ -235,8 +232,6 @@ export default function JobSummaryModal({
 
     return { baseA, baseBGrey, baseBTan, baseBClear, topA, topB, chipByBlend, tintByColor, allChipBlends, allTintColors };
   }, [jobMaterials, ignoredJobIds, chipInventory, tintInventory, currentPricing]);
-
-  const chipReclaimRate = currentPricing.chipReclaimRate ?? 0;
 
   const toggleIgnored = (jobId: string) => {
     setIgnoredIds((prev) => {
@@ -356,11 +351,6 @@ export default function JobSummaryModal({
                           {row.chipBlend && row.chipLbs > 0 ? (
                             <span>
                               {row.chipBlend} <span className="tabular-nums">{row.chipLbs.toFixed(0)} lbs</span>
-                              {chipReclaimRate > 0 && (
-                                <span className="text-xs text-green-600 ml-1">
-                                  ({(row.chipLbs * chipReclaimRate / 100).toFixed(0)} reclaimed)
-                                </span>
-                              )}
                             </span>
                           ) : (
                             <span className="text-slate-400">–</span>
@@ -388,9 +378,6 @@ export default function JobSummaryModal({
             <p className="text-xs text-slate-500 mt-0.5">
               Based on {activeCount} active job{activeCount !== 1 ? 's' : ''}.
               {' '}Difference = On Hand − Required.
-              {chipReclaimRate > 0 && (
-                <span className="ml-1">Chip quantities reflect {currentPricing.chipReclaimRate}% reclaim (net consumption).</span>
-              )}
             </p>
           </div>
           <div className="overflow-x-auto">
