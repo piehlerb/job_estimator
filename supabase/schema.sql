@@ -102,7 +102,7 @@ CREATE TABLE IF NOT EXISTS jobs (
   chip_blend TEXT,
   tags TEXT[],
   base_color TEXT,
-  status TEXT NOT NULL CHECK (status IN ('Won', 'Lost', 'Pending')),
+  status TEXT NOT NULL CHECK (status IN ('Won', 'Lost', 'Pending', 'Verbal')),
   include_basecoat_tint BOOLEAN,
   include_topcoat_tint BOOLEAN,
   google_drive_folder_id TEXT,
