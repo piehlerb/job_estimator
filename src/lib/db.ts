@@ -1,7 +1,7 @@
-import { ChipSystem, PricingVariable, Job, Costs, Laborer, ChipInventory, TintInventory, TopCoatInventory, BaseCoatInventory, MiscInventory, Pricing, Customer, Product, BaseCoatColor } from '../types';
+import { ChipSystem, PricingVariable, Job, Costs, Laborer, ChipInventory, TintInventory, TopCoatInventory, BaseCoatInventory, MiscInventory, Pricing, Customer, Product, BaseCoatColor, ShoppingItem } from '../types';
 
 const DB_NAME = 'JobEstimator';
-const DB_VERSION = 14; // Incremented again to ensure tintInventory store is created
+const DB_VERSION = 15; // Added shoppingItems store
 
 // Auto-sync flag - can be disabled for batch operations
 let autoSyncEnabled = true;
@@ -149,6 +149,9 @@ export async function initDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains('tintInventory')) {
         db.createObjectStore('tintInventory', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('shoppingItems')) {
+        db.createObjectStore('shoppingItems', { keyPath: 'id' });
       }
     };
   });
@@ -1319,4 +1322,49 @@ export async function deleteProduct(id: string): Promise<void> {
   await triggerBackgroundSync();
 }
 
+// ─── Shopping List ────────────────────────────────────────────────────────────
+
+export async function getAllShoppingItems(): Promise<ShoppingItem[]> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('shoppingItems', 'readonly');
+    const store = tx.objectStore('shoppingItems');
+    const req = store.getAll();
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => resolve(req.result || []);
+  });
+}
+
+export async function addShoppingItem(item: ShoppingItem): Promise<void> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('shoppingItems', 'readwrite');
+    const store = tx.objectStore('shoppingItems');
+    const req = store.put(item);
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => resolve();
+  });
+}
+
+export async function updateShoppingItem(item: ShoppingItem): Promise<void> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('shoppingItems', 'readwrite');
+    const store = tx.objectStore('shoppingItems');
+    const req = store.put(item);
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => resolve();
+  });
+}
+
+export async function deleteShoppingItem(id: string): Promise<void> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('shoppingItems', 'readwrite');
+    const store = tx.objectStore('shoppingItems');
+    const req = store.delete(id);
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => resolve();
+  });
+}
 

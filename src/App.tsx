@@ -16,6 +16,7 @@ import Customers from './pages/Customers';
 import Products from './pages/Products';
 import Organization from './pages/Organization';
 import Backup from './pages/Backup';
+import ShoppingList from './pages/ShoppingList';
 import Login from './pages/Login';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { useAuth } from './contexts/AuthContext';
@@ -23,10 +24,10 @@ import { useAutoSync } from './hooks/useAutoSync';
 import { migrateCustomersFromJobs, cleanupMigratedCustomerDuplicates, migrateJobsDisableGasHeater } from './lib/jobMigration';
 import { getAllJobs, updateJob } from './lib/db';
 
-type Page = 'dashboard' | 'new-job' | 'edit-job' | 'job-sheet' | 'chip-systems' | 'chip-blends' | 'laborers' | 'costs' | 'pricing' | 'settings' | 'inventory' | 'calendar' | 'reporting' | 'customers' | 'products' | 'organization' | 'backup';
+type Page = 'dashboard' | 'new-job' | 'edit-job' | 'job-sheet' | 'chip-systems' | 'chip-blends' | 'laborers' | 'costs' | 'pricing' | 'settings' | 'inventory' | 'shopping-list' | 'calendar' | 'reporting' | 'customers' | 'products' | 'organization' | 'backup';
 
 // Pages accessible to inventory_only org members
-const INVENTORY_ONLY_PAGES: Page[] = ['inventory', 'organization'];
+const INVENTORY_ONLY_PAGES: Page[] = ['inventory', 'shopping-list', 'organization'];
 
 function App() {
   const [currentPage, setCurrentPage] = useState<Page>('dashboard');
@@ -278,6 +279,9 @@ function App() {
       )}
       {currentPage === 'backup' && (
         <Backup />
+      )}
+      {currentPage === 'shopping-list' && (
+        <ShoppingList />
       )}
     </Layout>
   );

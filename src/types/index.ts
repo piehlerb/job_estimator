@@ -458,6 +458,14 @@ export interface OrganizationInvitation {
   createdAt: string;
 }
 
+export interface ShoppingItem {
+  id: string;
+  name: string;
+  completed: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // Sync types
 export type SyncStatus = 'idle' | 'syncing' | 'success' | 'error';
 export type SyncDirection = 'push' | 'pull' | 'both';
