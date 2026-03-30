@@ -1324,7 +1324,7 @@ export async function deleteProduct(id: string): Promise<void> {
 
 // ─── Shopping List ────────────────────────────────────────────────────────────
 
-export async function getAllShoppingItems(): Promise<ShoppingItem[]> {
+export async function getAllShoppingItemsForSync(): Promise<ShoppingItem[]> {
   const db = await getDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction('shoppingItems', 'readonly');
@@ -1335,36 +1335,58 @@ export async function getAllShoppingItems(): Promise<ShoppingItem[]> {
   });
 }
 
+export async function getAllShoppingItems(): Promise<ShoppingItem[]> {
+  const all = await getAllShoppingItemsForSync();
+  return all.filter(i => !i.deleted);
+}
+
 export async function addShoppingItem(item: ShoppingItem): Promise<void> {
   const db = await getDB();
-  return new Promise((resolve, reject) => {
+  await new Promise<void>((resolve, reject) => {
     const tx = db.transaction('shoppingItems', 'readwrite');
     const store = tx.objectStore('shoppingItems');
     const req = store.put(item);
     req.onerror = () => reject(req.error);
     req.onsuccess = () => resolve();
   });
+  await queueForSync('shoppingItems', item.id, 'create');
+  await triggerBackgroundSync();
 }
 
 export async function updateShoppingItem(item: ShoppingItem): Promise<void> {
   const db = await getDB();
-  return new Promise((resolve, reject) => {
+  await new Promise<void>((resolve, reject) => {
     const tx = db.transaction('shoppingItems', 'readwrite');
     const store = tx.objectStore('shoppingItems');
     const req = store.put(item);
     req.onerror = () => reject(req.error);
     req.onsuccess = () => resolve();
   });
+  await queueForSync('shoppingItems', item.id, 'update');
+  await triggerBackgroundSync();
 }
 
 export async function deleteShoppingItem(id: string): Promise<void> {
   const db = await getDB();
-  return new Promise((resolve, reject) => {
+  await new Promise<void>((resolve, reject) => {
     const tx = db.transaction('shoppingItems', 'readwrite');
     const store = tx.objectStore('shoppingItems');
-    const req = store.delete(id);
-    req.onerror = () => reject(req.error);
-    req.onsuccess = () => resolve();
+    const getReq = store.get(id);
+    getReq.onerror = () => reject(getReq.error);
+    getReq.onsuccess = () => {
+      const item = getReq.result;
+      if (item) {
+        item.deleted = true;
+        item.updatedAt = new Date().toISOString();
+        const putReq = store.put(item);
+        putReq.onerror = () => reject(putReq.error);
+        putReq.onsuccess = () => resolve();
+      } else {
+        resolve();
+      }
+    };
   });
+  await queueForSync('shoppingItems', id, 'delete');
+  await triggerBackgroundSync();
 }
 

@@ -464,6 +464,7 @@ export interface ShoppingItem {
   completed: boolean;
   createdAt: string;
   updatedAt: string;
+  deleted?: boolean;
 }
 
 // Sync types
