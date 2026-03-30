@@ -1,4 +1,4 @@
-import { ArrowLeft, Save, ChevronDown, ChevronUp, X, Plus, Trash2, Link, Shuffle } from 'lucide-react';
+import { ArrowLeft, Save, ChevronDown, ChevronUp, X, Plus, Trash2, Link, Shuffle, Check } from 'lucide-react';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   getAllSystems,
@@ -112,6 +112,8 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
     dueDate: '',
     dueTime: '',
   });
+  const [showNextReminderPrompt, setShowNextReminderPrompt] = useState(false);
+  const [nextReminderForm, setNextReminderForm] = useState({ subject: '', dueDate: '', dueTime: '', details: '' });
 
   // Follow-ups state
   const [followUps, setFollowUps] = useState<JobFollowUp[]>([]);
@@ -936,7 +938,69 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
     }
   };
 
-  const handleLogFollowUp = () => {
+  const handleCompleteReminder = async (id: string) => {
+    const now = new Date().toISOString();
+    const nextReminders = reminders.map((r) =>
+      r.id === id ? { ...r, completed: true, updatedAt: now } : r
+    );
+    try {
+      await persistReminderChanges(nextReminders);
+      setNextReminderForm({ subject: '', dueDate: '', dueTime: '', details: '' });
+      setShowNextReminderPrompt(true);
+    } catch (error) {
+      console.error('Error completing reminder:', error);
+      alert('Error completing reminder. Please try again.');
+    }
+  };
+
+  const handleCreateNextReminder = async () => {
+    if (!nextReminderForm.subject.trim() || !nextReminderForm.dueDate || !nextReminderForm.dueTime) {
+      alert('Please enter a subject, date, and time.');
+      return;
+    }
+    const dueAt = new Date(`${nextReminderForm.dueDate}T${nextReminderForm.dueTime}`).toISOString();
+    const now = new Date().toISOString();
+    const newReminder: JobReminder = {
+      id: generateId(),
+      subject: nextReminderForm.subject.trim(),
+      details: nextReminderForm.details.trim() || undefined,
+      dueDate: nextReminderForm.dueDate,
+      dueTime: nextReminderForm.dueTime,
+      dueAt,
+      createdAt: now,
+      updatedAt: now,
+    };
+    try {
+      await persistReminderChanges([...reminders, newReminder]);
+      setShowNextReminderPrompt(false);
+    } catch (error) {
+      console.error('Error creating next reminder:', error);
+      alert('Error creating reminder. Please try again.');
+    }
+  };
+
+  const persistFollowUpChanges = async (nextFollowUps: JobFollowUp[]) => {
+    setFollowUps(nextFollowUps);
+
+    if (!jobId || !existingJob) {
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const nextJob: Job = {
+      ...existingJob,
+      followUps: nextFollowUps.length > 0
+        ? [...nextFollowUps].sort((a, b) => a.date.localeCompare(b.date))
+        : undefined,
+      updatedAt: now,
+      synced: false,
+    };
+
+    await updateJob(nextJob);
+    setExistingJob(nextJob);
+  };
+
+  const handleLogFollowUp = async () => {
     if (!followUpForm.date) return;
     const now = new Date().toISOString();
     const newFollowUp: JobFollowUp = {
@@ -946,13 +1010,25 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
       createdAt: now,
       updatedAt: now,
     };
-    setFollowUps(prev => [...prev, newFollowUp]);
+    const nextFollowUps = [...followUps, newFollowUp];
+    try {
+      await persistFollowUpChanges(nextFollowUps);
+    } catch (error) {
+      console.error('Error saving follow-up:', error);
+      alert('Error saving follow-up. Please try again.');
+    }
     setFollowUpForm({ date: new Date().toISOString().slice(0, 10), notes: '' });
     setShowFollowUpForm(false);
   };
 
-  const handleDeleteFollowUp = (id: string) => {
-    setFollowUps(prev => prev.filter(f => f.id !== id));
+  const handleDeleteFollowUp = async (id: string) => {
+    const nextFollowUps = followUps.filter(f => f.id !== id);
+    try {
+      await persistFollowUpChanges(nextFollowUps);
+    } catch (error) {
+      console.error('Error deleting follow-up:', error);
+      alert('Error deleting follow-up. Please try again.');
+    }
   };
 
   // Load bundle aggregate whenever groupJobs change (for bundled type)
@@ -2880,26 +2956,40 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
                   {[...reminders]
                     .sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime())
                     .map((reminder) => (
-                      <div key={reminder.id} className="flex items-start justify-between gap-3 p-3 bg-white border border-slate-200 rounded-lg">
+                      <div key={reminder.id} className={`flex items-start justify-between gap-3 p-3 bg-white border rounded-lg ${reminder.completed ? 'border-slate-100 opacity-60' : 'border-slate-200'}`}>
                         <button
                           type="button"
-                          onClick={() => openEditReminder(reminder)}
+                          onClick={() => !reminder.completed && openEditReminder(reminder)}
                           className="text-left flex-1"
+                          disabled={reminder.completed}
                         >
-                          <p className="text-sm font-semibold text-slate-900">{reminder.subject}</p>
+                          <p className={`text-sm font-semibold ${reminder.completed ? 'line-through text-slate-400' : 'text-slate-900'}`}>{reminder.subject}</p>
                           <p className="text-xs text-slate-600">Due {new Date(reminder.dueAt).toLocaleString()}</p>
                           {reminder.details && (
                             <p className="text-xs text-slate-500 mt-1 whitespace-pre-wrap">{reminder.details}</p>
                           )}
+                          {reminder.completed && <p className="text-xs text-green-600 mt-0.5">Completed</p>}
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteReminder(reminder.id)}
-                          className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Delete reminder"
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                        <div className="flex items-center gap-1">
+                          {!reminder.completed && (
+                            <button
+                              type="button"
+                              onClick={() => handleCompleteReminder(reminder.id)}
+                              className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                              title="Mark complete"
+                            >
+                              <Check size={14} />
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteReminder(reminder.id)}
+                            className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Delete reminder"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
                       </div>
                     ))}
                 </div>
@@ -3097,6 +3187,82 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
                   className="px-4 py-2 text-sm font-medium text-white bg-gf-lime rounded-lg hover:bg-gf-dark-green transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed"
                 >
                   {savingReminder ? 'Saving...' : editingReminderId ? 'Save Reminder' : 'Add Reminder'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showNextReminderPrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-900">Create Next Reminder</h3>
+              <button
+                type="button"
+                onClick={() => setShowNextReminderPrompt(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <p className="text-sm text-slate-600">Reminder completed. Schedule a follow-up?</p>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Subject</label>
+                <input
+                  type="text"
+                  value={nextReminderForm.subject}
+                  onChange={(e) => setNextReminderForm((f) => ({ ...f, subject: e.target.value }))}
+                  placeholder="e.g. Follow up call"
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Date</label>
+                  <input
+                    type="date"
+                    value={nextReminderForm.dueDate}
+                    onChange={(e) => setNextReminderForm((f) => ({ ...f, dueDate: e.target.value }))}
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Time</label>
+                  <input
+                    type="time"
+                    value={nextReminderForm.dueTime}
+                    onChange={(e) => setNextReminderForm((f) => ({ ...f, dueTime: e.target.value }))}
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Details (optional)</label>
+                <textarea
+                  value={nextReminderForm.details}
+                  onChange={(e) => setNextReminderForm((f) => ({ ...f, details: e.target.value }))}
+                  rows={2}
+                  placeholder="Additional notes..."
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent resize-none"
+                />
+              </div>
+              <div className="pt-1 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={handleCreateNextReminder}
+                  className="px-3 py-2 text-sm font-medium text-white bg-gf-lime rounded-lg hover:bg-gf-dark-green transition-colors"
+                >
+                  Create Reminder
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowNextReminderPrompt(false)}
+                  className="px-3 py-2 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
+                >
+                  No Thanks
                 </button>
               </div>
             </div>
