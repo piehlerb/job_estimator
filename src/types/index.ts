@@ -386,6 +386,15 @@ export interface ExportMetadata {
   appName: string;
 }
 
+export interface CommunicationTemplate {
+  id: string;
+  name: string;   // Display label, e.g. "Initial Follow-up"
+  body: string;   // Message text; use [Name] as placeholder for customer first name
+  createdAt: string;
+  updatedAt: string;
+  deleted?: boolean;
+}
+
 export interface ExportData {
   metadata: ExportMetadata;
   systems: ChipSystem[];
@@ -401,6 +410,7 @@ export interface ExportData {
   topCoatInventory: TopCoatInventory | null;
   baseCoatInventory: BaseCoatInventory | null;
   miscInventory: MiscInventory | null;
+  commTemplates?: CommunicationTemplate[];
 }
 
 export type MergeAction = 'add' | 'update' | 'skip' | 'delete';

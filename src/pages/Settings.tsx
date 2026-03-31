@@ -8,8 +8,12 @@ import {
   addBaseCoatColor,
   updateBaseCoatColor,
   deleteBaseCoatColor,
+  getAllCommTemplates,
+  addCommTemplate,
+  updateCommTemplate,
+  deleteCommTemplate,
 } from '../lib/db';
-import { Pricing, BaseCoatColor, DiscountConfig, DiscountMode, TagDiscount } from '../types';
+import { Pricing, BaseCoatColor, DiscountConfig, DiscountMode, TagDiscount, CommunicationTemplate } from '../types';
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -24,6 +28,12 @@ export default function Settings() {
   const [isAddingColor, setIsAddingColor] = useState(false);
   const [editingColorId, setEditingColorId] = useState<string | null>(null);
   const [colorName, setColorName] = useState('');
+
+  // Communication Templates state
+  const [commTemplates, setCommTemplates] = useState<CommunicationTemplate[]>([]);
+  const [showTemplateForm, setShowTemplateForm] = useState(false);
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const [templateForm, setTemplateForm] = useState({ name: '', body: '' });
 
   const [form, setForm] = useState({
     minimumMarginBuffer: '',
@@ -163,6 +173,7 @@ export default function Settings() {
     }
 
     setBaseCoatColors(await getAllBaseCoatColors());
+    setCommTemplates(await getAllCommTemplates());
 
     setLoading(false);
   };
@@ -314,6 +325,51 @@ export default function Settings() {
     } catch (error) {
       console.error('Error deleting base coat color:', error);
       alert('Error deleting base coat color. Please try again.');
+    }
+  };
+
+  // Communication template handlers
+  const handleSaveTemplate = async () => {
+    const name = templateForm.name.trim();
+    const body = templateForm.body.trim();
+    if (!name || !body) {
+      alert('Please enter a name and message body.');
+      return;
+    }
+    const now = new Date().toISOString();
+    try {
+      if (editingTemplateId) {
+        const existing = commTemplates.find(t => t.id === editingTemplateId);
+        if (existing) {
+          await updateCommTemplate({ ...existing, name, body, updatedAt: now });
+        }
+      } else {
+        await addCommTemplate({ id: generateId(), name, body, createdAt: now, updatedAt: now });
+      }
+      setCommTemplates(await getAllCommTemplates());
+      setShowTemplateForm(false);
+      setEditingTemplateId(null);
+      setTemplateForm({ name: '', body: '' });
+    } catch (error) {
+      console.error('Error saving template:', error);
+      alert('Error saving template. Please try again.');
+    }
+  };
+
+  const handleEditTemplate = (template: CommunicationTemplate) => {
+    setEditingTemplateId(template.id);
+    setTemplateForm({ name: template.name, body: template.body });
+    setShowTemplateForm(true);
+  };
+
+  const handleDeleteTemplate = async (id: string) => {
+    if (!confirm('Delete this template?')) return;
+    try {
+      await deleteCommTemplate(id);
+      setCommTemplates(await getAllCommTemplates());
+    } catch (error) {
+      console.error('Error deleting template:', error);
+      alert('Error deleting template. Please try again.');
     }
   };
 
@@ -805,6 +861,101 @@ export default function Settings() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+      </div>
+
+      {/* Communication Templates */}
+      <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900">Communication Templates</h3>
+            <p className="text-sm text-slate-600 mt-1">
+              Reusable message templates for follow-ups. Use <code className="bg-slate-100 px-1 rounded text-xs">[Name]</code> to insert the customer's first name.
+            </p>
+          </div>
+          <button
+            onClick={() => { setEditingTemplateId(null); setTemplateForm({ name: '', body: '' }); setShowTemplateForm(true); }}
+            disabled={showTemplateForm}
+            className="flex items-center gap-2 px-4 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed"
+          >
+            <Plus size={18} />
+            <span>Add Template</span>
+          </button>
+        </div>
+
+        {showTemplateForm && (
+          <div className="border border-slate-200 rounded-lg p-4 mb-4 space-y-3">
+            <div>
+              <label className="block text-sm font-semibold text-slate-900 mb-1">Template Name</label>
+              <input
+                type="text"
+                value={templateForm.name}
+                onChange={(e) => setTemplateForm(f => ({ ...f, name: e.target.value }))}
+                placeholder="e.g. Initial Follow-up"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime text-sm"
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-900 mb-1">Message Body</label>
+              <textarea
+                value={templateForm.body}
+                onChange={(e) => setTemplateForm(f => ({ ...f, body: e.target.value }))}
+                placeholder={`Hi [Name], Brian here from Garage Force of the Seacoast...`}
+                rows={4}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime text-sm resize-none"
+              />
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={handleSaveTemplate}
+                className="flex items-center gap-2 px-5 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors"
+              >
+                <Save size={16} />
+                <span>Save</span>
+              </button>
+              <button
+                onClick={() => { setShowTemplateForm(false); setEditingTemplateId(null); setTemplateForm({ name: '', body: '' }); }}
+                className="flex items-center gap-2 px-5 py-2 bg-slate-200 text-slate-900 rounded-lg font-semibold hover:bg-slate-300 transition-colors"
+              >
+                <X size={16} />
+                <span>Cancel</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {commTemplates.length === 0 ? (
+          <p className="text-sm text-slate-500 italic">No templates configured yet.</p>
+        ) : (
+          <div className="space-y-3">
+            {commTemplates.map((template) => (
+              <div key={template.id} className="border border-slate-200 rounded-lg p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-slate-900">{template.name}</p>
+                    <p className="text-sm text-slate-600 mt-1 whitespace-pre-wrap">{template.body}</p>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={() => handleEditTemplate(template)}
+                      className="p-2 text-gf-dark-green hover:bg-green-50 rounded-lg transition-colors"
+                      title="Edit"
+                    >
+                      <Edit2 size={16} />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteTemplate(template.id)}
+                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      title="Delete"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

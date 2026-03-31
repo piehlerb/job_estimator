@@ -1,7 +1,7 @@
-import { ChipSystem, PricingVariable, Job, Costs, Laborer, ChipInventory, TintInventory, TopCoatInventory, BaseCoatInventory, MiscInventory, Pricing, Customer, Product, BaseCoatColor, ShoppingItem } from '../types';
+import { ChipSystem, PricingVariable, Job, Costs, Laborer, ChipInventory, TintInventory, TopCoatInventory, BaseCoatInventory, MiscInventory, Pricing, Customer, Product, BaseCoatColor, ShoppingItem, CommunicationTemplate } from '../types';
 
 const DB_NAME = 'JobEstimator';
-const DB_VERSION = 15; // Added shoppingItems store
+const DB_VERSION = 16; // Added commTemplates store
 
 // Auto-sync flag - can be disabled for batch operations
 let autoSyncEnabled = true;
@@ -152,6 +152,9 @@ export async function initDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains('shoppingItems')) {
         db.createObjectStore('shoppingItems', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('commTemplates')) {
+        db.createObjectStore('commTemplates', { keyPath: 'id' });
       }
     };
   });
@@ -1390,3 +1393,70 @@ export async function deleteShoppingItem(id: string): Promise<void> {
   await triggerBackgroundSync();
 }
 
+// ─── Communication Templates ──────────────────────────────────────────────────
+
+export async function getAllCommTemplatesForSync(): Promise<CommunicationTemplate[]> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('commTemplates', 'readonly');
+    const store = tx.objectStore('commTemplates');
+    const req = store.getAll();
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => resolve(req.result || []);
+  });
+}
+
+export async function getAllCommTemplates(): Promise<CommunicationTemplate[]> {
+  const all = await getAllCommTemplatesForSync();
+  return all.filter(t => !t.deleted);
+}
+
+export async function addCommTemplate(template: CommunicationTemplate): Promise<void> {
+  const db = await getDB();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction('commTemplates', 'readwrite');
+    const store = tx.objectStore('commTemplates');
+    const req = store.put(template);
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => resolve();
+  });
+  await queueForSync('commTemplates', template.id, 'create');
+  await triggerBackgroundSync();
+}
+
+export async function updateCommTemplate(template: CommunicationTemplate): Promise<void> {
+  const db = await getDB();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction('commTemplates', 'readwrite');
+    const store = tx.objectStore('commTemplates');
+    const req = store.put(template);
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => resolve();
+  });
+  await queueForSync('commTemplates', template.id, 'update');
+  await triggerBackgroundSync();
+}
+
+export async function deleteCommTemplate(id: string): Promise<void> {
+  const db = await getDB();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction('commTemplates', 'readwrite');
+    const store = tx.objectStore('commTemplates');
+    const getReq = store.get(id);
+    getReq.onerror = () => reject(getReq.error);
+    getReq.onsuccess = () => {
+      const item = getReq.result;
+      if (item) {
+        item.deleted = true;
+        item.updatedAt = new Date().toISOString();
+        const putReq = store.put(item);
+        putReq.onerror = () => reject(putReq.error);
+        putReq.onsuccess = () => resolve();
+      } else {
+        resolve();
+      }
+    };
+  });
+  await queueForSync('commTemplates', id, 'delete');
+  await triggerBackgroundSync();
+}

@@ -1,4 +1,4 @@
-import { ArrowLeft, Save, ChevronDown, ChevronUp, X, Plus, Trash2, Link, Shuffle, Check } from 'lucide-react';
+import { ArrowLeft, Save, ChevronDown, ChevronUp, X, Plus, Trash2, Link, Shuffle, Check, Copy } from 'lucide-react';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   getAllSystems,
@@ -20,8 +20,9 @@ import {
   getAllBaseCoatColors,
   getAllJobsByGroupId,
   getAllTintInventory,
+  getAllCommTemplates,
 } from '../lib/db';
-import { BaseColor, ChipSystem, Costs, Pricing, Job, JobCalculation, JobStatus, Laborer, InstallDaySchedule, ActualDaySchedule, ActualCosts, ChipInventory, CoatingRemovalType, Product, JobProduct, BaseCoatColor, JobReminder, JobFollowUp, TintInventory } from '../types';
+import { BaseColor, ChipSystem, Costs, Pricing, Job, JobCalculation, JobStatus, Laborer, InstallDaySchedule, ActualDaySchedule, ActualCosts, ChipInventory, CoatingRemovalType, Product, JobProduct, BaseCoatColor, JobReminder, JobFollowUp, TintInventory, CommunicationTemplate } from '../types';
 import { calculateJobOutputs, calculateActualCosts } from '../lib/calculations';
 import InstallDayScheduleComponent from '../components/InstallDaySchedule';
 import { convertLegacyJobToSchedule } from '../lib/jobMigration';
@@ -118,6 +119,8 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
   // Follow-ups state
   const [followUps, setFollowUps] = useState<JobFollowUp[]>([]);
   const [showFollowUpForm, setShowFollowUpForm] = useState(false);
+  const [commTemplates, setCommTemplates] = useState<CommunicationTemplate[]>([]);
+  const [copiedReminderId, setCopiedReminderId] = useState<string | null>(null);
   const [followUpForm, setFollowUpForm] = useState({
     date: new Date().toISOString().slice(0, 10),
     notes: '',
@@ -354,6 +357,7 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
       const productCatalog = await getAllProducts();
       const baseCoatColorList = await getAllBaseCoatColors();
       const tintInv = await getAllTintInventory();
+      const templates = await getAllCommTemplates();
       console.log('[JobForm] Data loaded:', { systems: allSystems.length, costs: !!storedCosts, pricing: !!storedPricing, laborers: laborers.length });
       setSystems(allSystems);
       setActiveLaborers(laborers);
@@ -362,6 +366,7 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
       setAllProducts(productCatalog);
       setBaseCoatColors(baseCoatColorList);
       setTintInventory(tintInv);
+      setCommTemplates(templates);
       const tagSet = new Set<string>();
       const customerMap = new Map<string, { name: string; address?: string; updatedAt: string }>();
 
@@ -2971,6 +2976,20 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
                           {reminder.completed && <p className="text-xs text-green-600 mt-0.5">Completed</p>}
                         </button>
                         <div className="flex items-center gap-1">
+                          {reminder.details && (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                await navigator.clipboard.writeText(reminder.details!);
+                                setCopiedReminderId(reminder.id);
+                                setTimeout(() => setCopiedReminderId(null), 2000);
+                              }}
+                              className="p-1.5 text-slate-400 hover:text-gf-dark-green hover:bg-green-50 rounded-lg transition-colors"
+                              title="Copy message"
+                            >
+                              {copiedReminderId === reminder.id ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
+                            </button>
+                          )}
                           {!reminder.completed && (
                             <button
                               type="button"
@@ -3034,7 +3053,7 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
                         value={followUpForm.notes}
                         onChange={(e) => setFollowUpForm({ ...followUpForm, notes: e.target.value })}
                         placeholder="What happened? (optional)"
-                        rows={2}
+                        rows={3}
                         className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent resize-none"
                       />
                     </div>
@@ -3141,8 +3160,30 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
                   className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
                 />
               </div>
+              {commTemplates.length > 0 && !editingReminderId && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Template (optional)</label>
+                  <select
+                    defaultValue=""
+                    onChange={(e) => {
+                      const tpl = commTemplates.find(t => t.id === e.target.value);
+                      if (tpl) {
+                        const firstName = (formData.customerName || '').trim().split(' ')[0] || '[Name]';
+                        const resolved = tpl.body.replace(/\[Name\]/gi, firstName);
+                        setReminderForm(f => ({ ...f, details: resolved }));
+                      }
+                    }}
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
+                  >
+                    <option value="">— Select a template —</option>
+                    {commTemplates.map(t => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Details</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Message / Details</label>
                 <textarea
                   value={reminderForm.details}
                   onChange={(e) => setReminderForm({ ...reminderForm, details: e.target.value })}

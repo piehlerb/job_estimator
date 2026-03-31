@@ -43,6 +43,10 @@ import {
   saveTopCoatInventory,
   saveBaseCoatInventory,
   saveMiscInventory,
+  getAllCommTemplates,
+  addCommTemplate,
+  updateCommTemplate,
+  deleteCommTemplate,
 } from './db';
 
 // Export all data from the database
@@ -61,6 +65,7 @@ export async function exportAllData(): Promise<ExportData> {
     topCoatInventory,
     baseCoatInventory,
     miscInventory,
+    commTemplates,
   ] = await Promise.all([
     getAllSystems(),
     getCosts(),
@@ -75,6 +80,7 @@ export async function exportAllData(): Promise<ExportData> {
     getTopCoatInventory(),
     getBaseCoatInventory(),
     getMiscInventory(),
+    getAllCommTemplates(),
   ]);
 
   const metadata: ExportMetadata = {
@@ -98,6 +104,7 @@ export async function exportAllData(): Promise<ExportData> {
     topCoatInventory,
     baseCoatInventory,
     miscInventory,
+    commTemplates,
   };
 }
 
@@ -443,6 +450,7 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
     localTopCoatInventory,
     localBaseCoatInventory,
     localMiscInventory,
+    localCommTemplates,
   ] = await Promise.all([
     getAllSystems(),
     getCosts(),
@@ -456,6 +464,7 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
     getTopCoatInventory(),
     getBaseCoatInventory(),
     getMiscInventory(),
+    getAllCommTemplates(),
   ]);
 
   // Create lookup maps
@@ -467,6 +476,7 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
   const localChipBlendsMap = new Map(localChipBlends.map(b => [b.id, b]));
   const localChipInventoryMap = new Map(localChipInventory.map(i => [i.id, i]));
   const localTintInventoryMap = new Map(localTintInventory.map(i => [i.id, i]));
+  const localCommTemplatesMap = new Map(localCommTemplates.map(t => [t.id, t]));
 
   // Track which IDs are in import for delete detection
   const importSystemIds = new Set(importData.systems.map(s => s.id));
@@ -477,6 +487,7 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
   const importChipBlendIds = new Set(importData.chipBlends.map(b => b.id));
   const importChipInventoryIds = new Set(importData.chipInventory.map(i => i.id));
   const importTintInventoryIds = new Set((importData.tintInventory || []).map(i => i.id));
+  const importCommTemplateIds = new Set((importData.commTemplates || []).map(t => t.id));
 
   // Compare systems
   for (const importSystem of importData.systems) {
@@ -719,6 +730,27 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
     }
   }
 
+  // Compare communication templates
+  for (const importTemplate of (importData.commTemplates || [])) {
+    const local = localCommTemplatesMap.get(importTemplate.id);
+    if (!local) {
+      preview.toAdd.push({ entityType: 'CommTemplate', entityName: importTemplate.name });
+    } else if (isNewer(importTemplate.updatedAt, local.updatedAt)) {
+      preview.toUpdate.push({
+        entityType: 'CommTemplate',
+        entityName: importTemplate.name,
+        localUpdatedAt: local.updatedAt,
+        importUpdatedAt: importTemplate.updatedAt,
+      });
+    } else {
+      preview.toSkip.push({
+        entityType: 'CommTemplate',
+        entityName: importTemplate.name,
+        reason: 'Local version is same or newer',
+      });
+    }
+  }
+
   // Find orphans to delete (if option enabled)
   if (deleteOrphans) {
     for (const local of localSystems) {
@@ -761,6 +793,11 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
         preview.toDelete.push({ entityType: 'TintInventory', entityName: local.color });
       }
     }
+    for (const local of localCommTemplates) {
+      if (!importCommTemplateIds.has(local.id)) {
+        preview.toDelete.push({ entityType: 'CommTemplate', entityName: local.name });
+      }
+    }
   }
 
   return preview;
@@ -784,6 +821,7 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
     localTopCoatInventory,
     localBaseCoatInventory,
     localMiscInventory,
+    localCommTemplates,
   ] = await Promise.all([
     getAllSystems(),
     getCosts(),
@@ -797,6 +835,7 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
     getTopCoatInventory(),
     getBaseCoatInventory(),
     getMiscInventory(),
+    getAllCommTemplates(),
   ]);
 
   // Create lookup maps
@@ -808,6 +847,7 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
   const localChipBlendsMap = new Map(localChipBlends.map(b => [b.id, b]));
   const localChipInventoryMap = new Map(localChipInventory.map(i => [i.id, i]));
   const localTintInventoryMap = new Map(localTintInventory.map(i => [i.id, i]));
+  const localCommTemplatesMap = new Map(localCommTemplates.map(t => [t.id, t]));
 
   // Track import IDs for deletion
   const importSystemIds = new Set(importData.systems.map(s => s.id));
@@ -817,6 +857,7 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
   const importJobIds = new Set(importData.jobs.map(j => j.id));
   const importChipInventoryIds = new Set(importData.chipInventory.map(i => i.id));
   const importTintInventoryIds = new Set((importData.tintInventory || []).map(i => i.id));
+  const importCommTemplateIds = new Set((importData.commTemplates || []).map(t => t.id));
 
   // Import systems
   for (const importSystem of importData.systems) {
@@ -979,6 +1020,20 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
     }
   }
 
+  // Import communication templates
+  for (const importTemplate of (importData.commTemplates || [])) {
+    const local = localCommTemplatesMap.get(importTemplate.id);
+    if (!local) {
+      await addCommTemplate(importTemplate);
+      log.push({ entityType: 'CommTemplate', entityName: importTemplate.name, action: 'add', reason: 'New record' });
+    } else if (isNewer(importTemplate.updatedAt, local.updatedAt)) {
+      await updateCommTemplate(importTemplate);
+      log.push({ entityType: 'CommTemplate', entityName: importTemplate.name, action: 'update', reason: 'Import is newer' });
+    } else {
+      log.push({ entityType: 'CommTemplate', entityName: importTemplate.name, action: 'skip', reason: 'Local is same or newer' });
+    }
+  }
+
   // Delete orphans if enabled
   if (deleteOrphans) {
     for (const local of localSystems) {
@@ -1022,6 +1077,12 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
       if (!importTintInventoryIds.has(local.id)) {
         await deleteTintInventory(local.id);
         log.push({ entityType: 'TintInventory', entityName: local.color, action: 'delete', reason: 'Not in import file' });
+      }
+    }
+    for (const local of localCommTemplates) {
+      if (!importCommTemplateIds.has(local.id)) {
+        await deleteCommTemplate(local.id);
+        log.push({ entityType: 'CommTemplate', entityName: local.name, action: 'delete', reason: 'Not in import file' });
       }
     }
   }
