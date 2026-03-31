@@ -3280,8 +3280,29 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
                   />
                 </div>
               </div>
+              {commTemplates.length > 0 && (
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Template (optional)</label>
+                  <select
+                    defaultValue=""
+                    onChange={(e) => {
+                      const tpl = commTemplates.find(t => t.id === e.target.value);
+                      if (tpl) {
+                        const firstName = (formData.customerName || '').trim().split(' ')[0] || '[Name]';
+                        setNextReminderForm((f) => ({ ...f, details: tpl.body.replace(/\[Name\]/gi, firstName) }));
+                      }
+                    }}
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
+                  >
+                    <option value="">— Select a template —</option>
+                    {commTemplates.map(t => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">Details (optional)</label>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Message / Details (optional)</label>
                 <textarea
                   value={nextReminderForm.details}
                   onChange={(e) => setNextReminderForm((f) => ({ ...f, details: e.target.value }))}
