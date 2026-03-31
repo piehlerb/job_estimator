@@ -599,8 +599,10 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
       : pricing;
     setUsedPricing(pricingToUse);
 
-    // For system snapshot, merge current defaults for fields added after the snapshot was taken
-    const systemToUse = existingJob && !useCurrentValues
+    // For system snapshot, merge current defaults for fields added after the snapshot was taken.
+    // If the user changed the system from the original, use the newly selected system directly.
+    const systemChanged = existingJob && formData.system !== existingJob.systemId;
+    const systemToUse = existingJob && !useCurrentValues && !systemChanged
       ? {
           ...existingJob.systemSnapshot,
           baseCoats: existingJob.systemSnapshot.baseCoats ?? selectedSystem?.baseCoats ?? 1,
@@ -763,8 +765,64 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
   };
 
   const handleSystemChange = (systemId: string) => {
+    // Reset actual pricing so it re-initializes from new suggested values
+    actualPricingInitialized.current = false;
     setFormData((prev) => ({ ...prev, system: systemId }));
     setShowBlendDropdown(true);
+  };
+
+  const handleFloorFootageChange = (newFootage: string) => {
+    if (!actualPricingInitialized.current) {
+      setFormData(prev => ({ ...prev, floorFootage: newFootage }));
+      return;
+    }
+    const footage = parseFloat(newFootage) || 0;
+    setFormData(prev => {
+      const perSqft = parseFloat(prev.actualFloorPricePerSqft) || 0;
+      const newFloorPrice = perSqft * footage;
+      const total = (parseFloat(prev.actualDiscount) || 0)
+        + (parseFloat(prev.actualCrackPrice) || 0)
+        + newFloorPrice
+        + (parseFloat(prev.actualVerticalPrice) || 0)
+        + (parseFloat(prev.actualAntiSlipPrice) || 0)
+        + (parseFloat(prev.actualAbrasionResistancePrice) || 0)
+        + (parseFloat(prev.actualCoatingRemovalPrice) || 0)
+        + (parseFloat(prev.actualMoistureMitigationPrice) || 0)
+        + productsTotalPrice;
+      return {
+        ...prev,
+        floorFootage: newFootage,
+        actualFloorPrice: newFloorPrice.toFixed(2),
+        totalPrice: total.toFixed(2),
+      };
+    });
+  };
+
+  const handleVerticalFootageChange = (newFootage: string) => {
+    if (!actualPricingInitialized.current) {
+      setFormData(prev => ({ ...prev, verticalFootage: newFootage }));
+      return;
+    }
+    const footage = parseFloat(newFootage) || 0;
+    setFormData(prev => {
+      const perSqft = parseFloat(prev.actualVerticalPricePerSqft) || 0;
+      const newVerticalPrice = perSqft > 0 ? perSqft * footage : 0;
+      const total = (parseFloat(prev.actualDiscount) || 0)
+        + (parseFloat(prev.actualCrackPrice) || 0)
+        + (parseFloat(prev.actualFloorPrice) || 0)
+        + newVerticalPrice
+        + (parseFloat(prev.actualAntiSlipPrice) || 0)
+        + (parseFloat(prev.actualAbrasionResistancePrice) || 0)
+        + (parseFloat(prev.actualCoatingRemovalPrice) || 0)
+        + (parseFloat(prev.actualMoistureMitigationPrice) || 0)
+        + productsTotalPrice;
+      return {
+        ...prev,
+        verticalFootage: newFootage,
+        actualVerticalPrice: newVerticalPrice.toFixed(2),
+        totalPrice: total.toFixed(2),
+      };
+    });
   };
 
   const handleChipBlendSelect = (blend: ChipBlend) => {
@@ -1853,7 +1911,7 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
                 type="number"
                 placeholder="0"
                 value={formData.floorFootage}
-                onChange={(e) => setFormData({ ...formData, floorFootage: e.target.value })}
+                onChange={(e) => handleFloorFootageChange(e.target.value)}
                 className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
               />
             </div>
@@ -1864,7 +1922,7 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
                 type="number"
                 placeholder="0"
                 value={formData.verticalFootage}
-                onChange={(e) => setFormData({ ...formData, verticalFootage: e.target.value })}
+                onChange={(e) => handleVerticalFootageChange(e.target.value)}
                 className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
               />
             </div>
