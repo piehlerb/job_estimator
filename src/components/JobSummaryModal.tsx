@@ -200,11 +200,30 @@ export default function JobSummaryModal({
     const topA = activeRows.reduce((s, r) => s + r.topA, 0);
     const topB = activeRows.reduce((s, r) => s + r.topB, 0);
 
-    const chipByBlend: Record<string, number> = {};
+    // Sequential chip reclaim simulation: reclaim from Job N feeds into Job N+1
+    const reclaimRate = (currentPricing.chipReclaimRate ?? 0) / 100;
+
+    // Group jobs by blend in chronological order (activeRows inherits filteredJobs sort)
+    const jobsByBlend: Record<string, number[]> = {};
     for (const r of activeRows) {
       if (r.chipBlend && r.chipLbs > 0) {
-        chipByBlend[r.chipBlend] = (chipByBlend[r.chipBlend] || 0) + r.chipLbs;
+        if (!jobsByBlend[r.chipBlend]) jobsByBlend[r.chipBlend] = [];
+        jobsByBlend[r.chipBlend].push(r.chipLbs);
       }
+    }
+
+    // For each blend, simulate sequential reclaim to compute net required from inventory
+    const chipByBlend: Record<string, number> = {};
+    for (const [blend, lbsList] of Object.entries(jobsByBlend)) {
+      let requiredFromInventory = 0;
+      let reclaimPool = 0;
+      for (const lbs of lbsList) {
+        const useFromReclaim = Math.min(lbs, reclaimPool);
+        const useFromInventory = lbs - useFromReclaim;
+        requiredFromInventory += useFromInventory;
+        reclaimPool = reclaimPool - useFromReclaim + lbs * reclaimRate;
+      }
+      chipByBlend[blend] = requiredFromInventory;
     }
 
     const tintByColor: Record<string, number> = {};
@@ -230,7 +249,7 @@ export default function JobSummaryModal({
     ]);
     const allTintColors = [...allTintColorsSet].sort();
 
-    return { baseA, baseBGrey, baseBTan, baseBClear, topA, topB, chipByBlend, tintByColor, allChipBlends, allTintColors };
+    return { baseA, baseBGrey, baseBTan, baseBClear, topA, topB, chipByBlend, tintByColor, allChipBlends, allTintColors, reclaimRate };
   }, [jobMaterials, ignoredJobIds, chipInventory, tintInventory, currentPricing]);
 
   const toggleIgnored = (jobId: string) => {
@@ -378,6 +397,11 @@ export default function JobSummaryModal({
             <p className="text-xs text-slate-500 mt-0.5">
               Based on {activeCount} active job{activeCount !== 1 ? 's' : ''}.
               {' '}Difference = On Hand − Required.
+              {totals.reclaimRate > 0 && (
+                <span className="ml-1 text-gf-dark-green font-medium">
+                  Chip quantities reflect {(totals.reclaimRate * 100).toFixed(0)}% reclaim rate.
+                </span>
+              )}
             </p>
           </div>
           <div className="overflow-x-auto">
@@ -402,7 +426,7 @@ export default function JobSummaryModal({
                 {totals.topA > 0 && <MaterialRow label="Top A" unit="gal" required={totals.topA} onHand={topCoatInventory.topA} />}
                 {totals.topB > 0 && <MaterialRow label="Top B" unit="gal" required={totals.topB} onHand={topCoatInventory.topB} />}
 
-                {/* Chip by blend */}
+                {/* Chip by blend — required accounts for sequential reclaim */}
                 {totals.allChipBlends.map((blend) => {
                   const required = totals.chipByBlend[blend] || 0;
                   const inv = chipInventory.find((c) => normalizeChipBlendName(c.blend) === blend);
