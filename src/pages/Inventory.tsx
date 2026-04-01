@@ -486,16 +486,12 @@ export default function Inventory() {
     setChipInventory(chipInventory.filter((inv) => inv.id !== id));
   };
 
-  const handleSaveTopCoat = async () => {
-    await saveTopCoatInventory(topCoatInventory);
-  };
-
-  const handleSaveBaseCoat = async () => {
-    await saveBaseCoatInventory(baseCoatInventory);
-  };
-
-  const handleSaveMisc = async () => {
-    await saveMiscInventory(miscInventory);
+  const handleSaveAll = async () => {
+    await Promise.all([
+      saveTopCoatInventory(topCoatInventory),
+      saveBaseCoatInventory(baseCoatInventory),
+      saveMiscInventory(miscInventory),
+    ]);
   };
 
   const getAvailable = (onHand: number, committed: number) => onHand - committed;
@@ -509,13 +505,22 @@ export default function Inventory() {
     <div className="p-6 md:p-8 max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-3xl font-bold text-slate-900">Inventory</h1>
-        <button
-          onClick={() => setShowJobSummary(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-gf-lime text-white rounded-lg font-medium hover:bg-gf-dark-green transition-colors"
-        >
-          <ClipboardList size={18} />
-          Job Summary
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleSaveAll}
+            className="flex items-center gap-2 px-4 py-2 bg-gf-lime text-white rounded-lg font-medium hover:bg-gf-dark-green transition-colors"
+          >
+            <Save size={18} />
+            Save
+          </button>
+          <button
+            onClick={() => setShowJobSummary(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-gf-lime text-white rounded-lg font-medium hover:bg-gf-dark-green transition-colors"
+          >
+            <ClipboardList size={18} />
+            Job Summary
+          </button>
+        </div>
       </div>
 
       {/* Chip Inventory */}
@@ -745,16 +750,7 @@ export default function Inventory() {
 
       {/* Top Coat Inventory */}
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6 mb-6">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold text-slate-900">Top Coat Inventory</h2>
-          <button
-            onClick={handleSaveTopCoat}
-            className="flex items-center gap-1 px-3 py-2 bg-gf-lime text-white rounded-lg text-sm font-medium hover:bg-gf-dark-green"
-          >
-            <Save size={16} />
-            Save
-          </button>
-        </div>
+        <h2 className="text-xl font-bold text-slate-900 mb-4">Top Coat Inventory</h2>
 
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -820,16 +816,7 @@ export default function Inventory() {
 
       {/* Base Coat Inventory */}
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold text-slate-900">Base Coat Inventory</h2>
-          <button
-            onClick={handleSaveBaseCoat}
-            className="flex items-center gap-1 px-3 py-2 bg-gf-lime text-white rounded-lg text-sm font-medium hover:bg-gf-dark-green"
-          >
-            <Save size={16} />
-            Save
-          </button>
-        </div>
+        <h2 className="text-xl font-bold text-slate-900 mb-4">Base Coat Inventory</h2>
 
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -939,16 +926,7 @@ export default function Inventory() {
 
       {/* Miscellaneous Inventory */}
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6 mt-6">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold text-slate-900">Miscellaneous Inventory</h2>
-          <button
-            onClick={handleSaveMisc}
-            className="flex items-center gap-1 px-3 py-2 bg-gf-lime text-white rounded-lg text-sm font-medium hover:bg-gf-dark-green"
-          >
-            <Save size={16} />
-            Save
-          </button>
-        </div>
+        <h2 className="text-xl font-bold text-slate-900 mb-4">Miscellaneous Inventory</h2>
 
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
