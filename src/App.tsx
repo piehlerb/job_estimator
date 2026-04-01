@@ -22,6 +22,7 @@ import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { useAuth } from './contexts/AuthContext';
 import { useAutoSync } from './hooks/useAutoSync';
 import { migrateCustomersFromJobs, cleanupMigratedCustomerDuplicates, migrateJobsDisableGasHeater } from './lib/jobMigration';
+import { seedOfflineData } from './lib/seedData';
 import { getAllJobs, updateJob } from './lib/db';
 
 type Page = 'dashboard' | 'new-job' | 'edit-job' | 'job-sheet' | 'chip-systems' | 'chip-blends' | 'laborers' | 'costs' | 'pricing' | 'settings' | 'inventory' | 'shopping-list' | 'calendar' | 'reporting' | 'customers' | 'products' | 'organization' | 'backup';
@@ -147,6 +148,14 @@ function App() {
   // One-time migration: seed customers store from existing job data
   useEffect(() => {
     if (!user && !offlineMode) return;
+
+    // Seed default data for offline/demo users (skips if data already exists)
+    if (offlineMode) {
+      seedOfflineData().catch((err) => {
+        console.warn('[Seed] Failed to seed offline data:', err);
+      });
+    }
+
     migrateCustomersFromJobs().then((count) => {
       if (count > 0) {
         console.log(`[Migration] Seeded ${count} customer(s) from job history`);
