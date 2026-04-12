@@ -248,7 +248,7 @@ function App() {
         <JobForm onBack={handleBackToDashboard} onEditJob={(id) => handleNavigation('edit-job', id)} />
       )}
       {currentPage === 'edit-job' && editingJobId && (
-        <JobForm jobId={editingJobId} onBack={handleBackToDashboard} onEditJob={(id) => handleNavigation('edit-job', id)} />
+        <JobForm jobId={editingJobId} onBack={handleBackToDashboard} onEditJob={(id) => handleNavigation('edit-job', id)} onViewJobSheet={(id) => handleNavigation('job-sheet', id)} />
       )}
       {currentPage === 'chip-systems' && (
         <ChipSystems />

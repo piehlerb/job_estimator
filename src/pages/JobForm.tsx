@@ -1,4 +1,4 @@
-import { ArrowLeft, Save, ChevronDown, ChevronUp, X, Plus, Trash2, Link, Shuffle, Check, Copy, ClipboardList } from 'lucide-react';
+import { ArrowLeft, Save, ChevronDown, ChevronUp, X, Plus, Trash2, Link, Shuffle, Check, Copy, FileText } from 'lucide-react';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   getAllSystems,
@@ -21,10 +21,7 @@ import {
   getAllJobsByGroupId,
   getAllTintInventory,
   getAllCommTemplates,
-  getBaseCoatInventory,
-  getTopCoatInventory,
 } from '../lib/db';
-import JobSummaryModal from '../components/JobSummaryModal';
 import { BaseColor, ChipSystem, Costs, Pricing, Job, JobCalculation, JobStatus, Laborer, InstallDaySchedule, ActualDaySchedule, ActualCosts, ChipInventory, CoatingRemovalType, Product, JobProduct, BaseCoatColor, JobReminder, JobFollowUp, TintInventory, CommunicationTemplate } from '../types';
 import { calculateJobOutputs, calculateActualCosts } from '../lib/calculations';
 import InstallDayScheduleComponent from '../components/InstallDaySchedule';
@@ -55,6 +52,7 @@ interface JobFormProps {
   jobId?: string;
   onBack: () => void;
   onEditJob?: (jobId: string) => void;
+  onViewJobSheet?: (jobId: string) => void;
 }
 
 interface CustomerOption {
@@ -62,7 +60,7 @@ interface CustomerOption {
   address?: string;
 }
 
-export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
+export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: JobFormProps) {
   const [systems, setSystems] = useState<ChipSystem[]>([]);
   const [costs, setCosts] = useState<Costs>(getDefaultCosts());
   const [pricing, setPricing] = useState<Pricing>(getDefaultPricing());
@@ -79,10 +77,6 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
   const [chipInventory, setChipInventory] = useState<ChipInventory[]>([]);
   const [baseCoatColors, setBaseCoatColors] = useState<BaseCoatColor[]>([]);
   const [tintInventory, setTintInventory] = useState<TintInventory[]>([]);
-  const [allJobs, setAllJobs] = useState<Job[]>([]);
-  const [baseCoatInventory, setBaseCoatInventory] = useState({ id: '', baseA: 0, baseBGrey: 0, baseBTan: 0, baseBClear: 0, updatedAt: '' });
-  const [topCoatInventory, setTopCoatInventory] = useState({ id: '', topA: 0, topB: 0, updatedAt: '' });
-  const [showJobSummary, setShowJobSummary] = useState(false);
   const [showTintColorDropdown, setShowTintColorDropdown] = useState(false);
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [showTagDropdown, setShowTagDropdown] = useState(false);
@@ -357,7 +351,7 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
       const storedCosts = await getCosts();
       const storedPricing = await getPricing();
       const laborers = await getActiveLaborers();
-      const jobs = await getAllJobs();
+      const allJobs = await getAllJobs();
       const allCustomers = await getAllCustomers();
       const blends = await getAllChipBlends();
       const inventory = await getAllChipInventory();
@@ -365,8 +359,6 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
       const baseCoatColorList = await getAllBaseCoatColors();
       const tintInv = await getAllTintInventory();
       const templates = await getAllCommTemplates();
-      const baseCoatInv = await getBaseCoatInventory();
-      const topCoatInv = await getTopCoatInventory();
       console.log('[JobForm] Data loaded:', { systems: allSystems.length, costs: !!storedCosts, pricing: !!storedPricing, laborers: laborers.length });
       setSystems(allSystems);
       setActiveLaborers(laborers);
@@ -376,9 +368,6 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
       setBaseCoatColors(baseCoatColorList);
       setTintInventory(tintInv);
       setCommTemplates(templates);
-      setAllJobs(jobs);
-      if (baseCoatInv) setBaseCoatInventory(baseCoatInv);
-      if (topCoatInv) setTopCoatInventory(topCoatInv);
       const tagSet = new Set<string>();
       const customerMap = new Map<string, { name: string; address?: string; updatedAt: string }>();
 
@@ -393,7 +382,7 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
       });
 
       // Merge in job-derived customer info (fills in addresses from jobs if missing in customer store)
-      jobs.forEach((job) => {
+      allJobs.forEach((job) => {
         (job.tags || []).forEach((tag) => tagSet.add(tag));
 
         const customerName = job.customerName?.trim();
@@ -419,7 +408,7 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
       });
       setAvailableTags(Array.from(tagSet).sort((a, b) => a.localeCompare(b)));
       // Jobs available to be pulled into a group (no existing group, not the current job)
-      setUngroupedJobs(jobs.filter(j => !j.groupId && j.id !== jobId));
+      setUngroupedJobs(allJobs.filter(j => !j.groupId && j.id !== jobId));
       setAvailableCustomers(
         Array.from(customerMap.values())
           .sort((a, b) => a.name.localeCompare(b.name))
@@ -1582,14 +1571,16 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
           <ArrowLeft size={18} className="sm:w-5 sm:h-5" />
           <span className="font-medium text-sm sm:text-base">Back</span>
         </button>
-        <button
-          type="button"
-          onClick={() => setShowJobSummary(true)}
-          className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-gf-lime text-white rounded-lg font-medium hover:bg-gf-dark-green transition-colors text-sm"
-        >
-          <ClipboardList size={16} />
-          <span>Job Summary</span>
-        </button>
+        {jobId && onViewJobSheet && (
+          <button
+            type="button"
+            onClick={() => onViewJobSheet(jobId)}
+            className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-gf-lime text-white rounded-lg font-medium hover:bg-gf-dark-green transition-colors text-sm"
+          >
+            <FileText size={16} />
+            <span>Job Summary</span>
+          </button>
+        )}
       </div>
 
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4 sm:p-6 md:p-8">
@@ -2361,7 +2352,7 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
                   </div>
                   <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
                     <p className="text-xs text-slate-500">Base Gallons</p>
-                    <p className="text-sm sm:text-base md:text-lg font-semibold">{calculation.baseGallons.toFixed(2)} gal / {(calculation.baseGallons * 128).toFixed(0)} oz</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold">{calculation.baseGallons.toFixed(2)}</p>
                   </div>
                   <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
                     <p className="text-xs text-slate-500">Base Cost</p>
@@ -2369,7 +2360,7 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
                   </div>
                   <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
                     <p className="text-xs text-slate-500">Top Gallons</p>
-                    <p className="text-sm sm:text-base md:text-lg font-semibold">{calculation.topGallons.toFixed(2)} gal / {(calculation.topGallons * 128).toFixed(0)} oz</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold">{calculation.topGallons.toFixed(2)}</p>
                   </div>
                   <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
                     <p className="text-xs text-slate-500">Top Cost</p>
@@ -2377,7 +2368,7 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
                   </div>
                   <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
                     <p className="text-xs text-slate-500">Crack Fill Gallons</p>
-                    <p className="text-sm sm:text-base md:text-lg font-semibold">{calculation.crackFillGallons.toFixed(2)} gal / {(calculation.crackFillGallons * 128).toFixed(0)} oz</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold">{calculation.crackFillGallons.toFixed(2)}</p>
                   </div>
                   <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
                     <p className="text-xs text-slate-500">Crack Fill Cost</p>
@@ -2385,7 +2376,7 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
                   </div>
                   <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
                     <p className="text-xs text-slate-500">Cyclo1 Needed</p>
-                    <p className="text-sm sm:text-base md:text-lg font-semibold">{calculation.cyclo1Needed.toFixed(2)} gal / {(calculation.cyclo1Needed * 128).toFixed(0)} oz</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold">{calculation.cyclo1Needed.toFixed(2)} gal</p>
                   </div>
                   <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
                     <p className="text-xs text-slate-500">Cyclo1 Cost</p>
@@ -3549,18 +3540,6 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
           </div>
         </div>
       )}
-
-      <JobSummaryModal
-        isOpen={showJobSummary}
-        onClose={() => setShowJobSummary(false)}
-        jobs={allJobs}
-        baseCoatInventory={baseCoatInventory}
-        topCoatInventory={topCoatInventory}
-        chipInventory={chipInventory}
-        tintInventory={tintInventory}
-        currentCosts={costs}
-        currentPricing={pricing}
-      />
     </div>
   );
 }
