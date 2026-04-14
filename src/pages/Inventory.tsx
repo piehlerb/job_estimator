@@ -42,7 +42,7 @@ interface CoatCommitment {
   potential: number;
 }
 
-export default function Inventory() {
+export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) => void }) {
   const [loading, setLoading] = useState(true);
   const [chipBlends, setChipBlends] = useState<ChipBlend[]>([]);
   const [chipInventory, setChipInventory] = useState<ChipInventory[]>([]);
@@ -997,6 +997,7 @@ export default function Inventory() {
         tintInventory={tintInventory}
         currentCosts={summaryCurrentCosts}
         currentPricing={summaryCurrentPricing}
+        onEditJob={onEditJob}
       />
     </div>
   );

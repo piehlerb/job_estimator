@@ -23,6 +23,7 @@ interface JobSummaryModalProps {
   tintInventory: TintInventory[];
   currentCosts: Costs;
   currentPricing: Pricing;
+  onEditJob?: (jobId: string) => void;
 }
 
 interface JobMaterialRow {
@@ -88,6 +89,7 @@ export default function JobSummaryModal({
   tintInventory,
   currentCosts,
   currentPricing,
+  onEditJob,
 }: JobSummaryModalProps) {
   const [dayWindow, setDayWindow] = useState(30);
   const [ignoredJobIds, setIgnoredIds] = useState<Set<string>>(new Set());
@@ -351,7 +353,19 @@ export default function JobSummaryModal({
                             className="w-4 h-4 rounded border-slate-300 accent-gf-lime cursor-pointer"
                           />
                         </td>
-                        <td className="py-3 px-3 font-medium text-slate-800">{row.job.name}</td>
+                        <td className="py-3 px-3 font-medium">
+                          {onEditJob ? (
+                            <button
+                              type="button"
+                              onClick={() => { onClose(); onEditJob(row.job.id); }}
+                              className="text-slate-800 hover:text-gf-lime hover:underline text-left"
+                            >
+                              {row.job.name}
+                            </button>
+                          ) : (
+                            <span className="text-slate-800">{row.job.name}</span>
+                          )}
+                        </td>
                         <td className="py-3 px-3 text-slate-600">{row.job.customerName || '–'}</td>
                         <td className="py-3 px-3 text-slate-600 whitespace-nowrap">{formatDate(row.job.installDate)}</td>
                         <td className="py-3 px-3">

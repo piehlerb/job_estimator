@@ -34,6 +34,7 @@ function App() {
   const [currentPage, setCurrentPage] = useState<Page>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [editingJobId, setEditingJobId] = useState<string | null>(null);
+  const [returnPage, setReturnPage] = useState<Page>('dashboard');
   const [offlineMode, setOfflineMode] = useState(false);
   const isOnline = useOnlineStatus();
   const { user, loading, orgAccessLevel, organization } = useAuth();
@@ -181,18 +182,19 @@ function App() {
     });
   }, [user, offlineMode]);
 
-  const handleNavigation = (page: Page, jobId?: string) => {
+  const handleNavigation = (page: Page, jobId?: string, returnTo?: Page) => {
     // Block navigation to restricted pages for inventory_only members
     if (organization && orgAccessLevel === 'inventory_only' && !INVENTORY_ONLY_PAGES.includes(page)) {
       return;
     }
     setCurrentPage(page);
     if (jobId) setEditingJobId(jobId);
+    setReturnPage(returnTo ?? 'dashboard');
     setSidebarOpen(false);
   };
 
   const handleBackToDashboard = () => {
-    setCurrentPage('dashboard');
+    setCurrentPage(returnPage);
     setEditingJobId(null);
   };
 
@@ -248,7 +250,7 @@ function App() {
         <JobForm onBack={handleBackToDashboard} onEditJob={(id) => handleNavigation('edit-job', id)} />
       )}
       {currentPage === 'edit-job' && editingJobId && (
-        <JobForm jobId={editingJobId} onBack={handleBackToDashboard} onEditJob={(id) => handleNavigation('edit-job', id)} onViewJobSheet={(id) => handleNavigation('job-sheet', id)} />
+        <JobForm key={editingJobId} jobId={editingJobId} onBack={handleBackToDashboard} onEditJob={(id) => handleNavigation('edit-job', id)} onViewJobSheet={(id) => handleNavigation('job-sheet', id)} />
       )}
       {currentPage === 'chip-systems' && (
         <ChipSystems />
@@ -269,7 +271,7 @@ function App() {
         <Settings />
       )}
       {currentPage === 'inventory' && (
-        <Inventory />
+        <Inventory onEditJob={(id) => handleNavigation('edit-job', id, 'inventory')} />
       )}
       {currentPage === 'calendar' && (
         <Calendar onEditJob={(id) => handleNavigation('edit-job', id)} />

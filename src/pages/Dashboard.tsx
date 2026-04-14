@@ -26,18 +26,32 @@ interface ReminderItem {
 
 const ALL_STATUSES: JobStatus[] = ['Pending', 'Verbal', 'Won', 'Lost'];
 
+const FILTERS_STORAGE_KEY = 'dashboard_filters';
+
+const getSavedFilters = () => {
+  try {
+    return JSON.parse(localStorage.getItem(FILTERS_STORAGE_KEY) || '{}');
+  } catch {
+    return {};
+  }
+};
+
 export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: DashboardProps) {
   const [jobsWithCalc, setJobsWithCalc] = useState<JobWithCalc[]>([]);
   const [loading, setLoading] = useState(true);
-  const [sortBy, setSortBy] = useState<'date' | 'price' | 'margin'>('date');
 
-  // Filter state - default to showing Pending, Verbal, and Won
-  const [statusFilter, setStatusFilter] = useState<JobStatus[]>(['Pending', 'Verbal', 'Won']);
-  const [probabilityFilter, setProbabilityFilter] = useState<number>(0);
-  const [chipBlendFilter, setChipBlendFilter] = useState<string>('');
-  const [selectedTagFilters, setSelectedTagFilters] = useState<string[]>([]);
-  const [tagMatchMode, setTagMatchMode] = useState<'any' | 'all'>('any');
-  const [searchQuery, setSearchQuery] = useState('');
+  // Filter/sort state — persisted to localStorage so it survives navigation away and back
+  const _saved = getSavedFilters();
+  const [sortBy, setSortBy] = useState<'date' | 'price' | 'margin'>(_saved.sortBy ?? 'date');
+  const [statusFilter, setStatusFilter] = useState<JobStatus[]>(_saved.statusFilter ?? ['Pending', 'Verbal', 'Won']);
+  const [probabilityFilter, setProbabilityFilter] = useState<number>(_saved.probabilityFilter ?? 0);
+  const [chipBlendFilter, setChipBlendFilter] = useState<string>(_saved.chipBlendFilter ?? '');
+  const [selectedTagFilters, setSelectedTagFilters] = useState<string[]>(_saved.selectedTagFilters ?? []);
+  const [tagMatchMode, setTagMatchMode] = useState<'any' | 'all'>(_saved.tagMatchMode ?? 'any');
+  const [searchQuery, setSearchQuery] = useState<string>(_saved.searchQuery ?? '');
+  const [viewMode, setViewMode] = useState<'jobs' | 'needs-contact'>(_saved.viewMode ?? 'jobs');
+  const [showFilters, setShowFilters] = useState<boolean>(_saved.showFilters ?? false);
+
   const [showReminders, setShowReminders] = useState(false);
   const [selectedReminder, setSelectedReminder] = useState<ReminderItem | null>(null);
   const [updatingReminder, setUpdatingReminder] = useState(false);
@@ -46,8 +60,14 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
   const [commTemplates, setCommTemplates] = useState<CommunicationTemplate[]>([]);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [dashboardPricing, setDashboardPricing] = useState<Pricing>(getDefaultPricing());
-  const [viewMode, setViewMode] = useState<'jobs' | 'needs-contact'>('jobs');
-  const [showFilters, setShowFilters] = useState(false);
+
+  // Persist filter/sort state whenever it changes
+  useEffect(() => {
+    localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify({
+      sortBy, statusFilter, probabilityFilter, chipBlendFilter,
+      selectedTagFilters, tagMatchMode, searchQuery, viewMode, showFilters,
+    }));
+  }, [sortBy, statusFilter, probabilityFilter, chipBlendFilter, selectedTagFilters, tagMatchMode, searchQuery, viewMode, showFilters]);
 
   useEffect(() => {
     loadJobs();
@@ -203,6 +223,16 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
         ? prev.filter((t) => t !== tag)
         : [...prev, tag]
     ));
+  };
+
+  const handleClearFilters = () => {
+    setStatusFilter(['Pending', 'Verbal', 'Won']);
+    setProbabilityFilter(0);
+    setChipBlendFilter('');
+    setSelectedTagFilters([]);
+    setTagMatchMode('any');
+    setSearchQuery('');
+    setSortBy('date');
   };
 
   // Filter and sort jobs
@@ -497,6 +527,8 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
     return count;
   }, [statusFilter, probabilityFilter, chipBlendFilter, selectedTagFilters]);
 
+  const isFiltered = activeFilterCount > 0 || !!searchQuery;
+
   return (
     <div className="max-w-7xl mx-auto">
       {/* Sticky header + toolbar */}
@@ -573,6 +605,16 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
                   <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-gf-lime text-white text-[10px] font-bold">{activeFilterCount}</span>
                 )}
               </button>
+              {isFiltered && (
+                <button
+                  onClick={handleClearFilters}
+                  title="Clear all filters"
+                  className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium text-red-500 hover:bg-red-50 transition-colors shrink-0"
+                >
+                  <X size={12} />
+                  <span className="hidden sm:inline">Clear</span>
+                </button>
+              )}
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as 'date' | 'price' | 'margin')}
