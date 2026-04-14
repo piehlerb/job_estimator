@@ -181,9 +181,13 @@ export default function Reporting() {
 
   const tagAggregates = useMemo(() => {
     const map = new Map<string, TagAggregate>();
+    const UNTAGGED = '(Untagged)';
 
     filteredJobs.forEach(({ job, calc }) => {
-      (job.tags || []).forEach((tag) => {
+      const tags = job.tags || [];
+      const tagsToProcess = tags.length > 0 ? tags : [UNTAGGED];
+
+      tagsToProcess.forEach((tag) => {
         if (!map.has(tag)) {
           map.set(tag, {
             tag,
@@ -211,7 +215,11 @@ export default function Reporting() {
       });
     });
 
-    return Array.from(map.values()).sort((a, b) => b.totalPrice - a.totalPrice);
+    const tagged = Array.from(map.values())
+      .filter((a) => a.tag !== UNTAGGED)
+      .sort((a, b) => b.totalPrice - a.totalPrice);
+    const untagged = map.get(UNTAGGED);
+    return untagged ? [...tagged, untagged] : tagged;
   }, [filteredJobs]);
 
   const handleStatusToggle = (status: JobStatus) => {
@@ -385,7 +393,7 @@ export default function Reporting() {
 
             {tagAggregates.length === 0 ? (
               <div className="p-6 sm:p-8 text-center text-slate-600 text-sm sm:text-base">
-                No tagged jobs match the current filters.
+                No jobs match the current filters.
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -406,9 +414,10 @@ export default function Reporting() {
                   <tbody>
                     {tagAggregates.map((row) => {
                       const marginPct = row.totalPrice > 0 ? (row.totalMargin / row.totalPrice) * 100 : 0;
+                      const isUntagged = row.tag === '(Untagged)';
                       return (
-                        <tr key={row.tag} className="border-b border-slate-200">
-                          <td className="px-4 lg:px-6 py-4 text-sm font-medium text-slate-900">{row.tag}</td>
+                        <tr key={row.tag} className={`border-b border-slate-200 ${isUntagged ? 'bg-slate-50' : ''}`}>
+                          <td className={`px-4 lg:px-6 py-4 text-sm font-medium ${isUntagged ? 'text-slate-400 italic' : 'text-slate-900'}`}>{row.tag}</td>
                           <td className="px-4 lg:px-6 py-4 text-sm text-right text-slate-700">{row.jobs}</td>
                           <td className="px-4 lg:px-6 py-4 text-sm text-right text-green-700">{row.won}</td>
                           <td className="px-4 lg:px-6 py-4 text-sm text-right text-blue-700">{row.verbal}</td>
