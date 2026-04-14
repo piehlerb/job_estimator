@@ -1,4 +1,4 @@
-import { ArrowLeft, Save, ChevronDown, ChevronUp, X, Plus, Trash2, Link, Shuffle, Check, Copy } from 'lucide-react';
+import { ArrowLeft, Save, ChevronDown, ChevronUp, X, Plus, Trash2, Link, Shuffle, Check, Copy, FileText } from 'lucide-react';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   getAllSystems,
@@ -52,6 +52,7 @@ interface JobFormProps {
   jobId?: string;
   onBack: () => void;
   onEditJob?: (jobId: string) => void;
+  onViewJobSheet?: (jobId: string) => void;
 }
 
 interface CustomerOption {
@@ -59,7 +60,7 @@ interface CustomerOption {
   address?: string;
 }
 
-export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
+export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: JobFormProps) {
   const [systems, setSystems] = useState<ChipSystem[]>([]);
   const [costs, setCosts] = useState<Costs>(getDefaultCosts());
   const [pricing, setPricing] = useState<Pricing>(getDefaultPricing());
@@ -1562,13 +1563,25 @@ export default function JobForm({ jobId, onBack, onEditJob }: JobFormProps) {
 
   return (
     <div className="p-3 sm:p-4 md:p-6 lg:p-8 max-w-6xl mx-auto">
-      <button
-        onClick={onBack}
-        className="flex items-center gap-2 text-slate-600 hover:text-slate-900 mb-4 sm:mb-6 transition-colors"
-      >
-        <ArrowLeft size={18} className="sm:w-5 sm:h-5" />
-        <span className="font-medium text-sm sm:text-base">Back</span>
-      </button>
+      <div className="flex items-center justify-between mb-4 sm:mb-6">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-2 text-slate-600 hover:text-slate-900 transition-colors"
+        >
+          <ArrowLeft size={18} className="sm:w-5 sm:h-5" />
+          <span className="font-medium text-sm sm:text-base">Back</span>
+        </button>
+        {jobId && onViewJobSheet && (
+          <button
+            type="button"
+            onClick={() => onViewJobSheet(jobId)}
+            className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-gf-lime text-white rounded-lg font-medium hover:bg-gf-dark-green transition-colors text-sm"
+          >
+            <FileText size={16} />
+            <span>Job Summary</span>
+          </button>
+        )}
+      </div>
 
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4 sm:p-6 md:p-8">
         <div className="flex items-center justify-between mb-4 sm:mb-6">
