@@ -217,30 +217,49 @@ export default function JobSheet({ jobId, onBack }: JobSheetProps) {
             {/* Right Column - Materials */}
             <div>
               <h3 className="text-sm font-semibold text-slate-900 mb-2 border-b border-slate-200 pb-1">Materials Needed</h3>
-              {calculation && (
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="bg-green-50 p-3 rounded-lg text-center">
-                    <span className="text-xs text-gf-dark-green block">Basecoat</span>
-                    <span className="text-xl font-bold text-gf-dark-green">{calculation.baseGallons.toFixed(1)}</span>
-                    <span className="text-xs text-gf-dark-green block">gallons</span>
+              {calculation && (() => {
+                const bg = calculation.baseGallons;
+                const tg = calculation.topGallons;
+                const baseA = bg / 3;
+                const baseBLabel = job.baseColor || null;
+                const baseB = baseBLabel ? (bg * 2) / 3 : 0;
+                const topA = tg * 0.5;
+                const topB = tg * 0.5;
+                return (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="bg-green-50 p-3 rounded-lg text-center">
+                      <span className="text-xs text-gf-dark-green block">Base A</span>
+                      <span className="text-xl font-bold text-gf-dark-green">{baseA.toFixed(1)}</span>
+                      <span className="text-xs text-gf-dark-green block">gal / {(baseA * 128).toFixed(0)} oz</span>
+                    </div>
+                    <div className="bg-green-50 p-3 rounded-lg text-center">
+                      <span className="text-xs text-gf-dark-green block">Base B{baseBLabel ? ` (${baseBLabel})` : ''}</span>
+                      <span className="text-xl font-bold text-gf-dark-green">{baseB.toFixed(1)}</span>
+                      <span className="text-xs text-gf-dark-green block">gal / {(baseB * 128).toFixed(0)} oz</span>
+                    </div>
+                    <div className="bg-green-50 p-3 rounded-lg text-center">
+                      <span className="text-xs text-gf-dark-green block">Top A</span>
+                      <span className="text-xl font-bold text-gf-dark-green">{topA.toFixed(1)}</span>
+                      <span className="text-xs text-gf-dark-green block">gal / {(topA * 128).toFixed(0)} oz</span>
+                    </div>
+                    <div className="bg-green-50 p-3 rounded-lg text-center">
+                      <span className="text-xs text-gf-dark-green block">Top B</span>
+                      <span className="text-xl font-bold text-gf-dark-green">{topB.toFixed(1)}</span>
+                      <span className="text-xs text-gf-dark-green block">gal / {(topB * 128).toFixed(0)} oz</span>
+                    </div>
+                    <div className="bg-green-50 p-3 rounded-lg text-center">
+                      <span className="text-xs text-gf-dark-green block">Chip</span>
+                      <span className="text-xl font-bold text-gf-dark-green">{calculation.chipNeeded}</span>
+                      <span className="text-xs text-gf-dark-green block">boxes</span>
+                    </div>
+                    <div className="bg-green-50 p-3 rounded-lg text-center">
+                      <span className="text-xs text-gf-dark-green block">Crack Fill</span>
+                      <span className="text-xl font-bold text-gf-dark-green">{calculation.crackFillGallons.toFixed(1)}</span>
+                      <span className="text-xs text-gf-dark-green block">gal / {(calculation.crackFillGallons * 128).toFixed(0)} oz</span>
+                    </div>
                   </div>
-                  <div className="bg-green-50 p-3 rounded-lg text-center">
-                    <span className="text-xs text-gf-dark-green block">Topcoat</span>
-                    <span className="text-xl font-bold text-gf-dark-green">{calculation.topGallons.toFixed(1)}</span>
-                    <span className="text-xs text-gf-dark-green block">gallons</span>
-                  </div>
-                  <div className="bg-green-50 p-3 rounded-lg text-center">
-                    <span className="text-xs text-gf-dark-green block">Chip</span>
-                    <span className="text-xl font-bold text-gf-dark-green">{calculation.chipNeeded}</span>
-                    <span className="text-xs text-gf-dark-green block">boxes</span>
-                  </div>
-                  <div className="bg-green-50 p-3 rounded-lg text-center">
-                    <span className="text-xs text-gf-dark-green block">Crack Fill</span>
-                    <span className="text-xl font-bold text-gf-dark-green">{calculation.crackFillGallons.toFixed(1)}</span>
-                    <span className="text-xs text-gf-dark-green block">gallons</span>
-                  </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
           </div>
 
