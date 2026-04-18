@@ -13,6 +13,7 @@ import Inventory from './pages/Inventory';
 import Calendar from './pages/Calendar';
 import Reporting from './pages/Reporting';
 import Customers from './pages/Customers';
+import ReferralAssociates from './pages/ReferralAssociates';
 import Products from './pages/Products';
 import Organization from './pages/Organization';
 import Backup from './pages/Backup';
@@ -25,7 +26,7 @@ import { migrateCustomersFromJobs, cleanupMigratedCustomerDuplicates, migrateJob
 import { seedOfflineData } from './lib/seedData';
 import { getAllJobs, updateJob } from './lib/db';
 
-type Page = 'dashboard' | 'new-job' | 'edit-job' | 'job-sheet' | 'chip-systems' | 'chip-blends' | 'laborers' | 'costs' | 'pricing' | 'settings' | 'inventory' | 'shopping-list' | 'calendar' | 'reporting' | 'customers' | 'products' | 'organization' | 'backup';
+type Page = 'dashboard' | 'new-job' | 'edit-job' | 'job-sheet' | 'chip-systems' | 'chip-blends' | 'laborers' | 'costs' | 'pricing' | 'settings' | 'inventory' | 'shopping-list' | 'calendar' | 'reporting' | 'customers' | 'referral-associates' | 'products' | 'organization' | 'backup';
 
 // Pages accessible to inventory_only org members
 const INVENTORY_ONLY_PAGES: Page[] = ['inventory', 'shopping-list', 'organization'];
@@ -281,6 +282,9 @@ function App() {
       )}
       {currentPage === 'customers' && (
         <Customers />
+      )}
+      {currentPage === 'referral-associates' && (
+        <ReferralAssociates />
       )}
       {currentPage === 'products' && (
         <Products />
