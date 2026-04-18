@@ -386,6 +386,28 @@ export interface ExportMetadata {
   appName: string;
 }
 
+export interface ReferralService {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  deleted?: boolean;
+}
+
+export interface ReferralAssociate {
+  id: string;
+  name: string;
+  company?: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  notes?: string;
+  serviceIds: string[]; // IDs of ReferralService tags
+  createdAt: string;
+  updatedAt: string;
+  deleted?: boolean;
+}
+
 export interface CommunicationTemplate {
   id: string;
   name: string;   // Display label, e.g. "Initial Follow-up"
