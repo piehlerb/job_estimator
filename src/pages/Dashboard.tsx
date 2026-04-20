@@ -239,6 +239,14 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
   const filteredAndSortedJobs = useMemo(() => {
     let filtered = jobsWithCalc;
 
+    // Hide Won jobs whose install date is 5+ days in the past
+    const fiveDaysAgoMs = Date.now() - 5 * 24 * 60 * 60 * 1000;
+    filtered = filtered.filter(({ job }) => {
+      if (job.status !== 'Won' || !job.installDate) return true;
+      const installMs = new Date(job.installDate + 'T12:00:00').getTime();
+      return isNaN(installMs) || installMs > fiveDaysAgoMs;
+    });
+
     // Apply search filter
     if (searchQuery.trim()) {
       const query = searchQuery.trim().toLowerCase();
