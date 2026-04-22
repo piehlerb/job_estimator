@@ -269,7 +269,7 @@ export default function Calendar({ onEditJob }: CalendarProps) {
                           <div className="font-medium truncate">{job.name || 'Untitled Job'}</div>
                         </button>
                       ))}
-                      {dayReminders.map(({ job, reminder }) => (
+                      {dateMode === 'install' && dayReminders.map(({ job, reminder }) => (
                         <button
                           key={`${job.id}-${reminder.id}`}
                           onClick={() => onEditJob(job.id)}
