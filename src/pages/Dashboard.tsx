@@ -51,6 +51,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
   const [searchQuery, setSearchQuery] = useState<string>(_saved.searchQuery ?? '');
   const [viewMode, setViewMode] = useState<'jobs' | 'needs-contact'>(_saved.viewMode ?? 'jobs');
   const [showFilters, setShowFilters] = useState<boolean>(_saved.showFilters ?? false);
+  const [showInactive, setShowInactive] = useState<boolean>(_saved.showInactive ?? false);
 
   const [showReminders, setShowReminders] = useState(false);
   const [selectedReminder, setSelectedReminder] = useState<ReminderItem | null>(null);
@@ -65,9 +66,9 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
   useEffect(() => {
     localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify({
       sortBy, statusFilter, probabilityFilter, chipBlendFilter,
-      selectedTagFilters, tagMatchMode, searchQuery, viewMode, showFilters,
+      selectedTagFilters, tagMatchMode, searchQuery, viewMode, showFilters, showInactive,
     }));
-  }, [sortBy, statusFilter, probabilityFilter, chipBlendFilter, selectedTagFilters, tagMatchMode, searchQuery, viewMode, showFilters]);
+  }, [sortBy, statusFilter, probabilityFilter, chipBlendFilter, selectedTagFilters, tagMatchMode, searchQuery, viewMode, showFilters, showInactive]);
 
   useEffect(() => {
     loadJobs();
@@ -239,13 +240,15 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
   const filteredAndSortedJobs = useMemo(() => {
     let filtered = jobsWithCalc;
 
-    // Hide Won jobs whose install date is 5+ days in the past
-    const fiveDaysAgoMs = Date.now() - 5 * 24 * 60 * 60 * 1000;
-    filtered = filtered.filter(({ job }) => {
-      if (job.status !== 'Won' || !job.installDate) return true;
-      const installMs = new Date(job.installDate + 'T12:00:00').getTime();
-      return isNaN(installMs) || installMs > fiveDaysAgoMs;
-    });
+    // Hide Won jobs whose install date is 5+ days in the past (unless showing inactive)
+    if (!showInactive) {
+      const fiveDaysAgoMs = Date.now() - 5 * 24 * 60 * 60 * 1000;
+      filtered = filtered.filter(({ job }) => {
+        if (job.status !== 'Won' || !job.installDate) return true;
+        const installMs = new Date(job.installDate + 'T12:00:00').getTime();
+        return isNaN(installMs) || installMs > fiveDaysAgoMs;
+      });
+    }
 
     // Apply search filter
     if (searchQuery.trim()) {
@@ -256,9 +259,11 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
       );
     }
 
-    // Apply status filter
+    // Apply status filter — when showing inactive, also include Lost regardless of filter
     if (statusFilter.length > 0) {
-      filtered = filtered.filter(({ job }) => statusFilter.includes(job.status));
+      filtered = filtered.filter(({ job }) =>
+        statusFilter.includes(job.status) || (showInactive && job.status === 'Lost')
+      );
     }
 
     // Apply probability filter
@@ -296,7 +301,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
           return new Date(b.job.createdAt).getTime() - new Date(a.job.createdAt).getTime();
       }
     });
-  }, [jobsWithCalc, searchQuery, statusFilter, probabilityFilter, chipBlendFilter, selectedTagFilters, tagMatchMode, sortBy]);
+  }, [jobsWithCalc, searchQuery, statusFilter, probabilityFilter, chipBlendFilter, selectedTagFilters, tagMatchMode, sortBy, showInactive]);
 
   type GroupDisplayItem = {
     type: 'group';
@@ -612,6 +617,18 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
                 {activeFilterCount > 0 && (
                   <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-gf-lime text-white text-[10px] font-bold">{activeFilterCount}</span>
                 )}
+              </button>
+              <button
+                onClick={() => setShowInactive(p => !p)}
+                title="Show inactive jobs (Lost + past Won)"
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-colors shrink-0 ${
+                  showInactive
+                    ? 'bg-slate-700 text-white'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                <span className="hidden sm:inline">Inactive</span>
+                <span className="sm:hidden">Inact.</span>
               </button>
               {isFiltered && (
                 <button
