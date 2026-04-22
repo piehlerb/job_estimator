@@ -4,6 +4,7 @@ import { getAllJobs } from '../lib/db';
 import { Job, JobStatus, JobReminder } from '../types';
 
 type FilterType = 'All' | 'Won' | 'Verbal' | 'Pending';
+type DateMode = 'install' | 'estimate';
 
 interface CalendarProps {
   onEditJob: (id: string) => void;
@@ -19,6 +20,7 @@ export default function Calendar({ onEditJob }: CalendarProps) {
   const [loading, setLoading] = useState(true);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [filter, setFilter] = useState<FilterType>('All');
+  const [dateMode, setDateMode] = useState<DateMode>('install');
 
   useEffect(() => {
     loadJobs();
@@ -55,7 +57,14 @@ export default function Calendar({ onEditJob }: CalendarProps) {
   // Get jobs for a specific date
   const getJobsForDate = (day: number): Job[] => {
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    return filteredJobs.filter((job) => job.installDate === dateStr);
+    if (dateMode === 'install') {
+      return filteredJobs.filter((job) => job.installDate === dateStr);
+    } else {
+      return filteredJobs.filter((job) => {
+        const estimateDate = job.estimateDate || job.createdAt?.slice(0, 10);
+        return estimateDate === dateStr;
+      });
+    }
   };
 
   const getRemindersForDate = (day: number): ReminderCalendarItem[] => {
@@ -109,7 +118,7 @@ export default function Calendar({ onEditJob }: CalendarProps) {
   const getStatusColor = (status: JobStatus) => {
     switch (status) {
       case 'Won':
-        return 'bg-green-100 text-green-800 border-green-200';
+        return 'bg-green-500 text-white border-green-600';
       case 'Pending':
         return 'bg-yellow-100 text-yellow-800 border-yellow-200';
       case 'Verbal':
@@ -132,8 +141,31 @@ export default function Calendar({ onEditJob }: CalendarProps) {
       <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-6">
         <div>
           <h2 className="text-3xl font-bold text-slate-900">Calendar</h2>
-          <p className="text-slate-600 mt-1">View jobs by install date</p>
+          <p className="text-slate-600 mt-1">View jobs by {dateMode === 'install' ? 'install' : 'estimate'} date</p>
         </div>
+      </div>
+
+      {/* Date mode toggle + Filter buttons */}
+      <div className="flex flex-wrap items-center gap-3 mb-6">
+        <div className="flex rounded-lg border border-slate-200 overflow-hidden">
+          <button
+            onClick={() => setDateMode('install')}
+            className={`px-4 py-2 text-sm font-medium transition-colors ${
+              dateMode === 'install' ? 'bg-gf-lime text-white' : 'bg-white text-slate-700 hover:bg-slate-50'
+            }`}
+          >
+            Install Date
+          </button>
+          <button
+            onClick={() => setDateMode('estimate')}
+            className={`px-4 py-2 text-sm font-medium transition-colors border-l border-slate-200 ${
+              dateMode === 'estimate' ? 'bg-gf-lime text-white' : 'bg-white text-slate-700 hover:bg-slate-50'
+            }`}
+          >
+            Estimate Date
+          </button>
+        </div>
+        <div className="w-px h-6 bg-slate-200" />
       </div>
 
       {/* Filter buttons */}
@@ -241,7 +273,7 @@ export default function Calendar({ onEditJob }: CalendarProps) {
                         <button
                           key={`${job.id}-${reminder.id}`}
                           onClick={() => onEditJob(job.id)}
-                          className="w-full text-left p-1.5 rounded border text-xs transition-colors hover:opacity-80 bg-green-100 text-green-800 border-green-200"
+                          className="w-full text-left p-1.5 rounded border text-xs transition-colors hover:opacity-80 bg-yellow-100 text-yellow-800 border-yellow-200"
                         >
                           <div className="font-medium truncate">{reminder.subject}</div>
                           <div className="text-[10px] opacity-75 truncate">
