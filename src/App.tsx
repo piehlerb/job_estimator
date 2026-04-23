@@ -278,7 +278,7 @@ function App() {
         <Calendar onEditJob={(id) => handleNavigation('edit-job', id)} />
       )}
       {currentPage === 'reporting' && (
-        <Reporting />
+        <Reporting onEditJob={(id) => handleNavigation('edit-job', id)} />
       )}
       {currentPage === 'customers' && (
         <Customers />

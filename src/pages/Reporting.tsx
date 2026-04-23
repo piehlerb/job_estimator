@@ -8,6 +8,7 @@ interface JobWithCalc {
   calc: JobCalculation;
   mergedCosts: Costs;
   mergedPricing: Pricing;
+  mergedLaborers: Laborer[];
 }
 
 interface TagAggregate {
@@ -47,7 +48,11 @@ function getDefaultEmpStart() {
   return d.toISOString().slice(0, 10);
 }
 
-export default function Reporting() {
+interface ReportingProps {
+  onEditJob: (id: string) => void;
+}
+
+export default function Reporting({ onEditJob }: ReportingProps) {
   const [jobsWithCalc, setJobsWithCalc] = useState<JobWithCalc[]>([]);
   const [allLaborers, setAllLaborers] = useState<Laborer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -83,6 +88,8 @@ export default function Reporting() {
       const costs = currentCosts || getDefaultCosts();
       const pricing = currentPricing || getDefaultPricing();
 
+      const activeLaborers = laborers.filter((l) => !l.deleted);
+
       const withCalc = allJobs.map((job) => {
         const mergedCosts: Costs = {
           ...getDefaultCosts(),
@@ -93,6 +100,11 @@ export default function Reporting() {
         const mergedPricing: Pricing = job.pricingSnapshot
           ? { ...getDefaultPricing(), ...job.pricingSnapshot }
           : pricing;
+        // Mirror JobForm: prefer current laborer rates; fall back to snapshot for deleted laborers
+        const mergedLaborers: Laborer[] = [
+          ...activeLaborers,
+          ...job.laborersSnapshot.filter((sl) => !activeLaborers.some((al) => al.id === sl.id)),
+        ];
         const calc = calculateJobOutputs(
           {
             floorFootage: job.floorFootage,
@@ -116,10 +128,10 @@ export default function Reporting() {
           },
           job.systemSnapshot,
           mergedCosts,
-          job.laborersSnapshot,
+          mergedLaborers,
           mergedPricing
         );
-        return { job, calc, mergedCosts, mergedPricing };
+        return { job, calc, mergedCosts, mergedPricing, mergedLaborers };
       });
 
       setJobsWithCalc(withCalc);
@@ -270,7 +282,7 @@ export default function Reporting() {
         const d = new Date(`${job.installDate}T00:00:00`);
         return d >= monthStart && d <= monthEnd;
       })
-      .map(({ job, calc, mergedCosts, mergedPricing }) => {
+      .map(({ job, calc, mergedCosts, mergedPricing, mergedLaborers }) => {
         const estMargin = job.totalPrice - calc.totalCosts;
 
         let actuals: ActualCosts | null = null;
@@ -293,7 +305,7 @@ export default function Reporting() {
             },
             mergedCosts,
             mergedPricing,
-            job.laborersSnapshot
+            mergedLaborers
           );
         }
 
@@ -676,8 +688,12 @@ export default function Reporting() {
                         {monthlyWonData.map(({ job, calc, estMargin, actuals }) => {
                           const estPct = job.totalPrice > 0 ? (estMargin / job.totalPrice) * 100 : 0;
                           return (
-                            <tr key={job.id} className="border-b border-slate-200 hover:bg-slate-50">
-                              <td className="px-4 py-3 text-sm font-medium text-slate-900">{job.name}</td>
+                            <tr
+                              key={job.id}
+                              className="border-b border-slate-200 hover:bg-slate-50 cursor-pointer"
+                              onClick={() => onEditJob(job.id)}
+                            >
+                              <td className="px-4 py-3 text-sm font-medium text-gf-dark-green hover:underline">{job.name}</td>
                               <td className="px-4 py-3 text-sm text-slate-600">{job.installDate}</td>
                               <td className="px-4 py-3 text-sm text-right text-slate-700">{formatCurrency(job.totalPrice)}</td>
                               <td className="px-4 py-3 text-sm text-right text-slate-600">{formatCurrency(calc.totalCosts)}</td>
