@@ -83,13 +83,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
   useEffect(() => {
-    // Detect password recovery flow: PKCE fires SIGNED_IN (not PASSWORD_RECOVERY),
-    // so we embed ?recovery=1 in the redirect URL and check for it here.
+    // Detect password recovery flow. Two signals, either one is sufficient:
+    // 1. ?recovery=1 in the URL (set in our redirectTo, preserved when Supabase allows it)
+    // 2. sessionStorage flag set when the user requested the reset email (same-browser fallback)
     const params = new URLSearchParams(window.location.search);
-    const isRecovery = params.get('recovery') === '1';
+    const isRecovery =
+      params.get('recovery') === '1' ||
+      sessionStorage.getItem('pendingPasswordReset') === '1';
     if (isRecovery) {
       setNeedsPasswordReset(true);
-      window.history.replaceState({}, '', window.location.pathname);
+      sessionStorage.removeItem('pendingPasswordReset');
+      // Do NOT clean the URL here — Supabase reads ?code= asynchronously during its
+      // PKCE exchange, and stripping query params before it runs breaks the exchange.
     }
 
     // Check for existing session on mount

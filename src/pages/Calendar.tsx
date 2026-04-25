@@ -151,27 +151,29 @@ export default function Calendar({ onEditJob }: CalendarProps) {
       </div>
 
       {/* Date mode toggle + Filter buttons */}
-      <div className="flex flex-wrap items-center gap-3 mb-6">
-        <div className="flex rounded-lg border border-slate-200 overflow-hidden">
-          <button
-            onClick={() => setDateMode('install')}
-            className={`px-4 py-2 text-sm font-medium transition-colors ${
-              dateMode === 'install' ? 'bg-gf-lime text-white' : 'bg-white text-slate-700 hover:bg-slate-50'
-            }`}
-          >
-            Install Date
-          </button>
-          <button
-            onClick={() => setDateMode('estimate')}
-            className={`px-4 py-2 text-sm font-medium transition-colors border-l border-slate-200 ${
-              dateMode === 'estimate' ? 'bg-gf-lime text-white' : 'bg-white text-slate-700 hover:bg-slate-50'
-            }`}
-          >
-            Estimate Date
-          </button>
+      {!installOnly && (
+        <div className="flex flex-wrap items-center gap-3 mb-6">
+          <div className="flex rounded-lg border border-slate-200 overflow-hidden">
+            <button
+              onClick={() => setDateMode('install')}
+              className={`px-4 py-2 text-sm font-medium transition-colors ${
+                dateMode === 'install' ? 'bg-gf-lime text-white' : 'bg-white text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              Install Date
+            </button>
+            <button
+              onClick={() => setDateMode('estimate')}
+              className={`px-4 py-2 text-sm font-medium transition-colors border-l border-slate-200 ${
+                dateMode === 'estimate' ? 'bg-gf-lime text-white' : 'bg-white text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              Estimate Date
+            </button>
+          </div>
+          <div className="w-px h-6 bg-slate-200" />
         </div>
-        <div className="w-px h-6 bg-slate-200" />
-      </div>
+      )}
 
       {/* Filter buttons */}
       {!installOnly && (
@@ -250,7 +252,7 @@ export default function Calendar({ onEditJob }: CalendarProps) {
                 }
 
                 const dayJobs = getJobsForDate(day);
-                const dayReminders = getRemindersForDate(day);
+                const dayReminders = installOnly ? [] : getRemindersForDate(day);
 
                 return (
                   <div

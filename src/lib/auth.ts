@@ -127,6 +127,9 @@ export async function resetPassword(email: string): Promise<{ error: AuthError |
 
   if (error) {
     console.error('Password reset error:', error);
+  } else {
+    // Fallback for when Supabase strips query params from the redirect URL
+    sessionStorage.setItem('pendingPasswordReset', '1');
   }
 
   return { error };

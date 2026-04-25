@@ -4,7 +4,7 @@ import { updatePassword } from '../lib/auth';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function SetNewPassword() {
-  const { clearPasswordReset } = useAuth();
+  const { clearPasswordReset, user } = useAuth();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -55,6 +55,14 @@ export default function SetNewPassword() {
           <h2 className="text-xl font-semibold text-slate-800 mb-1">Choose a new password</h2>
           <p className="text-sm text-slate-500 mb-6">Must be at least 6 characters.</p>
 
+          {/* Wait for the PKCE session exchange to complete before allowing submit */}
+          {!user && !success && (
+            <div className="flex items-center justify-center gap-3 py-4 text-slate-500">
+              <Loader className="animate-spin" size={18} />
+              <span className="text-sm">Verifying reset link…</span>
+            </div>
+          )}
+
           {error && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
               <AlertCircle className="text-red-600 flex-shrink-0 mt-0.5" size={18} />
@@ -66,7 +74,7 @@ export default function SetNewPassword() {
             <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
               <p className="text-sm text-green-800 text-center">Password updated! Signing you in…</p>
             </div>
-          ) : (
+          ) : user ? (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-1">
@@ -120,7 +128,7 @@ export default function SetNewPassword() {
                 )}
               </button>
             </form>
-          )}
+          ) : null}
         </div>
       </div>
     </div>

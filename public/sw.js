@@ -45,6 +45,11 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
+  // Skip non-HTTP(S) requests (e.g. chrome-extension://) — Cache API rejects them
+  if (!url.protocol.startsWith('http')) {
+    return;
+  }
+
   // NEVER cache Supabase requests - always fetch fresh
   if (url.hostname.includes('supabase.co') ||
       url.pathname.includes('/auth/') ||
