@@ -40,6 +40,7 @@ const getSavedFilters = () => {
 export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: DashboardProps) {
   const { permissions } = useAuth();
   const canWriteJobs = permissions.jobs === 'write';
+  const isReadOnlyJobs = permissions.jobs === 'read';
   const [jobsWithCalc, setJobsWithCalc] = useState<JobWithCalc[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -544,6 +545,79 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
   }, [statusFilter, probabilityFilter, chipBlendFilter, selectedTagFilters]);
 
   const isFiltered = activeFilterCount > 0 || !!searchQuery;
+
+  // Simplified read-only view for members without write access to jobs.
+  // Shows just job name, status, install date, and customer address.
+  if (isReadOnlyJobs) {
+    const readOnlyJobs = [...jobsWithCalc]
+      .filter(({ job }) => job.status === 'Won' || job.status === 'Verbal' || job.status === 'Pending')
+      .sort((a, b) => {
+        const aDate = a.job.installDate || '';
+        const bDate = b.job.installDate || '';
+        if (aDate && bDate) return aDate.localeCompare(bDate);
+        if (aDate) return -1;
+        if (bDate) return 1;
+        return 0;
+      });
+
+    const formatInstallDate = (d?: string) => {
+      if (!d) return '—';
+      const [y, m, day] = d.split('-').map(Number);
+      if (!y || !m || !day) return d;
+      return new Date(y, m - 1, day).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    };
+
+    const statusBadge = (status: JobStatus) => {
+      const cls =
+        status === 'Won' ? 'bg-green-100 text-green-800 border-green-200'
+        : status === 'Verbal' ? 'bg-blue-100 text-blue-800 border-blue-200'
+        : status === 'Pending' ? 'bg-yellow-100 text-yellow-800 border-yellow-200'
+        : 'bg-slate-100 text-slate-700 border-slate-200';
+      return <span className={`inline-flex items-center text-xs font-medium rounded-full border px-2 py-0.5 ${cls}`}>{status}</span>;
+    };
+
+    return (
+      <div className="max-w-7xl mx-auto p-3 sm:p-6">
+        <div className="flex items-baseline gap-2.5 mb-4">
+          <h2 className="text-lg sm:text-xl font-bold text-slate-900">Dashboard</h2>
+          <span className="text-xs text-slate-400">{readOnlyJobs.length}</span>
+        </div>
+
+        {loading ? (
+          <div className="p-8 text-center text-sm text-slate-500">Loading jobs...</div>
+        ) : readOnlyJobs.length === 0 ? (
+          <div className="p-8 text-center text-sm text-slate-500">No jobs to display.</div>
+        ) : (
+          <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 border-b border-slate-200">
+                <tr>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide">Job Name</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide">Status</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide">Install Date</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide">Customer Address</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {readOnlyJobs.map(({ job }) => (
+                  <tr
+                    key={job.id}
+                    onClick={() => onViewJobSheet(job.id)}
+                    className="hover:bg-slate-50 cursor-pointer transition-colors"
+                  >
+                    <td className="px-4 py-3 font-medium text-slate-800">{job.name || 'Untitled Job'}</td>
+                    <td className="px-4 py-3">{statusBadge(job.status)}</td>
+                    <td className="px-4 py-3 text-slate-700">{formatInstallDate(job.installDate)}</td>
+                    <td className="px-4 py-3 text-slate-600">{job.customerAddress || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto">
