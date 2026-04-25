@@ -122,7 +122,7 @@ export async function isAuthenticated(): Promise<boolean> {
  */
 export async function resetPassword(email: string): Promise<{ error: AuthError | null }> {
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${window.location.origin}/job_estimator/`,
+    redirectTo: `${window.location.origin}/job_estimator/?recovery=1`,
   });
 
   if (error) {
@@ -150,9 +150,9 @@ export async function updatePassword(newPassword: string): Promise<{ error: Auth
 /**
  * Listen to auth state changes
  */
-export function onAuthStateChange(callback: (user: User | null) => void) {
-  const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-    callback(session?.user ?? null);
+export function onAuthStateChange(callback: (user: User | null, event?: string) => void) {
+  const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    callback(session?.user ?? null, event);
   });
 
   // Return unsubscribe function

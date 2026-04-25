@@ -14,10 +14,11 @@ import {
   generateInviteCode,
   revokeInvitation,
   updateMemberRole,
-  updateMemberAccessLevel,
+  updateMemberPermissions,
   removeMember,
 } from '../lib/organizationService';
-import type { OrganizationMember, OrganizationInvitation, OrgAccessLevel } from '../types';
+import type { OrganizationMember, OrganizationInvitation, MemberPermissions } from '../types';
+import { FULL_PERMISSIONS, INVENTORY_ONLY_PERMISSIONS, permissionsFromAccessLevel } from '../lib/permissions';
 
 export default function Organization() {
   const { user, organization, orgRole, orgLoading, refreshOrganization } = useAuth();
@@ -42,6 +43,11 @@ export default function Organization() {
 
   // Copied state for invite codes
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+
+  // Permissions editor modal state
+  const [editingPermsMember, setEditingPermsMember] = useState<OrganizationMember | null>(null);
+  const [draftPermissions, setDraftPermissions] = useState<MemberPermissions>(FULL_PERMISSIONS);
+  const [savingPerms, setSavingPerms] = useState(false);
 
   // =====================================================
   // Load members + invitations when org is available
@@ -185,17 +191,57 @@ export default function Organization() {
   };
 
   // =====================================================
-  // Change access level
+  // Permissions editor
   // =====================================================
-  const handleAccessLevelChange = async (userId: string, accessLevel: OrgAccessLevel) => {
-    if (!organization) return;
+  const openPermissionsEditor = (member: OrganizationMember) => {
+    const initial = member.permissions ?? permissionsFromAccessLevel(member.accessLevel ?? 'full');
+    setDraftPermissions({ ...initial });
+    setEditingPermsMember(member);
+  };
+
+  const closePermissionsEditor = () => {
+    setEditingPermsMember(null);
+  };
+
+  const savePermissions = async () => {
+    if (!organization || !editingPermsMember) return;
+    setSavingPerms(true);
     setMgmtError('');
     try {
-      await updateMemberAccessLevel(organization.id, userId, accessLevel);
+      await updateMemberPermissions(organization.id, editingPermsMember.userId, draftPermissions);
       await loadOrgData();
+      setEditingPermsMember(null);
     } catch (err: any) {
-      setMgmtError(err.message ?? 'Failed to update access level.');
+      setMgmtError(err.message ?? 'Failed to update permissions.');
+    } finally {
+      setSavingPerms(false);
     }
+  };
+
+  const summarizePermissions = (m: OrganizationMember): string => {
+    const p = m.permissions ?? permissionsFromAccessLevel(m.accessLevel ?? 'full');
+    const parts: string[] = [];
+    if (p.jobs === 'write') parts.push('Jobs: Write');
+    else if (p.jobs === 'read') parts.push('Jobs: Read');
+    if (p.calendar === 'full') parts.push('Calendar');
+    else if (p.calendar === 'install') parts.push('Calendar: Install');
+    if (p.inventory) parts.push('Inventory');
+    if (p.reporting) parts.push('Reporting');
+    const others = [
+      p.customers && 'Customers',
+      p.referralAssociates && 'Referrals',
+      p.products && 'Products',
+      p.chipSystems && 'Systems',
+      p.chipBlends && 'Blends',
+      p.laborers && 'Laborers',
+      p.costs && 'Costs',
+      p.pricing && 'Pricing',
+      p.settings && 'Settings',
+      p.backup && 'Backup',
+    ].filter(Boolean) as string[];
+    if (others.length >= 8) parts.push('All admin');
+    else if (others.length > 0) parts.push(`+${others.length}`);
+    return parts.length === 0 ? 'No access' : parts.join(' · ');
   };
 
   // =====================================================
@@ -444,7 +490,7 @@ export default function Organization() {
                 <tr>
                   <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide">Email</th>
                   <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide">Role</th>
-                  <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide">Access</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide">Permissions</th>
                   <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide">Joined</th>
                   {isAdmin && <th className="px-4 py-2.5" />}
                 </tr>
@@ -484,27 +530,20 @@ export default function Organization() {
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        {isAdmin && !isSelf ? (
-                          <select
-                            value={member.accessLevel ?? 'full'}
-                            onChange={(e) =>
-                              handleAccessLevelChange(member.userId, e.target.value as OrgAccessLevel)
-                            }
-                            className="text-xs border border-slate-200 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-gf-electric/40"
-                          >
-                            <option value="full">Full Access</option>
-                            <option value="inventory_only">Inventory Only</option>
-                          </select>
-                        ) : (
-                          <span className={`inline-flex items-center gap-1 text-xs font-medium rounded-full px-2 py-0.5 ${
-                            (member.accessLevel ?? 'full') === 'full'
-                              ? 'text-green-700 bg-green-50 border border-green-200'
-                              : 'text-purple-700 bg-purple-50 border border-purple-200'
-                          }`}>
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center gap-1 text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded px-2 py-0.5 max-w-[260px] truncate" title={summarizePermissions(member)}>
                             <Lock size={10} />
-                            {(member.accessLevel ?? 'full') === 'full' ? 'Full Access' : 'Inventory Only'}
+                            {summarizePermissions(member)}
                           </span>
-                        )}
+                          {isAdmin && !isSelf && (
+                            <button
+                              onClick={() => openPermissionsEditor(member)}
+                              className="text-xs text-gf-dark-green hover:text-gf-lime font-medium"
+                            >
+                              Edit
+                            </button>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-slate-500 text-xs">
                         {new Date(member.joinedAt).toLocaleDateString()}
@@ -636,6 +675,122 @@ export default function Organization() {
             </div>
           )}
         </section>
+      )}
+
+      {/* Permissions Editor Modal */}
+      {editingPermsMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={closePermissionsEditor}>
+          <div
+            className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-800">Edit Permissions</h3>
+                <p className="text-xs text-slate-500 mt-0.5">{editingPermsMember.email}</p>
+              </div>
+              <button onClick={closePermissionsEditor} className="text-slate-400 hover:text-slate-700 text-2xl leading-none px-2">
+                ×
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5">
+              {/* Quick presets */}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDraftPermissions({ ...FULL_PERMISSIONS })}
+                  className="flex-1 px-3 py-2 text-sm font-medium bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors"
+                >
+                  Preset: Full Access
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDraftPermissions({ ...INVENTORY_ONLY_PERMISSIONS })}
+                  className="flex-1 px-3 py-2 text-sm font-medium bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors"
+                >
+                  Preset: Inventory Only
+                </button>
+              </div>
+
+              {/* Jobs */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Jobs</label>
+                <select
+                  value={draftPermissions.jobs}
+                  onChange={(e) => setDraftPermissions({ ...draftPermissions, jobs: e.target.value as MemberPermissions['jobs'] })}
+                  className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-gf-electric/40"
+                >
+                  <option value="none">No access</option>
+                  <option value="read">Read only (Job Summary)</option>
+                  <option value="write">Read &amp; write (full job page)</option>
+                </select>
+              </div>
+
+              {/* Calendar */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Calendar</label>
+                <select
+                  value={draftPermissions.calendar}
+                  onChange={(e) => setDraftPermissions({ ...draftPermissions, calendar: e.target.value as MemberPermissions['calendar'] })}
+                  className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-gf-electric/40"
+                >
+                  <option value="none">No access</option>
+                  <option value="install">Install calendar only (Won jobs)</option>
+                  <option value="full">Full calendar (all statuses)</option>
+                </select>
+              </div>
+
+              {/* Other features */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Other Pages</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    ['inventory', 'Inventory & Shopping'],
+                    ['reporting', 'Reporting'],
+                    ['customers', 'Customers'],
+                    ['referralAssociates', 'Referral Associates'],
+                    ['products', 'Products'],
+                    ['chipSystems', 'Chip Systems'],
+                    ['chipBlends', 'Chip Blends'],
+                    ['laborers', 'Laborers'],
+                    ['costs', 'Costs'],
+                    ['pricing', 'Pricing'],
+                    ['settings', 'Settings'],
+                    ['backup', 'Backup'],
+                  ] as const).map(([key, label]) => (
+                    <label key={key} className="flex items-center gap-2 text-sm text-slate-700 px-2 py-1.5 rounded hover:bg-slate-50 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={draftPermissions[key]}
+                        onChange={(e) => setDraftPermissions({ ...draftPermissions, [key]: e.target.checked })}
+                        className="rounded border-slate-300 text-gf-lime focus:ring-gf-lime"
+                      />
+                      <span>{label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-end gap-2">
+              <button
+                onClick={closePermissionsEditor}
+                disabled={savingPerms}
+                className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={savePermissions}
+                disabled={savingPerms}
+                className="px-4 py-2 text-sm font-medium bg-gf-lime text-white rounded-lg hover:bg-gf-dark-green disabled:opacity-50"
+              >
+                {savingPerms ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

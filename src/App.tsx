@@ -19,6 +19,7 @@ import Organization from './pages/Organization';
 import Backup from './pages/Backup';
 import ShoppingList from './pages/ShoppingList';
 import Login from './pages/Login';
+import SetNewPassword from './pages/SetNewPassword';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { useAuth } from './contexts/AuthContext';
 import { useAutoSync } from './hooks/useAutoSync';
@@ -26,10 +27,9 @@ import { migrateCustomersFromJobs, cleanupMigratedCustomerDuplicates, migrateJob
 import { seedOfflineData } from './lib/seedData';
 import { getAllJobs, updateJob } from './lib/db';
 
-type Page = 'dashboard' | 'new-job' | 'edit-job' | 'job-sheet' | 'chip-systems' | 'chip-blends' | 'laborers' | 'costs' | 'pricing' | 'settings' | 'inventory' | 'shopping-list' | 'calendar' | 'reporting' | 'customers' | 'referral-associates' | 'products' | 'organization' | 'backup';
+import { isPageAllowed, pickLandingPage, type AppPage } from './lib/permissions';
 
-// Pages accessible to inventory_only org members
-const INVENTORY_ONLY_PAGES: Page[] = ['inventory', 'shopping-list', 'organization'];
+type Page = AppPage;
 
 function App() {
   const [currentPage, setCurrentPage] = useState<Page>('dashboard');
@@ -38,16 +38,14 @@ function App() {
   const [returnPage, setReturnPage] = useState<Page>('dashboard');
   const [offlineMode, setOfflineMode] = useState(false);
   const isOnline = useOnlineStatus();
-  const { user, loading, orgAccessLevel, organization } = useAuth();
+  const { user, loading, organization, permissions, needsPasswordReset } = useAuth();
 
-  // Redirect inventory_only users away from restricted pages
+  // Redirect users away from pages they don't have permission to view
   useEffect(() => {
-    if (organization && orgAccessLevel === 'inventory_only') {
-      if (!INVENTORY_ONLY_PAGES.includes(currentPage)) {
-        setCurrentPage('inventory');
-      }
+    if (organization && !isPageAllowed(currentPage, permissions)) {
+      setCurrentPage(pickLandingPage(permissions));
     }
-  }, [orgAccessLevel, organization, currentPage]);
+  }, [permissions, organization, currentPage]);
   const notifiedThisSessionRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -184,11 +182,16 @@ function App() {
   }, [user, offlineMode]);
 
   const handleNavigation = (page: Page, jobId?: string, returnTo?: Page) => {
-    // Block navigation to restricted pages for inventory_only members
-    if (organization && orgAccessLevel === 'inventory_only' && !INVENTORY_ONLY_PAGES.includes(page)) {
+    let target = page;
+    // Read-only job access: rewrite edit/new requests to job-sheet (or block new entirely)
+    if (organization && permissions.jobs === 'read') {
+      if (page === 'edit-job' && jobId) target = 'job-sheet';
+      if (page === 'new-job') return;
+    }
+    if (organization && !isPageAllowed(target, permissions)) {
       return;
     }
-    setCurrentPage(page);
+    setCurrentPage(target);
     if (jobId) setEditingJobId(jobId);
     setReturnPage(returnTo ?? 'dashboard');
     setSidebarOpen(false);
@@ -219,6 +222,11 @@ function App() {
         </div>
       </div>
     );
+  }
+
+  // Show password reset screen when user clicked a reset link
+  if (needsPasswordReset) {
+    return <SetNewPassword />;
   }
 
   // Show login screen if not authenticated and not in offline mode

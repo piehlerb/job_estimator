@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { getAllJobs } from '../lib/db';
 import { Job, JobStatus, JobReminder } from '../types';
+import { useAuth } from '../contexts/AuthContext';
 
 type FilterType = 'All' | 'Won' | 'Verbal' | 'Pending';
 type DateMode = 'install' | 'estimate';
@@ -16,10 +17,12 @@ interface ReminderCalendarItem {
 }
 
 export default function Calendar({ onEditJob }: CalendarProps) {
+  const { permissions } = useAuth();
+  const installOnly = permissions.calendar === 'install';
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [filter, setFilter] = useState<FilterType>('All');
+  const [filter, setFilter] = useState<FilterType>(installOnly ? 'Won' : 'All');
   const [dateMode, setDateMode] = useState<DateMode>('install');
 
   useEffect(() => {
@@ -39,11 +42,13 @@ export default function Calendar({ onEditJob }: CalendarProps) {
   };
 
   // Filter jobs based on status (All = Won + Verbal + Pending, excludes Lost)
+  // Install-only permission forces Won regardless of state.
+  const effectiveFilter: FilterType = installOnly ? 'Won' : filter;
   const filteredJobs = jobs.filter((job) => {
-    if (filter === 'All') {
+    if (effectiveFilter === 'All') {
       return job.status === 'Won' || job.status === 'Verbal' || job.status === 'Pending';
     }
-    return job.status === filter;
+    return job.status === effectiveFilter;
   });
 
   // Get current month info
@@ -169,6 +174,7 @@ export default function Calendar({ onEditJob }: CalendarProps) {
       </div>
 
       {/* Filter buttons */}
+      {!installOnly && (
       <div className="flex gap-2 mb-6">
         {(['All', 'Won', 'Verbal', 'Pending'] as FilterType[]).map((filterOption) => (
           <button
@@ -190,6 +196,7 @@ export default function Calendar({ onEditJob }: CalendarProps) {
           </button>
         ))}
       </div>
+      )}
 
       {/* Calendar navigation */}
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">

@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { LogIn, UserPlus, AlertCircle, Loader } from 'lucide-react';
-import { signIn, signUp } from '../lib/auth';
+import { useState, useEffect } from 'react';
+import { LogIn, UserPlus, AlertCircle, Loader, Mail } from 'lucide-react';
+import { signIn, signUp, resetPassword } from '../lib/auth';
 
 interface LoginProps {
   onSuccess: () => void;
@@ -8,7 +8,7 @@ interface LoginProps {
 }
 
 export default function Login({ onSuccess, onContinueOffline }: LoginProps) {
-  const [mode, setMode] = useState<'login' | 'signup'>('login');
+  const [mode, setMode] = useState<'login' | 'signup' | 'forgot'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -16,10 +16,47 @@ export default function Login({ onSuccess, onContinueOffline }: LoginProps) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const errorCode = params.get('error_code');
+    if (errorCode) {
+      setMode('forgot');
+      if (errorCode === 'otp_expired') {
+        setError('Your password reset link has expired. Enter your email below to get a new one.');
+      } else {
+        setError('The reset link was invalid or already used. Request a new one below.');
+      }
+      // Clean error params from the URL without reloading
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setSuccess(null);
+
+    if (mode === 'forgot') {
+      if (!email) {
+        setError('Please enter your email address');
+        return;
+      }
+      setLoading(true);
+      try {
+        const { error: resetError } = await resetPassword(email);
+        if (resetError) {
+          setError(resetError.message);
+        } else {
+          setSuccess('Check your email for a password reset link.');
+          setEmail('');
+        }
+      } catch (err: any) {
+        setError(err.message || 'An unexpected error occurred');
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
 
     // Validation
     if (!email || !password) {
@@ -47,11 +84,9 @@ export default function Login({ onSuccess, onContinueOffline }: LoginProps) {
           setError(signUpError.message);
         } else if (user) {
           setSuccess('Account created! Please check your email to verify your account.');
-          // Clear form
           setEmail('');
           setPassword('');
           setConfirmPassword('');
-          // Switch to login mode after 2 seconds
           setTimeout(() => {
             setMode('login');
             setSuccess(null);
@@ -87,37 +122,47 @@ export default function Login({ onSuccess, onContinueOffline }: LoginProps) {
 
         {/* Auth Form */}
         <div className="bg-white rounded-lg shadow-xl p-8">
-          {/* Mode Toggle */}
-          <div className="flex gap-2 mb-6 p-1 bg-slate-100 rounded-lg">
-            <button
-              onClick={() => {
-                setMode('login');
-                setError(null);
-                setSuccess(null);
-              }}
-              className={`flex-1 py-2 rounded-md font-medium transition-colors ${
-                mode === 'login'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Login
-            </button>
-            <button
-              onClick={() => {
-                setMode('signup');
-                setError(null);
-                setSuccess(null);
-              }}
-              className={`flex-1 py-2 rounded-md font-medium transition-colors ${
-                mode === 'signup'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Sign Up
-            </button>
-          </div>
+          {/* Mode Toggle (hidden in forgot mode) */}
+          {mode !== 'forgot' && (
+            <div className="flex gap-2 mb-6 p-1 bg-slate-100 rounded-lg">
+              <button
+                onClick={() => {
+                  setMode('login');
+                  setError(null);
+                  setSuccess(null);
+                }}
+                className={`flex-1 py-2 rounded-md font-medium transition-colors ${
+                  mode === 'login'
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Login
+              </button>
+              <button
+                onClick={() => {
+                  setMode('signup');
+                  setError(null);
+                  setSuccess(null);
+                }}
+                className={`flex-1 py-2 rounded-md font-medium transition-colors ${
+                  mode === 'signup'
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Sign Up
+              </button>
+            </div>
+          )}
+
+          {/* Forgot password heading */}
+          {mode === 'forgot' && (
+            <div className="mb-6">
+              <h2 className="text-xl font-semibold text-slate-800">Reset your password</h2>
+              <p className="text-sm text-slate-500 mt-1">We'll send a reset link to your email.</p>
+            </div>
+          )}
 
           {/* Error Message */}
           {error && (
@@ -153,23 +198,40 @@ export default function Login({ onSuccess, onContinueOffline }: LoginProps) {
               />
             </div>
 
-            {/* Password */}
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-1">
-                Password
-              </label>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
-                disabled={loading}
-                required
-                minLength={6}
-              />
-            </div>
+            {/* Password (hidden in forgot mode) */}
+            {mode !== 'forgot' && (
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label htmlFor="password" className="block text-sm font-medium text-slate-700">
+                    Password
+                  </label>
+                  {mode === 'login' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMode('forgot');
+                        setError(null);
+                        setSuccess(null);
+                      }}
+                      className="text-xs text-gf-lime hover:text-gf-dark-green"
+                    >
+                      Forgot password?
+                    </button>
+                  )}
+                </div>
+                <input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
+                  disabled={loading}
+                  required
+                  minLength={6}
+                />
+              </div>
+            )}
 
             {/* Confirm Password (Signup only) */}
             {mode === 'signup' && (
@@ -200,24 +262,33 @@ export default function Login({ onSuccess, onContinueOffline }: LoginProps) {
               {loading ? (
                 <>
                   <Loader className="animate-spin" size={18} />
-                  <span>{mode === 'login' ? 'Signing in...' : 'Creating account...'}</span>
+                  <span>
+                    {mode === 'login' ? 'Signing in...' : mode === 'forgot' ? 'Sending...' : 'Creating account...'}
+                  </span>
                 </>
               ) : (
                 <>
-                  {mode === 'login' ? (
-                    <>
-                      <LogIn size={18} />
-                      <span>Sign In</span>
-                    </>
-                  ) : (
-                    <>
-                      <UserPlus size={18} />
-                      <span>Create Account</span>
-                    </>
-                  )}
+                  {mode === 'login' && <><LogIn size={18} /><span>Sign In</span></>}
+                  {mode === 'signup' && <><UserPlus size={18} /><span>Create Account</span></>}
+                  {mode === 'forgot' && <><Mail size={18} /><span>Send Reset Email</span></>}
                 </>
               )}
             </button>
+
+            {/* Back to login in forgot mode */}
+            {mode === 'forgot' && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('login');
+                  setError(null);
+                  setSuccess(null);
+                }}
+                className="w-full text-sm text-slate-500 hover:text-slate-700 text-center"
+              >
+                Back to login
+              </button>
+            )}
           </form>
 
           {/* Offline Mode Option */}
@@ -246,15 +317,17 @@ export default function Login({ onSuccess, onContinueOffline }: LoginProps) {
         </div>
 
         {/* Help Text */}
-        <p className="text-center text-sm text-slate-400 mt-6">
-          {mode === 'login' ? "Don't have an account? " : 'Already have an account? '}
-          <button
-            onClick={() => setMode(mode === 'login' ? 'signup' : 'login')}
-            className="text-gf-lime hover:text-gf-lime font-medium"
-          >
-            {mode === 'login' ? 'Sign up' : 'Sign in'}
-          </button>
-        </p>
+        {mode !== 'forgot' && (
+          <p className="text-center text-sm text-slate-400 mt-6">
+            {mode === 'login' ? "Don't have an account? " : 'Already have an account? '}
+            <button
+              onClick={() => setMode(mode === 'login' ? 'signup' : 'login')}
+              className="text-gf-lime hover:text-gf-lime font-medium"
+            >
+              {mode === 'login' ? 'Sign up' : 'Sign in'}
+            </button>
+          </p>
+        )}
       </div>
     </div>
   );

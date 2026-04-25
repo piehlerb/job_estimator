@@ -6,7 +6,7 @@
  */
 
 import { supabase } from './supabase';
-import type { Organization, OrganizationMember, OrganizationInvitation, OrgAccessLevel } from '../types';
+import type { Organization, OrganizationMember, OrganizationInvitation, OrgAccessLevel, MemberPermissions } from '../types';
 
 // =====================================================
 // HELPERS
@@ -30,6 +30,7 @@ function mapMember(row: any): OrganizationMember {
     email: row.email,
     role: row.role,
     accessLevel: (row.access_level as OrgAccessLevel) ?? 'full',
+    permissions: (row.permissions as MemberPermissions | null) ?? null,
     invitedBy: row.invited_by ?? undefined,
     joinedAt: row.joined_at,
   };
@@ -57,13 +58,14 @@ export async function getMyOrganization(): Promise<{
   org: Organization;
   role: 'admin' | 'member';
   accessLevel: OrgAccessLevel;
+  permissions: MemberPermissions | null;
 } | null> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
 
   const { data, error } = await supabase
     .from('organization_members')
-    .select('role, access_level, org_id, organizations(id, name, created_by, created_at, updated_at)')
+    .select('role, access_level, permissions, org_id, organizations(id, name, created_by, created_at, updated_at)')
     .eq('user_id', user.id)
     .maybeSingle();
 
@@ -76,6 +78,7 @@ export async function getMyOrganization(): Promise<{
     org: mapOrg(orgRow),
     role: data.role as 'admin' | 'member',
     accessLevel: ((data as any).access_level as OrgAccessLevel) ?? 'full',
+    permissions: ((data as any).permissions as MemberPermissions | null) ?? null,
   };
 }
 
@@ -338,6 +341,23 @@ export async function updateMemberAccessLevel(
   const { error } = await supabase
     .from('organization_members')
     .update({ access_level: accessLevel })
+    .eq('org_id', orgId)
+    .eq('user_id', userId);
+
+  if (error) throw new Error(error.message);
+}
+
+// =====================================================
+// UPDATE: Change a member's granular permissions
+// =====================================================
+export async function updateMemberPermissions(
+  orgId: string,
+  userId: string,
+  permissions: MemberPermissions | null
+): Promise<void> {
+  const { error } = await supabase
+    .from('organization_members')
+    .update({ permissions })
     .eq('org_id', orgId)
     .eq('user_id', userId);
 

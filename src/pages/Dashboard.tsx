@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { getAllJobs, deleteJob, updateJob, getDefaultCosts, getCosts, getPricing, getDefaultPricing, getAllCommTemplates } from '../lib/db';
 import { Job, JobCalculation, Costs, Pricing, JobStatus, JobReminder, CommunicationTemplate } from '../types';
 import { calculateJobOutputs } from '../lib/calculations';
+import { useAuth } from '../contexts/AuthContext';
 
 interface DashboardProps {
   onViewJobSheet: (id: string) => void;
@@ -37,6 +38,8 @@ const getSavedFilters = () => {
 };
 
 export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: DashboardProps) {
+  const { permissions } = useAuth();
+  const canWriteJobs = permissions.jobs === 'write';
   const [jobsWithCalc, setJobsWithCalc] = useState<JobWithCalc[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -552,13 +555,15 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
             <h2 className="text-lg sm:text-xl font-bold text-slate-900">Dashboard</h2>
             <span className="text-xs text-slate-400">{filteredAndSortedJobs.length}/{jobsWithCalc.length}</span>
           </div>
-          <button
-            onClick={onNewJob}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors text-sm"
-          >
-            <Plus size={15} />
-            New Job
-          </button>
+          {canWriteJobs && (
+            <button
+              onClick={onNewJob}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors text-sm"
+            >
+              <Plus size={15} />
+              New Job
+            </button>
+          )}
         </div>
         {/* Tab row */}
         <div className="flex border-b border-slate-100">
@@ -757,7 +762,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
           <p className="text-sm text-slate-500 mb-4">
             {jobsWithCalc.length === 0 ? "No jobs yet. Create your first job to get started!" : "No jobs match the current filters."}
           </p>
-          {jobsWithCalc.length === 0 && (
+          {jobsWithCalc.length === 0 && canWriteJobs && (
             <button onClick={onNewJob} className="inline-flex items-center gap-2 px-4 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors text-sm">
               <Plus size={16} /> Create Job
             </button>
@@ -801,7 +806,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
                           </div>
                           <div className="flex items-center gap-0.5">
                             <button onClick={(e) => { e.stopPropagation(); onViewJobSheet(job.id); }} className="p-1.5 text-slate-400 hover:text-green-600 rounded"><FileText size={14} /></button>
-                            <button onClick={(e) => { e.stopPropagation(); handleDeleteJob(job.id); }} className="p-1.5 text-slate-400 hover:text-red-500 rounded"><Trash2 size={14} /></button>
+                            {canWriteJobs && (<button onClick={(e) => { e.stopPropagation(); handleDeleteJob(job.id); }} className="p-1.5 text-slate-400 hover:text-red-500 rounded"><Trash2 size={14} /></button>)}
                           </div>
                         </div>
                       );
@@ -828,7 +833,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
                   </div>
                   <div className="flex items-center gap-0.5">
                     <button onClick={(e) => { e.stopPropagation(); onViewJobSheet(job.id); }} className="p-1.5 text-slate-400 hover:text-green-600 rounded"><FileText size={14} /></button>
-                    <button onClick={(e) => { e.stopPropagation(); handleDeleteJob(job.id); }} className="p-1.5 text-slate-400 hover:text-red-500 rounded"><Trash2 size={14} /></button>
+                    {canWriteJobs && (<button onClick={(e) => { e.stopPropagation(); handleDeleteJob(job.id); }} className="p-1.5 text-slate-400 hover:text-red-500 rounded"><Trash2 size={14} /></button>)}
                   </div>
                 </div>
               );
@@ -919,7 +924,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
                                   <div className="flex items-center justify-end gap-2">
                                     <button onClick={(e) => { e.stopPropagation(); onViewJobSheet(job.id); }} className="text-green-600 hover:text-green-800" title="Job Sheet"><FileText size={18} /></button>
                                     <button className="text-gf-dark-green hover:text-gf-dark-green font-medium text-xs lg:text-sm">Edit</button>
-                                    <button onClick={(e) => { e.stopPropagation(); handleDeleteJob(job.id); }} className="text-red-600 hover:text-red-800"><Trash2 size={18} /></button>
+                                    {canWriteJobs && (<button onClick={(e) => { e.stopPropagation(); handleDeleteJob(job.id); }} className="text-red-600 hover:text-red-800"><Trash2 size={18} /></button>)}
                                   </div>
                                 </td>
                               </tr>
@@ -958,7 +963,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
                           <div className="flex items-center justify-end gap-2">
                             <button onClick={(e) => { e.stopPropagation(); onViewJobSheet(job.id); }} className="text-green-600 hover:text-green-800" title="Job Sheet"><FileText size={18} /></button>
                             <button className="text-gf-dark-green hover:text-gf-dark-green font-medium text-xs lg:text-sm">Edit</button>
-                            <button onClick={(e) => { e.stopPropagation(); handleDeleteJob(job.id); }} className="text-red-600 hover:text-red-800"><Trash2 size={18} /></button>
+                            {canWriteJobs && (<button onClick={(e) => { e.stopPropagation(); handleDeleteJob(job.id); }} className="text-red-600 hover:text-red-800"><Trash2 size={18} /></button>)}
                           </div>
                         </td>
                       </tr>

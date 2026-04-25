@@ -22,9 +22,11 @@ export default function Layout({
   isOnline,
   onManualSync,
 }: LayoutProps) {
-  const { user, organization, orgRole, orgAccessLevel } = useAuth();
-  const isInventoryOnly = !!organization && orgAccessLevel === 'inventory_only';
+  const { user, organization, orgRole, permissions } = useAuth();
   const { isSyncing, lastSyncTime } = useSyncStatus();
+  const canWriteJobs = permissions.jobs === 'write';
+  const canSeeJobs = permissions.jobs !== 'none';
+  const canSeeCalendar = permissions.calendar !== 'none';
 
   const handleLogout = async () => {
     if (confirm('Are you sure you want to log out?')) {
@@ -75,7 +77,7 @@ export default function Layout({
           </div>
 
           <nav className="flex-1 overflow-y-auto scrollbar-hide p-2 md:p-4 space-y-1 md:space-y-2">
-            {!isInventoryOnly && (
+            {canSeeJobs && (
               <button
                 onClick={() => onNavigate('dashboard')}
                 className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
@@ -85,7 +87,7 @@ export default function Layout({
               </button>
             )}
 
-            {!isInventoryOnly && (
+            {canWriteJobs && (
               <button
                 onClick={() => onNavigate('new-job')}
                 className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
@@ -95,23 +97,27 @@ export default function Layout({
               </button>
             )}
 
-            <button
-              onClick={() => onNavigate('inventory')}
-              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
-            >
-              <Package size={18} className="md:w-5 md:h-5" />
-              <span>Inventory</span>
-            </button>
+            {permissions.inventory && (
+              <button
+                onClick={() => onNavigate('inventory')}
+                className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
+              >
+                <Package size={18} className="md:w-5 md:h-5" />
+                <span>Inventory</span>
+              </button>
+            )}
 
-            <button
-              onClick={() => onNavigate('shopping-list')}
-              className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
-            >
-              <ShoppingCart size={18} className="md:w-5 md:h-5" />
-              <span>Shopping List</span>
-            </button>
+            {permissions.inventory && (
+              <button
+                onClick={() => onNavigate('shopping-list')}
+                className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
+              >
+                <ShoppingCart size={18} className="md:w-5 md:h-5" />
+                <span>Shopping List</span>
+              </button>
+            )}
 
-            {!isInventoryOnly && (
+            {canSeeCalendar && (
               <button
                 onClick={() => onNavigate('calendar')}
                 className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
@@ -121,7 +127,7 @@ export default function Layout({
               </button>
             )}
 
-            {!isInventoryOnly && (
+            {permissions.reporting && (
               <button
                 onClick={() => onNavigate('reporting')}
                 className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
@@ -131,7 +137,7 @@ export default function Layout({
               </button>
             )}
 
-            {!isInventoryOnly && (
+            {permissions.customers && (
               <button
                 onClick={() => onNavigate('customers')}
                 className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
@@ -141,7 +147,7 @@ export default function Layout({
               </button>
             )}
 
-            {!isInventoryOnly && (
+            {permissions.referralAssociates && (
               <button
                 onClick={() => onNavigate('referral-associates')}
                 className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
@@ -151,7 +157,7 @@ export default function Layout({
               </button>
             )}
 
-            {!isInventoryOnly && (
+            {permissions.products && (
               <button
                 onClick={() => onNavigate('products')}
                 className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
@@ -161,7 +167,7 @@ export default function Layout({
               </button>
             )}
 
-            {!isInventoryOnly && (
+            {permissions.chipSystems && (
               <button
                 onClick={() => onNavigate('chip-systems')}
                 className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
@@ -171,7 +177,7 @@ export default function Layout({
               </button>
             )}
 
-            {!isInventoryOnly && (
+            {permissions.chipBlends && (
               <button
                 onClick={() => onNavigate('chip-blends')}
                 className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
@@ -181,7 +187,7 @@ export default function Layout({
               </button>
             )}
 
-            {!isInventoryOnly && (
+            {permissions.laborers && (
               <button
                 onClick={() => onNavigate('laborers')}
                 className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
@@ -191,7 +197,7 @@ export default function Layout({
               </button>
             )}
 
-            {!isInventoryOnly && (
+            {permissions.costs && (
               <button
                 onClick={() => onNavigate('costs')}
                 className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
@@ -201,7 +207,7 @@ export default function Layout({
               </button>
             )}
 
-            {!isInventoryOnly && (
+            {permissions.pricing && (
               <button
                 onClick={() => onNavigate('pricing')}
                 className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
@@ -211,7 +217,7 @@ export default function Layout({
               </button>
             )}
 
-            {!isInventoryOnly && (
+            {permissions.settings && (
               <button
                 onClick={() => onNavigate('settings')}
                 className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
@@ -221,7 +227,7 @@ export default function Layout({
               </button>
             )}
 
-            {!isInventoryOnly && (
+            {permissions.backup && (
               <button
                 onClick={() => onNavigate('backup')}
                 className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"

@@ -466,13 +466,34 @@ export interface Organization {
 
 export type OrgAccessLevel = 'full' | 'inventory_only';
 
+export type JobsPermission = 'write' | 'read' | 'none';
+export type CalendarPermission = 'full' | 'install' | 'none';
+
+export interface MemberPermissions {
+  jobs: JobsPermission;
+  calendar: CalendarPermission;
+  inventory: boolean;
+  reporting: boolean;
+  customers: boolean;
+  referralAssociates: boolean;
+  products: boolean;
+  chipSystems: boolean;
+  chipBlends: boolean;
+  laborers: boolean;
+  costs: boolean;
+  pricing: boolean;
+  settings: boolean;
+  backup: boolean;
+}
+
 export interface OrganizationMember {
   id: string;
   orgId: string;
   userId: string;
   email: string;
   role: 'admin' | 'member';
-  accessLevel: OrgAccessLevel; // Controls which pages the member can access
+  accessLevel: OrgAccessLevel; // Legacy: drives backwards-compatible defaults when permissions is null
+  permissions?: MemberPermissions | null; // Granular per-feature permissions; null = derive from accessLevel
   invitedBy?: string;
   joinedAt: string;
 }
