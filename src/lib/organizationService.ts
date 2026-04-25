@@ -48,6 +48,7 @@ function mapInvitation(row: any): OrganizationInvitation {
     acceptedAt: row.accepted_at ?? undefined,
     expiresAt: row.expires_at,
     createdAt: row.created_at,
+    permissions: (row.permissions as MemberPermissions | null) ?? null,
   };
 }
 
@@ -165,6 +166,7 @@ export async function joinOrganizationByCode(inviteCode: string): Promise<Organi
       email: user.email ?? '',
       role: row.invite_role,
       invited_by: row.invited_by_user,
+      permissions: row.invite_permissions ?? null,
     });
 
   if (memberError) throw new Error(memberError.message);
@@ -261,7 +263,8 @@ export async function getOrgInvitations(orgId: string): Promise<OrganizationInvi
 export async function generateInviteCode(
   orgId: string,
   email?: string,
-  role: 'admin' | 'member' = 'member'
+  role: 'admin' | 'member' = 'member',
+  permissions?: MemberPermissions | null,
 ): Promise<OrganizationInvitation> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
@@ -273,6 +276,7 @@ export async function generateInviteCode(
       email: email?.trim() || null,
       role,
       invited_by: user.id,
+      permissions: permissions ?? null,
     })
     .select()
     .single();

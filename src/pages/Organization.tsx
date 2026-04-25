@@ -39,6 +39,8 @@ export default function Organization() {
   // New invite form
   const [newInviteEmail, setNewInviteEmail] = useState('');
   const [newInviteRole, setNewInviteRole] = useState<'admin' | 'member'>('member');
+  const [newInvitePermissions, setNewInvitePermissions] = useState<MemberPermissions>({ ...FULL_PERMISSIONS });
+  const [showInvitePerms, setShowInvitePerms] = useState(false);
   const [inviteLoading, setInviteLoading] = useState(false);
 
   // Copied state for invite codes
@@ -151,9 +153,16 @@ export default function Organization() {
     setMgmtError('');
     setInviteLoading(true);
     try {
-      await generateInviteCode(organization.id, newInviteEmail || undefined, newInviteRole);
+      await generateInviteCode(
+        organization.id,
+        newInviteEmail || undefined,
+        newInviteRole,
+        newInviteRole === 'member' ? newInvitePermissions : null,
+      );
       setNewInviteEmail('');
       setNewInviteRole('member');
+      setNewInvitePermissions({ ...FULL_PERMISSIONS });
+      setShowInvitePerms(false);
       await loadOrgData();
     } catch (err: any) {
       setMgmtError(err.message ?? 'Failed to generate invite.');
@@ -581,43 +590,143 @@ export default function Organization() {
           {/* Generate new invite */}
           <form
             onSubmit={handleGenerateInvite}
-            className="flex flex-wrap items-end gap-3 p-4 bg-slate-50 border border-slate-200 rounded-xl mb-4"
+            className="flex flex-col gap-3 p-4 bg-slate-50 border border-slate-200 rounded-xl mb-4"
           >
-            <div className="flex-1 min-w-[160px]">
-              <label className="block text-xs font-medium text-slate-600 mb-1">
-                Email (optional)
-              </label>
-              <input
-                type="email"
-                value={newInviteEmail}
-                onChange={(e) => setNewInviteEmail(e.target.value)}
-                placeholder="colleague@example.com"
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gf-electric/40 focus:border-gf-electric"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">Role</label>
-              <select
-                value={newInviteRole}
-                onChange={(e) => setNewInviteRole(e.target.value as 'admin' | 'member')}
-                className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-gf-electric/40"
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="flex-1 min-w-[160px]">
+                <label className="block text-xs font-medium text-slate-600 mb-1">
+                  Email (optional)
+                </label>
+                <input
+                  type="email"
+                  value={newInviteEmail}
+                  onChange={(e) => setNewInviteEmail(e.target.value)}
+                  placeholder="colleague@example.com"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gf-electric/40 focus:border-gf-electric"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Role</label>
+                <select
+                  value={newInviteRole}
+                  onChange={(e) => {
+                    setNewInviteRole(e.target.value as 'admin' | 'member');
+                    setShowInvitePerms(false);
+                  }}
+                  className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-gf-electric/40"
+                >
+                  <option value="member">Member</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+              <button
+                type="submit"
+                disabled={inviteLoading}
+                className="flex items-center gap-1.5 bg-gf-electric text-black text-sm font-medium px-4 py-2 rounded-lg hover:bg-gf-electric/90 disabled:opacity-50 transition-colors"
               >
-                <option value="member">Member</option>
-                <option value="admin">Admin</option>
-              </select>
+                {inviteLoading ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-black" />
+                ) : (
+                  <Plus size={15} />
+                )}
+                Generate Code
+              </button>
             </div>
-            <button
-              type="submit"
-              disabled={inviteLoading}
-              className="flex items-center gap-1.5 bg-gf-electric text-black text-sm font-medium px-4 py-2 rounded-lg hover:bg-gf-electric/90 disabled:opacity-50 transition-colors"
-            >
-              {inviteLoading ? (
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-black" />
-              ) : (
-                <Plus size={15} />
-              )}
-              Generate Code
-            </button>
+
+            {/* Collapsible permissions — member role only */}
+            {newInviteRole === 'member' && (
+              <div className="border-t border-slate-200 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowInvitePerms(v => !v)}
+                  className="flex items-center gap-1.5 text-xs font-medium text-gf-dark-green hover:text-gf-lime transition-colors"
+                >
+                  <Lock size={12} />
+                  {showInvitePerms ? 'Hide permissions' : 'Set permissions'}
+                </button>
+
+                {showInvitePerms && (
+                  <div className="mt-3 space-y-4">
+                    {/* Presets */}
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setNewInvitePermissions({ ...FULL_PERMISSIONS })}
+                        className="flex-1 px-3 py-1.5 text-xs font-medium bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors"
+                      >
+                        Preset: Full Access
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewInvitePermissions({ ...INVENTORY_ONLY_PERMISSIONS })}
+                        className="flex-1 px-3 py-1.5 text-xs font-medium bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors"
+                      >
+                        Preset: Inventory Only
+                      </button>
+                    </div>
+
+                    {/* Jobs */}
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Jobs</label>
+                      <select
+                        value={newInvitePermissions.jobs}
+                        onChange={(e) => setNewInvitePermissions({ ...newInvitePermissions, jobs: e.target.value as MemberPermissions['jobs'] })}
+                        className="w-full text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-gf-electric/40"
+                      >
+                        <option value="none">No access</option>
+                        <option value="read">Read only (Job Summary)</option>
+                        <option value="write">Read &amp; write (full job page)</option>
+                      </select>
+                    </div>
+
+                    {/* Calendar */}
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Calendar</label>
+                      <select
+                        value={newInvitePermissions.calendar}
+                        onChange={(e) => setNewInvitePermissions({ ...newInvitePermissions, calendar: e.target.value as MemberPermissions['calendar'] })}
+                        className="w-full text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-gf-electric/40"
+                      >
+                        <option value="none">No access</option>
+                        <option value="install">Install calendar only (Won jobs)</option>
+                        <option value="full">Full calendar (all statuses)</option>
+                      </select>
+                    </div>
+
+                    {/* Other pages */}
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-2">Other Pages</label>
+                      <div className="grid grid-cols-2 gap-1">
+                        {([
+                          ['inventory', 'Inventory & Shopping'],
+                          ['reporting', 'Reporting'],
+                          ['customers', 'Customers'],
+                          ['referralAssociates', 'Referral Associates'],
+                          ['products', 'Products'],
+                          ['chipSystems', 'Chip Systems'],
+                          ['chipBlends', 'Chip Blends'],
+                          ['laborers', 'Laborers'],
+                          ['costs', 'Costs'],
+                          ['pricing', 'Pricing'],
+                          ['settings', 'Settings'],
+                          ['backup', 'Backup'],
+                        ] as const).map(([key, label]) => (
+                          <label key={key} className="flex items-center gap-2 text-xs text-slate-700 px-2 py-1 rounded hover:bg-slate-100 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={newInvitePermissions[key]}
+                              onChange={(e) => setNewInvitePermissions({ ...newInvitePermissions, [key]: e.target.checked })}
+                              className="rounded border-slate-300 text-gf-lime focus:ring-gf-lime"
+                            />
+                            <span>{label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </form>
 
           {/* Existing invite codes */}
@@ -634,16 +743,23 @@ export default function Organization() {
                     <span className="font-mono text-lg font-bold tracking-widest text-slate-800">
                       {inv.inviteCode}
                     </span>
-                    <div className="flex flex-col">
-                      <span className={`text-xs font-medium rounded-full px-2 py-0.5 w-fit ${
-                        inv.role === 'admin'
-                          ? 'text-amber-700 bg-amber-50'
-                          : 'text-slate-600 bg-slate-100'
-                      }`}>
-                        {inv.role}
-                      </span>
+                    <div className="flex flex-col gap-0.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`text-xs font-medium rounded-full px-2 py-0.5 w-fit ${
+                          inv.role === 'admin'
+                            ? 'text-amber-700 bg-amber-50'
+                            : 'text-slate-600 bg-slate-100'
+                        }`}>
+                          {inv.role}
+                        </span>
+                        {inv.role === 'member' && inv.permissions && (
+                          <span className="text-xs font-medium rounded-full px-2 py-0.5 text-gf-dark-green bg-green-50">
+                            custom permissions
+                          </span>
+                        )}
+                      </div>
                       {inv.email && (
-                        <span className="text-xs text-slate-500 mt-0.5">for {inv.email}</span>
+                        <span className="text-xs text-slate-500">for {inv.email}</span>
                       )}
                       <span className="text-xs text-slate-400">
                         Expires {new Date(inv.expiresAt).toLocaleDateString()}

@@ -509,6 +509,7 @@ export interface OrganizationInvitation {
   acceptedAt?: string;
   expiresAt: string;
   createdAt: string;
+  permissions?: MemberPermissions | null;
 }
 
 export interface ShoppingItem {
