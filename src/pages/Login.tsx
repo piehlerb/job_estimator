@@ -1,17 +1,30 @@
 import { useState, useEffect } from 'react';
-import { LogIn, UserPlus, AlertCircle, Loader, Mail } from 'lucide-react';
+import { LogIn, UserPlus, AlertCircle, Loader, Mail, Building2 } from 'lucide-react';
 import { signIn, signUp, resetPassword } from '../lib/auth';
+import {
+  clearPendingInviteCode,
+  joinOrganizationByCode,
+  normalizeInviteCode,
+  savePendingInviteCode,
+} from '../lib/organizationService';
+import { useAuth } from '../contexts/AuthContext';
 
 interface LoginProps {
   onSuccess: () => void;
   onContinueOffline?: () => void;
 }
 
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'An unexpected error occurred';
+}
+
 export default function Login({ onSuccess, onContinueOffline }: LoginProps) {
+  const { refreshOrganization } = useAuth();
   const [mode, setMode] = useState<'login' | 'signup' | 'forgot'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -50,8 +63,8 @@ export default function Login({ onSuccess, onContinueOffline }: LoginProps) {
           setSuccess('Check your email for a password reset link.');
           setEmail('');
         }
-      } catch (err: any) {
-        setError(err.message || 'An unexpected error occurred');
+      } catch (err: unknown) {
+        setError(getErrorMessage(err));
       } finally {
         setLoading(false);
       }
@@ -78,15 +91,49 @@ export default function Login({ onSuccess, onContinueOffline }: LoginProps) {
 
     try {
       if (mode === 'signup') {
+        const normalizedInviteCode = normalizeInviteCode(inviteCode);
         const { user, error: signUpError } = await signUp(email, password);
 
         if (signUpError) {
           setError(signUpError.message);
         } else if (user) {
-          setSuccess('Account created! Please check your email to verify your account.');
+          if (normalizedInviteCode) {
+            savePendingInviteCode(normalizedInviteCode);
+          }
+
+          let successMessage = normalizedInviteCode
+            ? 'Account created! Your organization invite code will be applied after you verify your email and sign in.'
+            : 'Account created! Please check your email to verify your account.';
+
+          if (normalizedInviteCode) {
+            try {
+              await joinOrganizationByCode(normalizedInviteCode);
+              await refreshOrganization();
+              successMessage = 'Account created and joined to your organization.';
+            } catch (inviteError: unknown) {
+              const inviteErrorMessage = getErrorMessage(inviteError);
+              const isNotAuthenticated = inviteErrorMessage === 'Not authenticated';
+              const isAlreadyMember = inviteErrorMessage === 'You are already a member of this organization.';
+              if (isAlreadyMember) {
+                clearPendingInviteCode();
+                await refreshOrganization();
+                successMessage = 'Account created and joined to your organization.';
+              }
+              if (!isNotAuthenticated) {
+                clearPendingInviteCode();
+                if (!isAlreadyMember) {
+                  successMessage = 'Account created. You can add an organization invite code later from Personal Account.';
+                  setError(`The invite code could not be applied: ${inviteErrorMessage}`);
+                }
+              }
+            }
+          }
+
+          setSuccess(successMessage);
           setEmail('');
           setPassword('');
           setConfirmPassword('');
+          setInviteCode('');
           setTimeout(() => {
             setMode('login');
             setSuccess(null);
@@ -99,13 +146,14 @@ export default function Login({ onSuccess, onContinueOffline }: LoginProps) {
           setError(signInError.message);
         } else if (user) {
           setSuccess('Login successful!');
+          await refreshOrganization();
           setTimeout(() => {
             onSuccess();
           }, 500);
         }
       }
-    } catch (err: any) {
-      setError(err.message || 'An unexpected error occurred');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -250,6 +298,31 @@ export default function Login({ onSuccess, onContinueOffline }: LoginProps) {
                   required
                   minLength={6}
                 />
+              </div>
+            )}
+
+            {/* Invite Code (Signup only) */}
+            {mode === 'signup' && (
+              <div>
+                <label htmlFor="inviteCode" className="block text-sm font-medium text-slate-700 mb-1">
+                  Organization Invite Code <span className="font-normal text-slate-400">(optional)</span>
+                </label>
+                <div className="relative">
+                  <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                  <input
+                    id="inviteCode"
+                    type="text"
+                    value={inviteCode}
+                    onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                    placeholder="Enter code from your organization"
+                    className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
+                    disabled={loading}
+                    autoCapitalize="characters"
+                  />
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  You can leave this blank and join an organization later from Personal Account.
+                </p>
               </div>
             )}
 

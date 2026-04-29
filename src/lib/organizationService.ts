@@ -12,6 +12,30 @@ import type { Organization, OrganizationMember, OrganizationInvitation, OrgAcces
 // HELPERS
 // =====================================================
 
+const PENDING_INVITE_CODE_KEY = 'pendingOrganizationInviteCode';
+
+export function normalizeInviteCode(inviteCode: string): string {
+  return inviteCode.trim().toUpperCase();
+}
+
+export function getPendingInviteCode(): string | null {
+  if (typeof window === 'undefined') return null;
+  return window.localStorage.getItem(PENDING_INVITE_CODE_KEY);
+}
+
+export function savePendingInviteCode(inviteCode: string): void {
+  if (typeof window === 'undefined') return;
+  const normalizedCode = normalizeInviteCode(inviteCode);
+  if (normalizedCode) {
+    window.localStorage.setItem(PENDING_INVITE_CODE_KEY, normalizedCode);
+  }
+}
+
+export function clearPendingInviteCode(): void {
+  if (typeof window === 'undefined') return;
+  window.localStorage.removeItem(PENDING_INVITE_CODE_KEY);
+}
+
 function mapOrg(row: any): Organization {
   return {
     id: row.id,
@@ -181,6 +205,20 @@ export async function joinOrganizationByCode(inviteCode: string): Promise<Organi
   await migrateMyDataToOrg(orgRow.id);
 
   return mapOrg(orgRow);
+}
+
+export async function joinPendingOrganizationInvite(): Promise<Organization | null> {
+  const pendingCode = getPendingInviteCode();
+  if (!pendingCode) return null;
+
+  try {
+    const org = await joinOrganizationByCode(pendingCode);
+    clearPendingInviteCode();
+    return org;
+  } catch (error) {
+    clearPendingInviteCode();
+    throw error;
+  }
 }
 
 // =====================================================

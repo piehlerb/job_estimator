@@ -6,7 +6,12 @@
 import { createContext, useContext, useEffect, useRef, useState, useCallback, ReactNode } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { getCurrentUser, onAuthStateChange } from '../lib/auth';
-import { getMyOrganization } from '../lib/organizationService';
+import {
+  clearPendingInviteCode,
+  getMyOrganization,
+  getPendingInviteCode,
+  joinPendingOrganizationInvite,
+} from '../lib/organizationService';
 import { setSyncOrgContext, clearLastSyncTimestamp } from '../lib/sync';
 import { resolvePermissions, FULL_PERMISSIONS } from '../lib/permissions';
 import type { Organization, OrgAccessLevel, MemberPermissions } from '../types';
@@ -47,7 +52,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const loadOrganization = useCallback(async () => {
     setOrgLoading(true);
     try {
-      const result = await getMyOrganization();
+      let result = await getMyOrganization();
+      if (result) {
+        clearPendingInviteCode();
+      } else if (getPendingInviteCode()) {
+        try {
+          await joinPendingOrganizationInvite();
+          result = await getMyOrganization();
+        } catch (inviteError) {
+          console.warn('[Auth] Failed to join pending organization invite:', inviteError);
+        }
+      }
+
       if (result) {
         setOrganization(result.org);
         setOrgRole(result.role);
