@@ -1,7 +1,7 @@
 import { ChipSystem, PricingVariable, Job, Costs, Laborer, ChipInventory, TintInventory, TopCoatInventory, BaseCoatInventory, MiscInventory, Pricing, Customer, Product, BaseCoatColor, ShoppingItem, CommunicationTemplate, ReferralAssociate, ReferralService } from '../types';
 
 const DB_NAME = 'JobEstimator';
-const DB_VERSION = 17; // Added referralAssociates and referralServices stores
+const DB_VERSION = 18; // Bumped to match browser state after worktree sessions
 
 // Auto-sync flag - can be disabled for batch operations
 let autoSyncEnabled = true;

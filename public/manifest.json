@@ -1,7 +1,7 @@
 {
-  "name": "Job Estimator",
-  "short_name": "Est",
-  "description": "Professional job estimation app with offline support",
+  "name": "GFS",
+  "short_name": "GFS",
+  "description": "GFS job estimation app with offline support",
   "start_url": "/job_estimator/",
   "scope": "/job_estimator/",
   "display": "standalone",
@@ -10,16 +10,16 @@
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "/job_estimator/icon.svg",
+      "src": "/job_estimator/icon-192.png",
       "sizes": "192x192",
-      "type": "image/svg+xml",
-      "purpose": "any"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
-      "src": "/job_estimator/icon.svg",
-      "sizes": "192x192",
-      "type": "image/svg+xml",
-      "purpose": "maskable"
+      "src": "/job_estimator/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ],
   "categories": ["business", "productivity"]

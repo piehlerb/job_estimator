@@ -1,4 +1,4 @@
-import { Plus, Trash2, FileText, Search, Bell, Check, X, ChevronDown, ChevronRight, Link, Shuffle, PhoneCall, SlidersHorizontal } from 'lucide-react';
+import { Plus, Trash2, FileText, Search, Bell, Check, X, ChevronDown, ChevronRight, Link, Shuffle, PhoneCall, SlidersHorizontal, Calendar, Clock, Wrench, FileSearch } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { getAllJobs, deleteJob, updateJob, getDefaultCosts, getCosts, getPricing, getDefaultPricing, getAllCommTemplates } from '../lib/db';
 import { Job, JobCalculation, Costs, Pricing, JobStatus, JobReminder, CommunicationTemplate } from '../types';
@@ -53,7 +53,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
   const [selectedTagFilters, setSelectedTagFilters] = useState<string[]>(_saved.selectedTagFilters ?? []);
   const [tagMatchMode, setTagMatchMode] = useState<'any' | 'all'>(_saved.tagMatchMode ?? 'any');
   const [searchQuery, setSearchQuery] = useState<string>(_saved.searchQuery ?? '');
-  const [viewMode, setViewMode] = useState<'jobs' | 'needs-contact'>(_saved.viewMode ?? 'jobs');
+  const [viewMode, setViewMode] = useState<'jobs' | 'needs-contact' | 'today'>(_saved.viewMode ?? 'jobs');
   const [showFilters, setShowFilters] = useState<boolean>(_saved.showFilters ?? false);
   const [showInactive, setShowInactive] = useState<boolean>(_saved.showInactive ?? false);
 
@@ -425,6 +425,44 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
       .sort((a, b) => b.daysSince - a.daysSince);
   }, [jobsWithCalc, dashboardPricing]);
 
+  const todayItems = useMemo(() => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const todayMs = new Date(todayStr + 'T12:00:00').getTime();
+    const msPerDay = 24 * 60 * 60 * 1000;
+
+    const installs: { job: Job; dayNumber: number; totalDays: number }[] = [];
+    const estimates: { job: Job }[] = [];
+    const reminders: { job: Job; reminder: JobReminder }[] = [];
+
+    for (const { job } of jobsWithCalc) {
+      if (job.status === 'Won' && job.installDate) {
+        const startMs = new Date(job.installDate + 'T12:00:00').getTime();
+        const days = job.installDays || 1;
+        const endMs = startMs + (days - 1) * msPerDay;
+        if (todayMs >= startMs && todayMs <= endMs) {
+          const dayNumber = Math.round((todayMs - startMs) / msPerDay) + 1;
+          installs.push({ job, dayNumber, totalDays: days });
+        }
+      }
+
+      if ((job.estimateDate || job.createdAt.split('T')[0]) === todayStr) {
+        estimates.push({ job });
+      }
+
+      (job.reminders || []).forEach(r => {
+        if (!r.completed && r.dueDate === todayStr) {
+          reminders.push({ job, reminder: r });
+        }
+      });
+    }
+
+    reminders.sort((a, b) => a.reminder.dueTime.localeCompare(b.reminder.dueTime));
+
+    return { installs, estimates, reminders };
+  }, [jobsWithCalc]);
+
+  const todayTotalCount = todayItems.installs.length + todayItems.estimates.length + todayItems.reminders.length;
+
   const selectedReminderDetails = useMemo(() => {
     if (!selectedReminder) return null;
     const jobEntry = jobsWithCalc.find(({ job }) => job.id === selectedReminder.jobId);
@@ -668,8 +706,25 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
               }`}>{needsContactJobs.length}</span>
             )}
           </button>
+          <button
+            onClick={() => setViewMode('today')}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-medium transition-colors ${
+              viewMode === 'today'
+                ? 'text-blue-600 border-b-2 border-blue-400 -mb-px'
+                : 'text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            <Calendar size={12} />
+            Today
+            {todayTotalCount > 0 && (
+              <span className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold ${
+                viewMode === 'today' ? 'bg-blue-100 text-blue-700' : 'bg-blue-100 text-blue-600'
+              }`}>{todayTotalCount}</span>
+            )}
+          </button>
         </div>
         {/* Toolbar row */}
+        {viewMode !== 'today' && (
         <div className="flex items-center gap-2 px-3 sm:px-6 py-2">
           <div className="relative flex-1">
             <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
@@ -743,6 +798,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
             {remindersNeedingAttentionCount > 0 && <span className="font-bold">{remindersNeedingAttentionCount}</span>}
           </button>
         </div>
+        )}
       </div>
 
       {/* Collapsible filter panel */}
@@ -828,8 +884,96 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
         </div>
       )}
 
+      {/* Today tab content */}
+      {viewMode === 'today' && (
+        <div className="bg-white">
+          {todayTotalCount === 0 ? (
+            <div className="p-8 text-center">
+              <Calendar size={24} className="mx-auto mb-2 text-slate-300" />
+              <p className="text-sm text-slate-500">Nothing scheduled for today.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-200">
+              {/* Installs section */}
+              {todayItems.installs.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 px-3 sm:px-6 py-2 bg-green-50">
+                    <Wrench size={13} className="text-green-600" />
+                    <span className="text-xs font-semibold text-green-700 uppercase tracking-wide">Installs</span>
+                    <span className="text-[10px] font-bold text-green-600">({todayItems.installs.length})</span>
+                  </div>
+                  <div className="divide-y divide-slate-100">
+                    {todayItems.installs.map(({ job, dayNumber, totalDays }) => (
+                      <button key={job.id} onClick={() => onEditJob(job.id)}
+                        className="w-full flex items-center gap-3 px-3 sm:px-6 py-3 text-left hover:bg-green-50/60 active:bg-green-50 transition-colors">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium text-slate-900 truncate">{job.name || 'Untitled Job'}</div>
+                          {job.customerName && <div className="text-xs text-slate-400">{job.customerName}</div>}
+                        </div>
+                        {totalDays > 1 && (
+                          <span className="text-xs font-medium text-green-700 bg-green-100 px-1.5 py-0.5 rounded shrink-0">Day {dayNumber}/{totalDays}</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Estimates section */}
+              {todayItems.estimates.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 px-3 sm:px-6 py-2 bg-purple-50">
+                    <FileSearch size={13} className="text-purple-600" />
+                    <span className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Estimates</span>
+                    <span className="text-[10px] font-bold text-purple-600">({todayItems.estimates.length})</span>
+                  </div>
+                  <div className="divide-y divide-slate-100">
+                    {todayItems.estimates.map(({ job }) => (
+                      <button key={job.id} onClick={() => onEditJob(job.id)}
+                        className="w-full flex items-center gap-3 px-3 sm:px-6 py-3 text-left hover:bg-purple-50/60 active:bg-purple-50 transition-colors">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium text-slate-900 truncate">{job.name || 'Untitled Job'}</div>
+                          {job.customerName && <div className="text-xs text-slate-400">{job.customerName}</div>}
+                        </div>
+                        <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium ${getStatusColor(job.status)}`}>{job.status}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Reminders section */}
+              {todayItems.reminders.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 px-3 sm:px-6 py-2 bg-blue-50">
+                    <Bell size={13} className="text-blue-600" />
+                    <span className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Reminders</span>
+                    <span className="text-[10px] font-bold text-blue-600">({todayItems.reminders.length})</span>
+                  </div>
+                  <div className="divide-y divide-slate-100">
+                    {todayItems.reminders.map(({ job, reminder }) => (
+                      <button key={reminder.id} onClick={() => onEditJob(job.id)}
+                        className="w-full flex items-center gap-3 px-3 sm:px-6 py-3 text-left hover:bg-blue-50/60 active:bg-blue-50 transition-colors">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium text-slate-900 truncate">{reminder.subject}</div>
+                          <div className="text-xs text-slate-400">{job.name || 'Untitled Job'}{job.customerName ? ` · ${job.customerName}` : ''}</div>
+                        </div>
+                        <div className="flex items-center gap-1 text-xs text-blue-600 shrink-0">
+                          <Clock size={11} />
+                          <span>{reminder.dueTime}</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Job list */}
-      {viewMode === 'needs-contact' ? null : loading ? (
+      {viewMode !== 'jobs' ? null : loading ? (
         <div className="p-8 text-center text-sm text-slate-500">Loading jobs...</div>
       ) : filteredAndSortedJobs.length === 0 ? (
         <div className="p-8 text-center">

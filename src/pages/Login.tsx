@@ -164,7 +164,7 @@ export default function Login({ onSuccess, onContinueOffline }: LoginProps) {
       <div className="w-full max-w-md">
         {/* Logo/Title */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2">Job Estimator</h1>
+          <h1 className="text-4xl font-bold text-white mb-2">GFS</h1>
           <p className="text-slate-400">Sign in to sync your data across devices</p>
         </div>
 
