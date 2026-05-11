@@ -2945,7 +2945,7 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
                           { label: 'Top Coat', est: calculation.topCost, act: actualCalculation.actualTopCost },
                           { label: 'Cyclo1', est: calculation.cyclo1Cost, act: actualCalculation.actualCyclo1Cost },
                           { label: 'Tint', est: calculation.tintCost, act: actualCalculation.actualTintCost },
-                          ...(calculation.crackFillCost > 0 ? [{ label: 'Crack Repair', est: calculation.crackFillCost, act: actualCalculation.actualCrackRepairCost }] : []),
+                          { label: 'Crack Repair', est: calculation.crackFillCost, act: actualCalculation.actualCrackRepairCost },
                           {
                             label: 'Gas',
                             est: calculation.gasGeneratorCost + calculation.gasHeaterCost + calculation.gasTravelCost,
