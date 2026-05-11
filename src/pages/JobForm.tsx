@@ -2906,23 +2906,21 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
                       className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime"
                     />
                   </div>
-                  {calculation && calculation.crackFillGallons > 0 && (
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 mb-1">
-                        Crack Repair (oz)
-                        <span className="ml-1 text-slate-400 font-normal">est. {(calculation.crackFillGallons * 128).toFixed(0)}</span>
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="1"
-                        placeholder={(calculation.crackFillGallons * 128).toFixed(0)}
-                        value={actualMaterials.actualCrackRepairOz}
-                        onChange={(e) => setActualMaterials(prev => ({ ...prev, actualCrackRepairOz: e.target.value }))}
-                        className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime"
-                      />
-                    </div>
-                  )}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Crack Repair (oz)
+                      {calculation && <span className="ml-1 text-slate-400 font-normal">est. {(calculation.crackFillGallons * 128).toFixed(0)}</span>}
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      placeholder={calculation ? (calculation.crackFillGallons * 128).toFixed(0) : '0'}
+                      value={actualMaterials.actualCrackRepairOz}
+                      onChange={(e) => setActualMaterials(prev => ({ ...prev, actualCrackRepairOz: e.target.value }))}
+                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime"
+                    />
+                  </div>
                 </div>
               </div>
 
