@@ -47,6 +47,8 @@ export default function Settings() {
     chipReclaimRate: '',
     defaultDayHours: '',
     staleContactDays: '',
+    defaultReminderDays: '',
+    defaultReminderTime: '',
   });
 
   // Discount config state
@@ -93,6 +95,8 @@ export default function Settings() {
         chipReclaimRate: (mergedPricing.chipReclaimRate ?? 0).toString(),
         defaultDayHours: (mergedPricing.defaultDayHours ?? 8).toString(),
         staleContactDays: (mergedPricing.staleContactDays ?? 30).toString(),
+        defaultReminderDays: (mergedPricing.defaultReminderDays ?? 7).toString(),
+        defaultReminderTime: mergedPricing.defaultReminderTime ?? '05:00',
       });
 
       // Load discount config, migrating from legacy fields if needed
@@ -126,6 +130,8 @@ export default function Settings() {
         chipReclaimRate: '0',
         defaultDayHours: '8',
         staleContactDays: '30',
+        defaultReminderDays: '7',
+        defaultReminderTime: '05:00',
       });
       setDiscountMode('per_sqft');
       setPerSqftAmount('1');
@@ -178,8 +184,8 @@ export default function Settings() {
     setLoading(false);
   };
 
-  const handleSavePricing = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSavePricing = async (e?: React.FormEvent) => {
+    e?.preventDefault();
     setSaving(true);
 
     try {
@@ -196,6 +202,8 @@ export default function Settings() {
         chipReclaimRate: parseFloat(form.chipReclaimRate) || 0,
         defaultDayHours: parseFloat(form.defaultDayHours) || 8,
         staleContactDays: parseFloat(form.staleContactDays) || 30,
+        defaultReminderDays: parseInt(form.defaultReminderDays) || 7,
+        defaultReminderTime: form.defaultReminderTime || '05:00',
         updatedAt: new Date().toISOString(),
       };
 
@@ -958,6 +966,47 @@ export default function Settings() {
             ))}
           </div>
         )}
+      </div>
+
+      {/* Reminder Defaults */}
+      <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
+        <h3 className="text-lg font-semibold text-slate-900 mb-1">Reminder Defaults</h3>
+        <p className="text-sm text-slate-600 mb-4">Default values when creating a new reminder on a job.</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-semibold text-slate-900 mb-2">Days Out</label>
+            <input
+              type="number"
+              step="1"
+              min="0"
+              placeholder="7"
+              value={form.defaultReminderDays}
+              onChange={(e) => setForm({ ...form, defaultReminderDays: e.target.value })}
+              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
+            />
+            <p className="text-xs text-slate-500 mt-1">New reminders default to this many days from today.</p>
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-slate-900 mb-2">Time</label>
+            <input
+              type="time"
+              value={form.defaultReminderTime}
+              onChange={(e) => setForm({ ...form, defaultReminderTime: e.target.value })}
+              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
+            />
+            <p className="text-xs text-slate-500 mt-1">Default time for new reminders.</p>
+          </div>
+        </div>
+        <div className="pt-4">
+          <button
+            type="button"
+            disabled={saving}
+            onClick={handleSavePricing}
+            className="px-6 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors disabled:opacity-50"
+          >
+            {saving ? 'Saving...' : 'Save Settings'}
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -381,6 +381,7 @@ interface ActualCostParams {
   installDate: string;
   travelDistance: number;
   disableGasHeater?: boolean;
+  actualExpenseAdjustment?: number;
 }
 
 export function calculateActualCosts(
@@ -403,6 +404,7 @@ export function calculateActualCosts(
     installDate,
     travelDistance,
     disableGasHeater,
+    actualExpenseAdjustment: expenseAdj,
   } = params;
 
   const {
@@ -451,10 +453,11 @@ export function calculateActualCosts(
 
   const actualConsumablesCost = consumablesCost;
   const actualRoyaltyCost = totalPrice * 0.05;
+  const actualExpenseAdjustment = expenseAdj ?? 0;
 
   const actualTotalCosts = actualChipCost + actualBaseCost + actualTopCost + actualCyclo1Cost
     + actualTintCost + actualCrackRepairCost + actualGasGeneratorCost + actualGasHeaterCost + actualGasTravelCost
-    + actualLaborCost + actualConsumablesCost + actualRoyaltyCost;
+    + actualLaborCost + actualConsumablesCost + actualRoyaltyCost + actualExpenseAdjustment;
 
   const actualMargin = totalPrice - actualTotalCosts;
   const actualMarginPct = totalPrice > 0 ? (actualMargin / totalPrice) * 100 : 0;
@@ -472,6 +475,7 @@ export function calculateActualCosts(
     actualLaborCost,
     actualConsumablesCost,
     actualRoyaltyCost,
+    actualExpenseAdjustment,
     actualTotalCosts,
     actualTotalHours,
     actualMargin,

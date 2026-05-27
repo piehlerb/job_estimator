@@ -103,6 +103,8 @@ export interface Pricing {
   chipReclaimRate?: number; // Percentage of chip reclaimed after a job (0-100, default 0)
   defaultDayHours?: number; // Default hours per install day (default 8)
   staleContactDays?: number; // Days without contact before a job appears in "Needs Contact" (default 30)
+  defaultReminderDays?: number; // Days from today for default reminder date (default 7)
+  defaultReminderTime?: string; // Default reminder time in HH:mm format (default "05:00")
   createdAt: string;
   updatedAt: string;
 }
@@ -172,6 +174,13 @@ export interface JobFollowUp {
   updatedAt: string;
 }
 
+export interface JobEvaluation {
+  moisture: number[];
+  ph: number[];
+  hardness: number[];
+  cacl: number[];
+}
+
 export interface InstallDaySchedule {
   day: number;
   hours: number;
@@ -197,6 +206,7 @@ export interface ActualCosts {
   actualLaborCost: number;
   actualConsumablesCost: number;
   actualRoyaltyCost: number;
+  actualExpenseAdjustment: number;
   actualTotalCosts: number;
   actualTotalHours: number;
   actualMargin: number;
@@ -227,6 +237,7 @@ export interface Job {
   decisionDate?: string; // Date the customer made a decision (Won/Lost)
   probability?: number;  // 0 | 20 | 40 | 60 | 80 | 100 — likelihood of closing
   notes?: string;
+  evaluation?: JobEvaluation;
   // Tint options
   includeBasecoatTint?: boolean;
   includeTopcoatTint?: boolean;
@@ -259,6 +270,8 @@ export interface Job {
   actualTintOz?: number;         // Combined base + top tint, in oz
   actualChipBoxes?: number;
   actualCrackRepairOz?: number;
+  actualExpenseAdjustment?: number;
+  actualExpenseAdjustmentNotes?: string;
   // Products added to this job
   products?: JobProduct[];
   reminders?: JobReminder[];

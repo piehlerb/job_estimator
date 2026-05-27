@@ -272,6 +272,25 @@ export default function JobSheet({ jobId, onBack }: JobSheetProps) {
               </div>
             </div>
           )}
+
+          {/* Evaluation */}
+          {job.evaluation && (job.evaluation.moisture.length > 0 || job.evaluation.ph.length > 0 || job.evaluation.hardness.length > 0 || job.evaluation.cacl.length > 0) && (
+            <div>
+              <h3 className="text-sm font-semibold text-slate-900 mb-2 border-b border-slate-200 pb-1">Evaluation</h3>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {([['moisture', 'Moisture'], ['ph', 'pH'], ['hardness', 'Hardness'], ['cacl', 'CaCl']] as const).map(([field, label]) => {
+                  const values = job.evaluation![field as keyof typeof job.evaluation];
+                  if (!values || (values as number[]).length === 0) return null;
+                  return (
+                    <div key={field} className="bg-slate-50 p-3 rounded-lg">
+                      <span className="text-xs text-slate-500 block mb-1">{label}</span>
+                      <span className="text-sm font-semibold text-slate-900">{(values as number[]).join(', ')}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

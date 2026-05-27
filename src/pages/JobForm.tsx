@@ -22,7 +22,7 @@ import {
   getAllTintInventory,
   getAllCommTemplates,
 } from '../lib/db';
-import { BaseColor, ChipSystem, Costs, Pricing, Job, JobCalculation, JobStatus, Laborer, InstallDaySchedule, ActualDaySchedule, ActualCosts, ChipInventory, CoatingRemovalType, Product, JobProduct, BaseCoatColor, JobReminder, JobFollowUp, TintInventory, CommunicationTemplate } from '../types';
+import { BaseColor, ChipSystem, Costs, Pricing, Job, JobCalculation, JobStatus, Laborer, InstallDaySchedule, ActualDaySchedule, ActualCosts, ChipInventory, CoatingRemovalType, Product, JobProduct, BaseCoatColor, JobReminder, JobFollowUp, TintInventory, CommunicationTemplate, JobEvaluation } from '../types';
 import { calculateJobOutputs, calculateActualCosts } from '../lib/calculations';
 import InstallDayScheduleComponent from '../components/InstallDaySchedule';
 import { convertLegacyJobToSchedule } from '../lib/jobMigration';
@@ -99,6 +99,8 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
     actualTintOz: '',
     actualChipBoxes: '',
     actualCrackRepairOz: '',
+    actualExpenseAdjustment: '',
+    actualExpenseAdjustmentNotes: '',
   });
   const [actualCalculation, setActualCalculation] = useState<ActualCosts | null>(null);
   const actualsInitialized = useRef(false);
@@ -126,6 +128,10 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
     date: new Date().toISOString().slice(0, 10),
     notes: '',
   });
+
+  // Evaluation state
+  const [evaluation, setEvaluation] = useState<JobEvaluation>({ moisture: [], ph: [], hardness: [], cacl: [] });
+  const [evalInputs, setEvalInputs] = useState({ moisture: '', ph: '', hardness: '', cacl: '' });
 
   // Snapshot comparison state
   const [snapshotChanges, setSnapshotChanges] = useState<SnapshotChanges | null>(null);
@@ -230,6 +236,7 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
         installDate: formData.installDate,
         travelDistance: parseFloat(formData.travelDistance) || 0,
         disableGasHeater: formData.disableGasHeater,
+        actualExpenseAdjustment: parseFloat(actualMaterials.actualExpenseAdjustment) || 0,
       },
       costsToUse,
       pricingToUse,
@@ -507,6 +514,8 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
             actualTintOz: job.actualTintOz?.toString() || '',
             actualChipBoxes: job.actualChipBoxes?.toString() || '',
             actualCrackRepairOz: job.actualCrackRepairOz?.toString() || '',
+            actualExpenseAdjustment: job.actualExpenseAdjustment?.toString() || '',
+            actualExpenseAdjustmentNotes: job.actualExpenseAdjustmentNotes || '',
           });
           // Load products from existing job
           if (job.products && job.products.length > 0) {
@@ -518,6 +527,9 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
           }
           if (job.followUps && job.followUps.length > 0) {
             setFollowUps(job.followUps);
+          }
+          if (job.evaluation) {
+            setEvaluation(job.evaluation);
           }
           // Load sibling jobs if this job belongs to a group
           if (job.groupId) {
@@ -885,11 +897,14 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
   const openAddReminder = () => {
     setActiveTab('reminders');
     setEditingReminderId(null);
+    const defaultDays = pricing.defaultReminderDays ?? 7;
+    const defaultDate = new Date();
+    defaultDate.setDate(defaultDate.getDate() + defaultDays);
     setReminderForm({
       subject: '',
       details: '',
-      dueDate: new Date().toISOString().split('T')[0],
-      dueTime: '09:00',
+      dueDate: defaultDate.toISOString().split('T')[0],
+      dueTime: pricing.defaultReminderTime ?? '05:00',
     });
     setShowReminderModal(true);
   };
@@ -1009,7 +1024,15 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
     );
     try {
       await persistReminderChanges(nextReminders);
-      setNextReminderForm({ subject: '', dueDate: '', dueTime: '', details: '' });
+      const nextDefaultDays = pricing.defaultReminderDays ?? 7;
+      const nextDefaultDate = new Date();
+      nextDefaultDate.setDate(nextDefaultDate.getDate() + nextDefaultDays);
+      setNextReminderForm({
+        subject: '',
+        dueDate: nextDefaultDate.toISOString().split('T')[0],
+        dueTime: pricing.defaultReminderTime ?? '05:00',
+        details: '',
+      });
       setShowNextReminderPrompt(true);
     } catch (error) {
       console.error('Error completing reminder:', error);
@@ -1404,6 +1427,7 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
         decisionDate: formData.decisionDate || undefined,
         probability: parseInt(formData.probability) || 0,
         notes: formData.notes || undefined,
+        evaluation: (evaluation.moisture.length || evaluation.ph.length || evaluation.hardness.length || evaluation.cacl.length) ? evaluation : undefined,
         includeBasecoatTint: formData.includeBasecoatTint,
         includeTopcoatTint: formData.includeTopcoatTint,
         tintColor: (formData.includeBasecoatTint || formData.includeTopcoatTint) ? (formData.tintColor || undefined) : undefined,
@@ -1433,6 +1457,8 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
         actualTintOz: parseFloat(actualMaterials.actualTintOz) || undefined,
         actualChipBoxes: parseFloat(actualMaterials.actualChipBoxes) || undefined,
         actualCrackRepairOz: parseFloat(actualMaterials.actualCrackRepairOz) || undefined,
+        actualExpenseAdjustment: parseFloat(actualMaterials.actualExpenseAdjustment) || undefined,
+        actualExpenseAdjustmentNotes: actualMaterials.actualExpenseAdjustmentNotes.trim() || undefined,
         products: jobProducts.length > 0 ? jobProducts : undefined,
         reminders: reminders.length > 0
           ? [...reminders].sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime())
@@ -1872,6 +1898,70 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
                 rows={3}
                 className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent resize-y"
               />
+            </div>
+
+            {/* Evaluation Section */}
+            <div className="md:col-span-2 lg:col-span-3">
+              <h3 className="text-sm sm:text-base font-semibold text-slate-900 mb-3 border-b border-slate-200 pb-1">Evaluation</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {(['moisture', 'ph', 'hardness', 'cacl'] as const).map((field) => {
+                  const labels: Record<string, string> = { moisture: 'Moisture', ph: 'pH', hardness: 'Hardness', cacl: 'CaCl' };
+                  return (
+                    <div key={field}>
+                      <label className="block text-xs sm:text-sm font-semibold text-slate-700 mb-1">{labels[field]}</label>
+                      <div className="flex gap-1.5 mb-1.5">
+                        <input
+                          type="number"
+                          step="any"
+                          placeholder="Value"
+                          value={evalInputs[field]}
+                          onChange={(e) => setEvalInputs({ ...evalInputs, [field]: e.target.value })}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              const val = parseFloat(evalInputs[field]);
+                              if (!isNaN(val)) {
+                                setEvaluation({ ...evaluation, [field]: [...evaluation[field], val] });
+                                setEvalInputs({ ...evalInputs, [field]: '' });
+                              }
+                            }
+                          }}
+                          className="flex-1 min-w-0 px-2 py-1.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const val = parseFloat(evalInputs[field]);
+                            if (!isNaN(val)) {
+                              setEvaluation({ ...evaluation, [field]: [...evaluation[field], val] });
+                              setEvalInputs({ ...evalInputs, [field]: '' });
+                            }
+                          }}
+                          className="px-2 py-1.5 bg-gf-lime text-white rounded-lg hover:bg-gf-dark-green text-sm font-medium"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+                      </div>
+                      {evaluation[field].length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {evaluation[field].map((val, idx) => (
+                            <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 text-slate-700 rounded-full text-xs">
+                              {val}
+                              <button
+                                type="button"
+                                onClick={() => setEvaluation({ ...evaluation, [field]: evaluation[field].filter((_, i) => i !== idx) })}
+                                className="text-slate-400 hover:text-red-500"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
             <div className="md:col-span-2 lg:col-span-3 relative">
@@ -2924,7 +3014,37 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
                 </div>
               </div>
 
-              {/* Section C: Actual vs Estimated Cost Comparison */}
+              {/* Section C: Expense Adjustments */}
+              <div className="rounded-lg border border-slate-200 p-4 sm:p-5 bg-slate-50">
+                <h3 className="text-sm sm:text-base font-semibold text-slate-900 mb-1">Expense Adjustment</h3>
+                <p className="text-xs text-slate-500 mb-4">Add or subtract an adjustment to actual costs (e.g., equipment rental, subcontractor fees, credits).</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Amount ($)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={actualMaterials.actualExpenseAdjustment}
+                      onChange={(e) => setActualMaterials(prev => ({ ...prev, actualExpenseAdjustment: e.target.value }))}
+                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime"
+                    />
+                    <p className="mt-1 text-xs text-slate-400">Positive = additional expense, negative = credit/savings.</p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Notes</label>
+                    <textarea
+                      placeholder="Justification for this adjustment..."
+                      value={actualMaterials.actualExpenseAdjustmentNotes}
+                      onChange={(e) => setActualMaterials(prev => ({ ...prev, actualExpenseAdjustmentNotes: e.target.value }))}
+                      rows={2}
+                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime resize-y"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Section D: Actual vs Estimated Cost Comparison */}
               {actualCalculation && calculation && (
                 <div className="rounded-lg border border-slate-200 p-4 sm:p-5 bg-white">
                   <h3 className="text-sm sm:text-base font-semibold text-slate-900 mb-4">Estimated vs. Actual Costs</h3>
@@ -2954,6 +3074,7 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
                           { label: 'Labor', est: calculation.laborCost, act: actualCalculation.actualLaborCost },
                           { label: 'Consumables', est: calculation.consumablesCost, act: actualCalculation.actualConsumablesCost },
                           { label: 'Royalty', est: calculation.royaltyCost, act: actualCalculation.actualRoyaltyCost },
+                          ...(actualCalculation.actualExpenseAdjustment !== 0 ? [{ label: 'Expense Adj.', est: 0, act: actualCalculation.actualExpenseAdjustment }] : []),
                         ].map(({ label, est, act }) => {
                           const diff = act - est;
                           return (
