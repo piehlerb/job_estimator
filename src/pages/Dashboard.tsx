@@ -53,7 +53,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
   const [selectedTagFilters, setSelectedTagFilters] = useState<string[]>(_saved.selectedTagFilters ?? []);
   const [tagMatchMode, setTagMatchMode] = useState<'any' | 'all'>(_saved.tagMatchMode ?? 'any');
   const [searchQuery, setSearchQuery] = useState<string>(_saved.searchQuery ?? '');
-  const [viewMode, setViewMode] = useState<'jobs' | 'needs-contact' | 'today'>(_saved.viewMode ?? 'jobs');
+  const [viewMode, setViewMode] = useState<'jobs' | 'needs-contact' | 'today' | 'reminders'>(_saved.viewMode ?? 'jobs');
   const [showFilters, setShowFilters] = useState<boolean>(_saved.showFilters ?? false);
   const [showInactive, setShowInactive] = useState<boolean>(_saved.showInactive ?? false);
 
@@ -722,9 +722,27 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
               }`}>{todayTotalCount}</span>
             )}
           </button>
+          <button
+            onClick={() => setViewMode('reminders')}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-medium transition-colors ${
+              viewMode === 'reminders'
+                ? 'text-red-600 border-b-2 border-red-400 -mb-px'
+                : 'text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            <Bell size={12} />
+            Reminders
+            {remindersByDue.length > 0 && (
+              <span className={`inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[10px] font-bold ${
+                remindersNeedingAttentionCount > 0
+                  ? (viewMode === 'reminders' ? 'bg-red-100 text-red-700' : 'bg-red-100 text-red-600')
+                  : (viewMode === 'reminders' ? 'bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-500')
+              }`}>{remindersByDue.length}</span>
+            )}
+          </button>
         </div>
         {/* Toolbar row */}
-        {viewMode !== 'today' && (
+        {viewMode !== 'today' && viewMode !== 'reminders' && (
         <div className="flex items-center gap-2 px-3 sm:px-6 py-2">
           <div className="relative flex-1">
             <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
@@ -967,6 +985,78 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
                   </div>
                 </div>
               )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Reminders tab content */}
+      {viewMode === 'reminders' && (
+        <div className="bg-white">
+          {remindersByDue.length === 0 ? (
+            <div className="p-8 text-center">
+              <Bell size={24} className="mx-auto mb-2 text-slate-300" />
+              <p className="text-sm text-slate-500">No pending reminders.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {remindersByDue.map((reminder) => {
+                const now = Date.now();
+                const dueAtTime = new Date(reminder.dueAt).getTime();
+                const startOfTomorrow = new Date();
+                startOfTomorrow.setHours(24, 0, 0, 0);
+                const isPastDue = dueAtTime < now;
+                const isDueTodayOrPast = dueAtTime < startOfTomorrow.getTime();
+
+                return (
+                  <div
+                    key={`${reminder.jobId}-${reminder.reminderId}`}
+                    className={`flex items-start gap-3 px-3 sm:px-6 py-3 ${
+                      isPastDue
+                        ? 'bg-red-50'
+                        : isDueTodayOrPast
+                          ? 'bg-amber-50'
+                          : ''
+                    }`}
+                  >
+                    <button
+                      onClick={() => onEditJob(reminder.jobId)}
+                      className="flex-1 min-w-0 text-left"
+                    >
+                      <div className="text-sm font-medium text-slate-900 truncate">{reminder.subject}</div>
+                      <div className="text-xs text-slate-400 truncate">{reminder.jobName}</div>
+                      {reminder.details && (
+                        <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{reminder.details}</p>
+                      )}
+                      <p className={`text-xs font-medium mt-0.5 ${
+                        isPastDue ? 'text-red-600' : isDueTodayOrPast ? 'text-amber-600' : 'text-slate-500'
+                      }`}>
+                        {new Date(reminder.dueAt).toLocaleString()}
+                      </p>
+                    </button>
+                    <div className="flex items-center gap-1 shrink-0 pt-0.5">
+                      <button
+                        type="button"
+                        onClick={() => handleCompleteReminder(reminder)}
+                        className="p-1.5 rounded text-green-600 hover:bg-green-50 transition-colors"
+                        title="Mark complete"
+                        disabled={updatingReminder}
+                      >
+                        <Check size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteReminder(reminder)}
+                        className="p-1.5 rounded text-red-600 hover:bg-red-50 transition-colors"
+                        title="Delete reminder"
+                        disabled={updatingReminder}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
