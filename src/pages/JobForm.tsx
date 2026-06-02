@@ -1341,9 +1341,23 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
     }
   };
 
-  const handleUpdateToCurrentValues = () => {
+  const handleUpdateToCurrentValues = async () => {
     setUseCurrentValues(true);
     setShowSnapshotBanner(false);
+
+    if (existingJob) {
+      const selectedSystem = systems.find((s) => s.id === formData.system);
+      const updatedJob: Job = {
+        ...existingJob,
+        costsSnapshot: costs,
+        pricingSnapshot: pricing,
+        systemSnapshot: selectedSystem || existingJob.systemSnapshot,
+        updatedAt: new Date().toISOString(),
+        synced: false,
+      };
+      await updateJob(updatedJob);
+      setExistingJob(updatedJob);
+    }
   };
 
   const handleKeepOriginalValues = () => {

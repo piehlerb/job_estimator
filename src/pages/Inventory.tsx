@@ -156,8 +156,8 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
     // Filter jobs that are today or in the future
     const relevantJobs = jobs.filter((job) => {
       if (!job.installDate) return false;
-      const jobDate = new Date(job.installDate);
-      jobDate.setHours(0, 0, 0, 0);
+      const [y, m, d] = job.installDate.split('-').map(Number);
+      const jobDate = new Date(y, m - 1, d);
       return jobDate >= today;
     });
 

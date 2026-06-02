@@ -215,7 +215,7 @@ export function calculateJobOutputs(
   const gasHeaterMonths = pricing.gasHeaterMonths && pricing.gasHeaterMonths.length > 0
     ? pricing.gasHeaterMonths
     : [11, 12, 1, 2, 3];
-  const installMonth = installDate ? new Date(installDate).getMonth() + 1 : 0;
+  const installMonth = installDate ? parseInt(installDate.split('-')[1], 10) || 0 : 0;
   const isWinterMonth = gasHeaterMonths.includes(installMonth);
   const gasHeaterCost = !disableGasHeater && isWinterMonth
     ? gasCost * gasHeaterGallonsPerHour * totalHours
@@ -434,7 +434,7 @@ export function calculateActualCosts(
   const gasHeaterMonths = pricing.gasHeaterMonths && pricing.gasHeaterMonths.length > 0
     ? pricing.gasHeaterMonths
     : [11, 12, 1, 2, 3];
-  const installMonth = installDate ? new Date(installDate).getMonth() + 1 : 0;
+  const installMonth = installDate ? parseInt(installDate.split('-')[1], 10) || 0 : 0;
   const isWinterMonth = gasHeaterMonths.includes(installMonth);
   const actualGasHeaterCost = !disableGasHeater && isWinterMonth
     ? gasCost * gasHeaterGallonsPerHour * actualTotalHours
