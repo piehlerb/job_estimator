@@ -414,7 +414,7 @@ export default function Customers() {
                                     </td>
                                     <td className="py-2 text-sm text-right text-slate-700">
                                       {job.installDate
-                                        ? new Date(job.installDate).toLocaleDateString()
+                                        ? (() => { const [y, m, d] = job.installDate.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString(); })()
                                         : '-'}
                                     </td>
                                     <td className="py-2 text-sm text-right text-slate-900">

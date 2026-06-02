@@ -77,8 +77,9 @@ export default function JobSheet({ jobId, onBack }: JobSheetProps) {
 
   const formatDate = (dateString: string) => {
     if (!dateString) return 'Not set';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
+    const [y, m, d] = dateString.split('-').map(Number);
+    if (!y || !m || !d) return dateString;
+    return new Date(y, m - 1, d).toLocaleDateString('en-US', {
       weekday: 'short',
       year: 'numeric',
       month: 'short',
@@ -194,24 +195,31 @@ export default function JobSheet({ jobId, onBack }: JobSheetProps) {
                 </div>
               </div>
 
-              {/* Options */}
-              <div>
-                <h3 className="text-sm font-semibold text-slate-900 mb-2 border-b border-slate-200 pb-1">Options</h3>
-                <div className="grid grid-cols-2 gap-1 text-sm">
-                  <div className="flex items-center gap-1.5">
-                    <span className={`w-3 h-3 rounded ${job.abrasionResistance ? 'bg-green-500' : 'bg-slate-200'}`}></span>
-                    <span className="text-slate-700">Abrasion Resistance</span>
+              {/* Options - only show enabled options */}
+              {(() => {
+                const options: string[] = [];
+                if (job.abrasionResistance) options.push('Abrasion Resistance');
+                if (job.antiSlip) options.push('Anti-Slip');
+                if (job.includeBasecoatTint) options.push('Basecoat Tint');
+                if (job.includeTopcoatTint) options.push('Topcoat Tint');
+                if (job.cyclo1Topcoat) options.push(`Cyclo1 Topcoat (${job.cyclo1Coats || 1} coat${(job.cyclo1Coats || 1) !== 1 ? 's' : ''})`);
+                if (job.moistureMitigation) options.push('Moisture Mitigation');
+                if (job.coatingRemoval && job.coatingRemoval !== 'None') options.push(`Coating Removal: ${job.coatingRemoval}`);
+                if (options.length === 0) return null;
+                return (
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-900 mb-2 border-b border-slate-200 pb-1">Options</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {options.map((opt) => (
+                        <span key={opt} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-100 text-green-800 text-xs font-semibold">
+                          <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                          {opt}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className={`w-3 h-3 rounded ${job.antiSlip ? 'bg-green-500' : 'bg-slate-200'}`}></span>
-                    <span className="text-slate-700">Anti-Slip</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className={`w-3 h-3 rounded ${job.coatingRemoval !== 'None' ? 'bg-green-500' : 'bg-slate-200'}`}></span>
-                    <span className="text-slate-700">Coating Removal: {job.coatingRemoval || 'None'}</span>
-                  </div>
-                </div>
-              </div>
+                );
+              })()}
             </div>
 
             {/* Right Column - Materials */}
