@@ -211,8 +211,10 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
       setActualCalculation(null);
       return;
     }
-    const costsToUse = existingJob ? { ...getDefaultCosts(), ...existingJob.costsSnapshot } : costs;
-    const pricingToUse = existingJob?.pricingSnapshot
+    const costsToUse = existingJob && !useCurrentValues
+      ? { ...getDefaultCosts(), ...existingJob.costsSnapshot }
+      : costs;
+    const pricingToUse = existingJob && !useCurrentValues && existingJob.pricingSnapshot
       ? { ...getDefaultPricing(), ...existingJob.pricingSnapshot }
       : pricing;
     const laborersToUse = [
@@ -243,7 +245,7 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
       laborersToUse
     );
     setActualCalculation(calc);
-  }, [actualInstallSchedule, actualMaterials, formData.totalPrice, formData.installDays, formData.installDate, formData.travelDistance, formData.disableGasHeater, existingJob, activeLaborers, costs, pricing]);
+  }, [actualInstallSchedule, actualMaterials, formData.totalPrice, formData.installDays, formData.installDate, formData.travelDistance, formData.disableGasHeater, existingJob, activeLaborers, costs, pricing, useCurrentValues]);
 
 
   const productsTotalPrice = useMemo(
