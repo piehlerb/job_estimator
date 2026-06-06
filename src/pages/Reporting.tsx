@@ -67,6 +67,9 @@ export default function Reporting({ onEditJob }: ReportingProps) {
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
 
+  // Monthly won jobs month offset (0 = current month, -1 = last month, +1 = next month)
+  const [monthOffset, setMonthOffset] = useState(0);
+
   // Employee hours date range
   const [empStartDate, setEmpStartDate] = useState(getDefaultEmpStart);
   const [empEndDate, setEmpEndDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -273,8 +276,8 @@ export default function Reporting({ onEditJob }: ReportingProps) {
 
   const monthlyWonData = useMemo((): MonthlyWonRow[] => {
     const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+    const monthStart = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + monthOffset + 1, 0, 23, 59, 59);
 
     return jobsWithCalc
       .filter(({ job }) => {
@@ -312,7 +315,7 @@ export default function Reporting({ onEditJob }: ReportingProps) {
         return { job, calc, estMargin, actuals };
       })
       .sort((a, b) => a.job.installDate.localeCompare(b.job.installDate));
-  }, [jobsWithCalc]);
+  }, [jobsWithCalc, monthOffset]);
 
   const monthlyWonSummary = useMemo(() => {
     const jobCount = monthlyWonData.length;
@@ -399,7 +402,11 @@ export default function Reporting({ onEditJob }: ReportingProps) {
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value)
   );
 
-  const currentMonthLabel = new Date().toLocaleString('default', { month: 'long', year: 'numeric' });
+  const selectedMonth = useMemo(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
+  }, [monthOffset]);
+  const currentMonthLabel = selectedMonth.toLocaleString('default', { month: 'long', year: 'numeric' });
 
   // ==================== RENDER ====================
 
@@ -625,8 +632,37 @@ export default function Reporting({ onEditJob }: ReportingProps) {
           {activeView === 'monthly-won' && (
             <>
               <div className="mb-4 sm:mb-6">
-                <h2 className="text-lg sm:text-xl font-semibold text-slate-900">{currentMonthLabel}</h2>
-                <p className="text-sm text-slate-500 mt-0.5">Won jobs with install date in the current month</p>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setMonthOffset((prev) => prev - 1)}
+                    className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors"
+                    aria-label="Previous month"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+                  </button>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-lg sm:text-xl font-semibold text-slate-900">{currentMonthLabel}</h2>
+                    {monthOffset !== 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setMonthOffset(0)}
+                        className="px-2 py-0.5 text-xs font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-full transition-colors"
+                      >
+                        Today
+                      </button>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setMonthOffset((prev) => prev + 1)}
+                    className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors"
+                    aria-label="Next month"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                  </button>
+                </div>
+                <p className="text-sm text-slate-500 mt-0.5">Won jobs with install date in {monthOffset === 0 ? 'the current month' : currentMonthLabel}</p>
               </div>
 
               {/* Summary cards */}
