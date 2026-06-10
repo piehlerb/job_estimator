@@ -193,7 +193,11 @@ function App() {
     }
     setCurrentPage(target);
     if (jobId) setEditingJobId(jobId);
-    setReturnPage(returnTo ?? 'dashboard');
+    if (returnTo) {
+      setReturnPage(returnTo);
+    } else if (currentPage !== 'edit-job' && currentPage !== 'new-job' && currentPage !== 'job-sheet') {
+      setReturnPage(currentPage);
+    }
     setSidebarOpen(false);
   };
 
