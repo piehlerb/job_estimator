@@ -1417,7 +1417,7 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
   const prepareInventoryReview = async (deltas: Parameters<typeof buildInventoryReviewRows>[0]['deltas']) => {
     const [chipInventoryRows, tintInventoryRows, topCoatInventory, baseCoatInventory, miscInventory] = await Promise.all([
       getAllChipInventory(),
-      getAllTintInventory().catch(() => [] as TintInventory[]),
+      getAllTintInventory(),
       getTopCoatInventory(),
       getBaseCoatInventory(),
       getMiscInventory(),
