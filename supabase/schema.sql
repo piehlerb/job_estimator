@@ -115,6 +115,7 @@ CREATE TABLE IF NOT EXISTS jobs (
   -- Photos array stored as JSONB
   photos JSONB,
   reminders JSONB DEFAULT '[]'::jsonb,
+  inventory_actuals_applied JSONB,
 
   synced BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
