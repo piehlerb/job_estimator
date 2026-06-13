@@ -1485,21 +1485,53 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
       let hasTopChanges = false;
       let hasBaseChanges = false;
       let hasMiscChanges = false;
-      const getValueToSave = (row: EditableInventoryReviewRow, freshCurrentValue: number) =>
-        row.newValueEdited ? row.newValue : freshCurrentValue - row.usedDelta;
+      const getFreshCurrentValue = (row: EditableInventoryReviewRow) => {
+        if (row.target.kind === 'chip') {
+          const existing = chipInventoryRows.find(
+            (inventory) => normalizeChipBlendName(inventory.blend) === row.target.blend
+          );
+          return existing?.pounds ?? 0;
+        }
 
-      for (const row of inventoryReviewRows) {
+        if (row.target.kind === 'tint') {
+          const existing = tintInventoryRows.find((inventory) => inventory.color === row.target.color);
+          return existing?.ounces ?? 0;
+        }
+
+        if (row.target.kind === 'top') {
+          return topInventory[row.target.field] ?? 0;
+        }
+
+        if (row.target.kind === 'base') {
+          return baseInventory[row.target.field] ?? 0;
+        }
+
+        return miscInventory[row.target.field] ?? 0;
+      };
+
+      const rowsToApply: EditableInventoryReviewRow[] = inventoryReviewRows.map((row) => {
+        const freshCurrentValue = getFreshCurrentValue(row);
+        const computedValue = row.newValueEdited ? row.newValue : freshCurrentValue - row.usedDelta;
+        return {
+          ...row,
+          newValue: computedValue,
+          newValueEdited: true,
+        };
+      });
+
+      setInventoryReviewRows(rowsToApply);
+
+      for (const row of rowsToApply) {
         if (row.target.kind === 'chip') {
           const target = row.target;
           const existing = chipInventoryRows.find(
             (inventory) => normalizeChipBlendName(inventory.blend) === target.blend
           );
-          const freshCurrentValue = existing?.pounds ?? 0;
 
           await saveChipInventory({
             id: existing?.id || generateId(),
             blend: existing?.blend || target.blend,
-            pounds: getValueToSave(row, freshCurrentValue),
+            pounds: row.newValue,
             updatedAt: now,
             deleted: false,
           });
@@ -1509,12 +1541,11 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
         if (row.target.kind === 'tint') {
           const target = row.target;
           const existing = tintInventoryRows.find((inventory) => inventory.color === target.color);
-          const freshCurrentValue = existing?.ounces ?? 0;
 
           await saveTintInventory({
             id: existing?.id || generateId(),
             color: existing?.color || target.color,
-            ounces: getValueToSave(row, freshCurrentValue),
+            ounces: row.newValue,
             updatedAt: now,
             deleted: false,
           });
@@ -1522,10 +1553,9 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
         }
 
         if (row.target.kind === 'top') {
-          const freshCurrentValue = topInventory[row.target.field] ?? 0;
           topInventory = {
             ...topInventory,
-            [row.target.field]: getValueToSave(row, freshCurrentValue),
+            [row.target.field]: row.newValue,
             updatedAt: now,
           };
           hasTopChanges = true;
@@ -1533,20 +1563,18 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
         }
 
         if (row.target.kind === 'base') {
-          const freshCurrentValue = baseInventory[row.target.field] ?? 0;
           baseInventory = {
             ...baseInventory,
-            [row.target.field]: getValueToSave(row, freshCurrentValue),
+            [row.target.field]: row.newValue,
             updatedAt: now,
           };
           hasBaseChanges = true;
           continue;
         }
 
-        const freshCurrentValue = miscInventory[row.target.field] ?? 0;
         miscInventory = {
           ...miscInventory,
-          [row.target.field]: getValueToSave(row, freshCurrentValue),
+          [row.target.field]: row.newValue,
           updatedAt: now,
         };
         hasMiscChanges = true;
