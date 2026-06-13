@@ -1487,14 +1487,16 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
       let hasMiscChanges = false;
       const getFreshCurrentValue = (row: EditableInventoryReviewRow) => {
         if (row.target.kind === 'chip') {
+          const target = row.target;
           const existing = chipInventoryRows.find(
-            (inventory) => normalizeChipBlendName(inventory.blend) === row.target.blend
+            (inventory) => normalizeChipBlendName(inventory.blend) === target.blend
           );
           return existing?.pounds ?? 0;
         }
 
         if (row.target.kind === 'tint') {
-          const existing = tintInventoryRows.find((inventory) => inventory.color === row.target.color);
+          const target = row.target;
+          const existing = tintInventoryRows.find((inventory) => inventory.color === target.color);
           return existing?.ounces ?? 0;
         }
 
