@@ -65,19 +65,31 @@ export function buildInventoryActualsSnapshot(
   appliedAt: string
 ): InventoryActualsApplied {
   const hasTint = Boolean(source.includeBasecoatTint || source.includeTopcoatTint);
+  const snapshot: InventoryActualsApplied = { appliedAt };
 
-  return {
-    actualBaseCoatGallons: numeric(source.actualBaseCoatGallons),
-    actualTopCoatGallons: numeric(source.actualTopCoatGallons),
-    actualCyclo1Gallons: numeric(source.actualCyclo1Gallons),
-    actualTintOz: numeric(source.actualTintOz),
-    actualChipBoxes: numeric(source.actualChipBoxes),
-    actualCrackRepairOz: numeric(source.actualCrackRepairOz),
-    chipBlend: source.chipBlend ? normalizeChipBlendName(source.chipBlend) : undefined,
-    baseColor: source.baseColor || undefined,
-    tintColor: hasTint && source.tintColor ? source.tintColor : undefined,
-    appliedAt,
-  };
+  const actualBaseCoatGallons = numeric(source.actualBaseCoatGallons);
+  if (actualBaseCoatGallons !== undefined) snapshot.actualBaseCoatGallons = actualBaseCoatGallons;
+
+  const actualTopCoatGallons = numeric(source.actualTopCoatGallons);
+  if (actualTopCoatGallons !== undefined) snapshot.actualTopCoatGallons = actualTopCoatGallons;
+
+  const actualCyclo1Gallons = numeric(source.actualCyclo1Gallons);
+  if (actualCyclo1Gallons !== undefined) snapshot.actualCyclo1Gallons = actualCyclo1Gallons;
+
+  const actualTintOz = numeric(source.actualTintOz);
+  if (actualTintOz !== undefined) snapshot.actualTintOz = actualTintOz;
+
+  const actualChipBoxes = numeric(source.actualChipBoxes);
+  if (actualChipBoxes !== undefined) snapshot.actualChipBoxes = actualChipBoxes;
+
+  const actualCrackRepairOz = numeric(source.actualCrackRepairOz);
+  if (actualCrackRepairOz !== undefined) snapshot.actualCrackRepairOz = actualCrackRepairOz;
+
+  if (source.chipBlend) snapshot.chipBlend = normalizeChipBlendName(source.chipBlend);
+  if (source.baseColor) snapshot.baseColor = source.baseColor;
+  if (hasTint && source.tintColor) snapshot.tintColor = source.tintColor;
+
+  return snapshot;
 }
 
 function addAmount(map: Map<string, InventoryActualDeltaRow>, row: InventoryActualDeltaRow): void {
@@ -86,6 +98,7 @@ function addAmount(map: Map<string, InventoryActualDeltaRow>, row: InventoryActu
   const existing = map.get(row.key);
   if (existing) {
     existing.usedDelta += row.usedDelta;
+    if (!existing.warning && row.warning) existing.warning = row.warning;
     return;
   }
 

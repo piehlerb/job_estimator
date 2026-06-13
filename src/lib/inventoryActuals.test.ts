@@ -22,6 +22,22 @@ const baseSource: InventoryActualsSource = {
 };
 
 describe('inventory actual delta rows', () => {
+  test('snapshot omits zero and undefined material quantity fields', () => {
+    const snapshot = buildInventoryActualsSnapshot(
+      {
+        actualBaseCoatGallons: undefined,
+        actualTopCoatGallons: 0,
+        actualChipBoxes: 0,
+        chipBlend: 'shoreline',
+      },
+      '2026-06-12T10:00:00.000Z'
+    );
+
+    assert.equal(Object.prototype.hasOwnProperty.call(snapshot, 'actualBaseCoatGallons'), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(snapshot, 'actualTopCoatGallons'), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(snapshot, 'actualChipBoxes'), false);
+  });
+
   test('first inventory update subtracts full current actuals from a zero baseline', () => {
     const current = buildInventoryActualsSnapshot(baseSource, '2026-06-12T10:00:00.000Z');
     const rows = buildInventoryActualDeltaRows(current, undefined);
@@ -88,6 +104,19 @@ describe('inventory actual delta rows', () => {
     assert.equal(byKey['tint:Slate Gray'], -24);
     assert.equal(byKey['tint:Warm Umber'], 24);
     assert.equal(byKey['base:baseA'], undefined);
+  });
+
+  test('merged rows preserve base color warning', () => {
+    const baseline = buildInventoryActualsSnapshot({ ...baseSource, actualBaseCoatGallons: 18 }, '2026-06-12T09:00:00.000Z');
+    const current = buildInventoryActualsSnapshot(
+      { ...baseSource, actualBaseCoatGallons: 18, baseColor: 'Custom Blue' },
+      '2026-06-12T11:00:00.000Z'
+    );
+
+    const baseRow = buildInventoryActualDeltaRows(current, baseline).find((row) => row.key === 'base:baseA');
+
+    assert.equal(baseRow?.usedDelta, 12);
+    assert.equal(baseRow?.warning, 'No matching Base B inventory bucket exists for this base color.');
   });
 
   test('review rows default missing inventory to zero and calculate editable new values', () => {
