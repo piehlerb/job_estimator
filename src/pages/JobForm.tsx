@@ -73,6 +73,8 @@ interface CustomerOption {
   address?: string;
 }
 
+type EditableInventoryReviewRow = InventoryReviewRow & { newValueEdited?: boolean };
+
 function createDefaultTopCoatInventory(): TopCoatInventory {
   return {
     id: 'current',
@@ -148,7 +150,7 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
   const [actualCalculation, setActualCalculation] = useState<ActualCosts | null>(null);
   const actualsInitialized = useRef(false);
   const [showInventoryUpdateModal, setShowInventoryUpdateModal] = useState(false);
-  const [inventoryReviewRows, setInventoryReviewRows] = useState<InventoryReviewRow[]>([]);
+  const [inventoryReviewRows, setInventoryReviewRows] = useState<EditableInventoryReviewRow[]>([]);
   const [pendingInventoryJob, setPendingInventoryJob] = useState<Job | null>(null);
   const [pendingInventoryBaseline, setPendingInventoryBaseline] = useState<InventoryActualsApplied | null>(null);
   const [inventoryUpdateError, setInventoryUpdateError] = useState('');
@@ -1441,6 +1443,7 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
           ? {
               ...row,
               newValue: Number.isFinite(parsed) ? parsed : 0,
+              newValueEdited: true,
             }
           : row
       )
@@ -1482,6 +1485,8 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
       let hasTopChanges = false;
       let hasBaseChanges = false;
       let hasMiscChanges = false;
+      const getValueToSave = (row: EditableInventoryReviewRow, freshCurrentValue: number) =>
+        row.newValueEdited ? row.newValue : freshCurrentValue - row.usedDelta;
 
       for (const row of inventoryReviewRows) {
         if (row.target.kind === 'chip') {
@@ -1489,11 +1494,12 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
           const existing = chipInventoryRows.find(
             (inventory) => normalizeChipBlendName(inventory.blend) === target.blend
           );
+          const freshCurrentValue = existing?.pounds ?? 0;
 
           await saveChipInventory({
             id: existing?.id || generateId(),
             blend: existing?.blend || target.blend,
-            pounds: row.newValue,
+            pounds: getValueToSave(row, freshCurrentValue),
             updatedAt: now,
             deleted: false,
           });
@@ -1503,11 +1509,12 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
         if (row.target.kind === 'tint') {
           const target = row.target;
           const existing = tintInventoryRows.find((inventory) => inventory.color === target.color);
+          const freshCurrentValue = existing?.ounces ?? 0;
 
           await saveTintInventory({
             id: existing?.id || generateId(),
             color: existing?.color || target.color,
-            ounces: row.newValue,
+            ounces: getValueToSave(row, freshCurrentValue),
             updatedAt: now,
             deleted: false,
           });
@@ -1515,9 +1522,10 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
         }
 
         if (row.target.kind === 'top') {
+          const freshCurrentValue = topInventory[row.target.field] ?? 0;
           topInventory = {
             ...topInventory,
-            [row.target.field]: row.newValue,
+            [row.target.field]: getValueToSave(row, freshCurrentValue),
             updatedAt: now,
           };
           hasTopChanges = true;
@@ -1525,18 +1533,20 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
         }
 
         if (row.target.kind === 'base') {
+          const freshCurrentValue = baseInventory[row.target.field] ?? 0;
           baseInventory = {
             ...baseInventory,
-            [row.target.field]: row.newValue,
+            [row.target.field]: getValueToSave(row, freshCurrentValue),
             updatedAt: now,
           };
           hasBaseChanges = true;
           continue;
         }
 
+        const freshCurrentValue = miscInventory[row.target.field] ?? 0;
         miscInventory = {
           ...miscInventory,
-          [row.target.field]: row.newValue,
+          [row.target.field]: getValueToSave(row, freshCurrentValue),
           updatedAt: now,
         };
         hasMiscChanges = true;
@@ -1568,7 +1578,7 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
       onBack();
     } catch (error) {
       console.error('Error applying inventory update:', error);
-      setInventoryUpdateError('Inventory update failed. Your job was saved, but inventory was not changed.');
+      setInventoryUpdateError('Inventory update failed before it could be completed. Review inventory levels before trying again.');
       setApplyingInventoryUpdate(false);
     }
   };
@@ -3779,13 +3789,19 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
 
       {showInventoryUpdateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-xl bg-white shadow-xl">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="inventory-update-modal-title"
+            className="w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-xl bg-white shadow-xl"
+          >
             <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
-              <h2 className="text-lg font-semibold text-slate-900">Review Inventory Updates</h2>
+              <h2 id="inventory-update-modal-title" className="text-lg font-semibold text-slate-900">Review Inventory Updates</h2>
               <button
                 type="button"
                 onClick={handleCancelInventoryUpdate}
                 disabled={applyingInventoryUpdate}
+                aria-label="Close inventory review"
                 className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <X size={18} />
