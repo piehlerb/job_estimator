@@ -22,6 +22,11 @@ export interface InventoryActualsSource {
   includeTopcoatTint?: boolean;
 }
 
+export interface InventoryActualsUpdateSource extends InventoryActualsSource {
+  inventoryActualsApplied?: InventoryActualsApplied;
+  appliedAt?: string;
+}
+
 export type InventoryTarget =
   | { kind: 'chip'; blend: string }
   | { kind: 'base'; field: keyof Pick<BaseCoatInventory, 'baseA' | 'baseBGrey' | 'baseBTan' | 'baseBClear'> }
@@ -55,9 +60,14 @@ export interface InventoryReviewInputs {
 }
 
 const ZERO_EPSILON = 0.000001;
+const MISSING_INVENTORY_WARNING = 'Missing inventory record; current value is assumed to be 0.';
 
 function numeric(value: number | undefined): number | undefined {
-  return value && Number.isFinite(value) ? value : undefined;
+  return value !== undefined && value > 0 && Number.isFinite(value) ? value : undefined;
+}
+
+function combineWarnings(...warnings: Array<string | undefined>): string | undefined {
+  return warnings.filter(Boolean).join(' ') || undefined;
 }
 
 export function buildInventoryActualsSnapshot(
@@ -206,6 +216,18 @@ export function buildInventoryActualDeltaRows(
     .sort((a, b) => a.key.localeCompare(b.key));
 }
 
+export function buildInventoryActualsUpdate(
+  source: InventoryActualsUpdateSource,
+  appliedAt = source.appliedAt ?? new Date().toISOString()
+): { snapshot: InventoryActualsApplied; deltas: InventoryActualDeltaRow[] } {
+  const snapshot = buildInventoryActualsSnapshot(source, appliedAt);
+
+  return {
+    snapshot,
+    deltas: buildInventoryActualDeltaRows(snapshot, source.inventoryActualsApplied),
+  };
+}
+
 export function hasInventoryActualsDelta(
   current: InventoryActualsApplied,
   baseline: InventoryActualsApplied | undefined
@@ -238,12 +260,15 @@ export function buildInventoryReviewRows(inputs: InventoryReviewInputs): Invento
       inventoryId = inputs.miscInventory?.id;
     }
 
+    const isMissingInventory = inventoryId === undefined;
+
     return {
       ...delta,
       currentValue,
       newValue: currentValue - delta.usedDelta,
-      isMissingInventory: inventoryId === undefined,
+      isMissingInventory,
       inventoryId,
+      warning: combineWarnings(delta.warning, isMissingInventory ? MISSING_INVENTORY_WARNING : undefined),
     };
   });
 }

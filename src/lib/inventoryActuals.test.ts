@@ -3,6 +3,7 @@ import { describe, test } from 'node:test';
 import {
   buildInventoryActualDeltaRows,
   buildInventoryActualsSnapshot,
+  buildInventoryActualsUpdate,
   buildInventoryReviewRows,
   hasInventoryActualsDelta,
   type InventoryActualsSource,
@@ -38,6 +39,34 @@ describe('inventory actual delta rows', () => {
     assert.equal(Object.prototype.hasOwnProperty.call(snapshot, 'actualChipBoxes'), false);
   });
 
+  test('snapshot omits negative material quantities and they produce no deltas', () => {
+    const snapshot = buildInventoryActualsSnapshot(
+      {
+        actualBaseCoatGallons: -2,
+        actualTopCoatGallons: -1,
+        actualChipBoxes: -3,
+        chipBlend: 'shoreline',
+        baseColor: 'Grey',
+      },
+      '2026-06-12T10:00:00.000Z'
+    );
+
+    assert.equal(Object.prototype.hasOwnProperty.call(snapshot, 'actualBaseCoatGallons'), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(snapshot, 'actualTopCoatGallons'), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(snapshot, 'actualChipBoxes'), false);
+    assert.deepEqual(buildInventoryActualDeltaRows(snapshot, undefined), []);
+  });
+
+  test('captures Cyclo1 actuals in the baseline without inventory deltas yet', () => {
+    const snapshot = buildInventoryActualsSnapshot(
+      { actualCyclo1Gallons: 4 },
+      '2026-06-12T10:00:00.000Z'
+    );
+
+    assert.equal(snapshot.actualCyclo1Gallons, 4);
+    assert.deepEqual(buildInventoryActualDeltaRows(snapshot, undefined), []);
+  });
+
   test('first inventory update subtracts full current actuals from a zero baseline', () => {
     const current = buildInventoryActualsSnapshot(baseSource, '2026-06-12T10:00:00.000Z');
     const rows = buildInventoryActualDeltaRows(current, undefined);
@@ -58,6 +87,20 @@ describe('inventory actual delta rows', () => {
     const current = buildInventoryActualsSnapshot({ ...baseSource, actualChipBoxes: 8 }, '2026-06-12T11:00:00.000Z');
 
     const chipRow = buildInventoryActualDeltaRows(current, baseline).find((row) => row.key === 'chip:Shoreline');
+    assert.equal(chipRow?.usedDelta, 200);
+  });
+
+  test('update wrapper builds current snapshot and deltas from the stored baseline', () => {
+    const baseline = buildInventoryActualsSnapshot({ ...baseSource, actualChipBoxes: 3 }, '2026-06-12T09:00:00.000Z');
+
+    const result = buildInventoryActualsUpdate(
+      { ...baseSource, actualChipBoxes: 8, inventoryActualsApplied: baseline },
+      '2026-06-12T11:00:00.000Z'
+    );
+
+    const chipRow = result.deltas.find((row) => row.key === 'chip:Shoreline');
+    assert.equal(result.snapshot.appliedAt, '2026-06-12T11:00:00.000Z');
+    assert.equal(result.snapshot.actualChipBoxes, 8);
     assert.equal(chipRow?.usedDelta, 200);
   });
 
@@ -134,5 +177,27 @@ describe('inventory actual delta rows', () => {
     assert.equal(chipRow?.currentValue, 0);
     assert.equal(chipRow?.newValue, -280);
     assert.equal(chipRow?.isMissingInventory, true);
+    assert.equal(chipRow?.warning, 'Missing inventory record; current value is assumed to be 0.');
+  });
+
+  test('review rows combine missing inventory warning with existing delta warning', () => {
+    const current = buildInventoryActualsSnapshot(
+      { ...baseSource, baseColor: 'Custom Blue' },
+      '2026-06-12T10:00:00.000Z'
+    );
+    const rows = buildInventoryReviewRows({
+      deltas: buildInventoryActualDeltaRows(current, undefined),
+      chipInventory: [],
+      tintInventory: [],
+      topCoatInventory: null,
+      baseCoatInventory: null,
+      miscInventory: null,
+    });
+
+    const baseRow = rows.find((row) => row.key === 'base:baseA');
+    assert.equal(
+      baseRow?.warning,
+      'No matching Base B inventory bucket exists for this base color. Missing inventory record; current value is assumed to be 0.'
+    );
   });
 });
