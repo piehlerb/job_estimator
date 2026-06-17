@@ -262,8 +262,10 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
       setActualCalculation(null);
       return;
     }
-    const costsToUse = existingJob ? { ...getDefaultCosts(), ...existingJob.costsSnapshot } : costs;
-    const pricingToUse = existingJob?.pricingSnapshot
+    const costsToUse = existingJob && !useCurrentValues
+      ? { ...getDefaultCosts(), ...existingJob.costsSnapshot }
+      : costs;
+    const pricingToUse = existingJob && !useCurrentValues && existingJob.pricingSnapshot
       ? { ...getDefaultPricing(), ...existingJob.pricingSnapshot }
       : pricing;
     const laborersToUse = [
@@ -294,7 +296,7 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
       laborersToUse
     );
     setActualCalculation(calc);
-  }, [actualInstallSchedule, actualMaterials, formData.totalPrice, formData.installDays, formData.installDate, formData.travelDistance, formData.disableGasHeater, existingJob, activeLaborers, costs, pricing]);
+  }, [actualInstallSchedule, actualMaterials, formData.totalPrice, formData.installDays, formData.installDate, formData.travelDistance, formData.disableGasHeater, existingJob, activeLaborers, costs, pricing, useCurrentValues]);
 
 
   const productsTotalPrice = useMemo(
@@ -1391,9 +1393,23 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
     }
   };
 
-  const handleUpdateToCurrentValues = () => {
+  const handleUpdateToCurrentValues = async () => {
     setUseCurrentValues(true);
     setShowSnapshotBanner(false);
+
+    if (existingJob) {
+      const selectedSystem = systems.find((s) => s.id === formData.system);
+      const updatedJob: Job = {
+        ...existingJob,
+        costsSnapshot: costs,
+        pricingSnapshot: pricing,
+        systemSnapshot: selectedSystem || existingJob.systemSnapshot,
+        updatedAt: new Date().toISOString(),
+        synced: false,
+      };
+      await updateJob(updatedJob);
+      setExistingJob(updatedJob);
+    }
   };
 
   const handleKeepOriginalValues = () => {
