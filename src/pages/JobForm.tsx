@@ -21,14 +21,27 @@ import {
   getAllJobsByGroupId,
   getAllTintInventory,
   getAllCommTemplates,
+  getTopCoatInventory,
+  saveTopCoatInventory,
+  getBaseCoatInventory,
+  saveBaseCoatInventory,
+  getMiscInventory,
+  saveMiscInventory,
+  saveChipInventory,
+  saveTintInventory,
 } from '../lib/db';
-import { BaseColor, ChipSystem, Costs, Pricing, Job, JobCalculation, JobStatus, Laborer, InstallDaySchedule, ActualDaySchedule, ActualCosts, ChipInventory, CoatingRemovalType, Product, JobProduct, BaseCoatColor, JobReminder, JobFollowUp, TintInventory, CommunicationTemplate, JobEvaluation } from '../types';
+import { BaseCoatInventory, BaseColor, ChipSystem, Costs, Pricing, Job, JobCalculation, JobStatus, Laborer, InstallDaySchedule, ActualDaySchedule, ActualCosts, ChipInventory, CoatingRemovalType, Product, JobProduct, BaseCoatColor, JobReminder, JobFollowUp, TintInventory, CommunicationTemplate, JobEvaluation, InventoryActualsApplied, MiscInventory, TopCoatInventory } from '../types';
 import { calculateJobOutputs, calculateActualCosts } from '../lib/calculations';
 import InstallDayScheduleComponent from '../components/InstallDaySchedule';
 import { convertLegacyJobToSchedule } from '../lib/jobMigration';
 import { compareSnapshots, SnapshotChanges } from '../lib/snapshotComparison';
 import SnapshotChangeBanner from '../components/SnapshotChangeBanner';
 import { normalizeChipBlendName } from '../lib/syncHelpers';
+import {
+  buildInventoryActualsUpdate,
+  buildInventoryReviewRows,
+  type InventoryReviewRow,
+} from '../lib/inventoryActuals';
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -58,6 +71,38 @@ interface JobFormProps {
 interface CustomerOption {
   name: string;
   address?: string;
+}
+
+type EditableInventoryReviewRow = InventoryReviewRow & { newValueEdited?: boolean };
+
+function createDefaultTopCoatInventory(): TopCoatInventory {
+  return {
+    id: 'current',
+    topA: 0,
+    topB: 0,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function createDefaultBaseCoatInventory(): BaseCoatInventory {
+  return {
+    id: 'current',
+    baseA: 0,
+    baseBGrey: 0,
+    baseBTan: 0,
+    baseBClear: 0,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function createDefaultMiscInventory(): MiscInventory {
+  return {
+    id: 'current',
+    crackRepair: 0,
+    silicaSand: 0,
+    shot: 0,
+    updatedAt: new Date().toISOString(),
+  };
 }
 
 export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: JobFormProps) {
@@ -104,6 +149,12 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
   });
   const [actualCalculation, setActualCalculation] = useState<ActualCosts | null>(null);
   const actualsInitialized = useRef(false);
+  const [showInventoryUpdateModal, setShowInventoryUpdateModal] = useState(false);
+  const [inventoryReviewRows, setInventoryReviewRows] = useState<EditableInventoryReviewRow[]>([]);
+  const [pendingInventoryJob, setPendingInventoryJob] = useState<Job | null>(null);
+  const [pendingInventoryBaseline, setPendingInventoryBaseline] = useState<InventoryActualsApplied | null>(null);
+  const [inventoryUpdateError, setInventoryUpdateError] = useState('');
+  const [applyingInventoryUpdate, setApplyingInventoryUpdate] = useState(false);
 
   // Reminders state
   const [reminders, setReminders] = useState<JobReminder[]>([]);
@@ -1308,7 +1359,6 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
     if (!window.confirm('Remove this estimate from the group? The estimate will remain but will no longer be part of this bundle/alternative set.')) return;
     try {
       const now = new Date().toISOString();
-      const groupId = existingJob.groupId;
 
       // Clear group fields on the current job
       const updatedCurrent: Job = {
@@ -1365,6 +1415,218 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
   const handleKeepOriginalValues = () => {
     setUseCurrentValues(false);
     setShowSnapshotBanner(false);
+  };
+
+  const jobSourceFrom = (job: Job) => ({
+    actualBaseCoatGallons: job.actualBaseCoatGallons,
+    actualTopCoatGallons: job.actualTopCoatGallons,
+    actualCyclo1Gallons: job.actualCyclo1Gallons,
+    actualTintOz: job.actualTintOz,
+    actualChipBoxes: job.actualChipBoxes,
+    actualCrackRepairOz: job.actualCrackRepairOz,
+    chipBlend: job.chipBlend,
+    baseColor: job.baseColor,
+    tintColor: job.tintColor,
+    includeBasecoatTint: job.includeBasecoatTint,
+    includeTopcoatTint: job.includeTopcoatTint,
+    inventoryActualsApplied: job.inventoryActualsApplied,
+  });
+
+  const prepareInventoryReview = async (deltas: Parameters<typeof buildInventoryReviewRows>[0]['deltas']) => {
+    const [chipInventoryRows, tintInventoryRows, topCoatInventory, baseCoatInventory, miscInventory] = await Promise.all([
+      getAllChipInventory(),
+      getAllTintInventory(),
+      getTopCoatInventory(),
+      getBaseCoatInventory(),
+      getMiscInventory(),
+    ]);
+
+    return buildInventoryReviewRows({
+      deltas,
+      chipInventory: chipInventoryRows,
+      tintInventory: tintInventoryRows,
+      topCoatInventory,
+      baseCoatInventory,
+      miscInventory,
+    });
+  };
+
+  const updateInventoryReviewNewValue = (rowKey: string, value: string) => {
+    const parsed = Number.parseFloat(value);
+    setInventoryReviewRows((prev) =>
+      prev.map((row) =>
+        row.key === rowKey
+          ? {
+              ...row,
+              newValue: Number.isFinite(parsed) ? parsed : 0,
+              newValueEdited: true,
+            }
+          : row
+      )
+    );
+  };
+
+  const handleCancelInventoryUpdate = () => {
+    setShowInventoryUpdateModal(false);
+    setInventoryReviewRows([]);
+    setPendingInventoryJob(null);
+    setPendingInventoryBaseline(null);
+    setInventoryUpdateError('');
+    setApplyingInventoryUpdate(false);
+    onBack();
+  };
+
+  const handleApplyInventoryUpdate = async () => {
+    if (!pendingInventoryJob || !pendingInventoryBaseline) {
+      handleCancelInventoryUpdate();
+      return;
+    }
+
+    setApplyingInventoryUpdate(true);
+    setInventoryUpdateError('');
+
+    try {
+      const [chipInventoryRows, tintInventoryRows, topInventoryRecord, baseInventoryRecord, miscInventoryRecord] = await Promise.all([
+        getAllChipInventory(),
+        getAllTintInventory(),
+        getTopCoatInventory(),
+        getBaseCoatInventory(),
+        getMiscInventory(),
+      ]);
+
+      const now = new Date().toISOString();
+      let topInventory = topInventoryRecord ?? createDefaultTopCoatInventory();
+      let baseInventory = baseInventoryRecord ?? createDefaultBaseCoatInventory();
+      let miscInventory = miscInventoryRecord ?? createDefaultMiscInventory();
+      let hasTopChanges = false;
+      let hasBaseChanges = false;
+      let hasMiscChanges = false;
+      const getFreshCurrentValue = (row: EditableInventoryReviewRow) => {
+        if (row.target.kind === 'chip') {
+          const target = row.target;
+          const existing = chipInventoryRows.find(
+            (inventory) => normalizeChipBlendName(inventory.blend) === target.blend
+          );
+          return existing?.pounds ?? 0;
+        }
+
+        if (row.target.kind === 'tint') {
+          const target = row.target;
+          const existing = tintInventoryRows.find((inventory) => inventory.color === target.color);
+          return existing?.ounces ?? 0;
+        }
+
+        if (row.target.kind === 'top') {
+          return topInventory[row.target.field] ?? 0;
+        }
+
+        if (row.target.kind === 'base') {
+          return baseInventory[row.target.field] ?? 0;
+        }
+
+        return miscInventory[row.target.field] ?? 0;
+      };
+
+      const rowsToApply: EditableInventoryReviewRow[] = inventoryReviewRows.map((row) => {
+        const freshCurrentValue = getFreshCurrentValue(row);
+        const computedValue = row.newValueEdited ? row.newValue : freshCurrentValue - row.usedDelta;
+        return {
+          ...row,
+          newValue: computedValue,
+          newValueEdited: true,
+        };
+      });
+
+      setInventoryReviewRows(rowsToApply);
+
+      for (const row of rowsToApply) {
+        if (row.target.kind === 'chip') {
+          const target = row.target;
+          const existing = chipInventoryRows.find(
+            (inventory) => normalizeChipBlendName(inventory.blend) === target.blend
+          );
+
+          await saveChipInventory({
+            id: existing?.id || generateId(),
+            blend: existing?.blend || target.blend,
+            pounds: row.newValue,
+            updatedAt: now,
+            deleted: false,
+          });
+          continue;
+        }
+
+        if (row.target.kind === 'tint') {
+          const target = row.target;
+          const existing = tintInventoryRows.find((inventory) => inventory.color === target.color);
+
+          await saveTintInventory({
+            id: existing?.id || generateId(),
+            color: existing?.color || target.color,
+            ounces: row.newValue,
+            updatedAt: now,
+            deleted: false,
+          });
+          continue;
+        }
+
+        if (row.target.kind === 'top') {
+          topInventory = {
+            ...topInventory,
+            [row.target.field]: row.newValue,
+            updatedAt: now,
+          };
+          hasTopChanges = true;
+          continue;
+        }
+
+        if (row.target.kind === 'base') {
+          baseInventory = {
+            ...baseInventory,
+            [row.target.field]: row.newValue,
+            updatedAt: now,
+          };
+          hasBaseChanges = true;
+          continue;
+        }
+
+        miscInventory = {
+          ...miscInventory,
+          [row.target.field]: row.newValue,
+          updatedAt: now,
+        };
+        hasMiscChanges = true;
+      }
+
+      if (hasTopChanges) {
+        await saveTopCoatInventory(topInventory);
+      }
+      if (hasBaseChanges) {
+        await saveBaseCoatInventory(baseInventory);
+      }
+      if (hasMiscChanges) {
+        await saveMiscInventory(miscInventory);
+      }
+
+      await updateJob({
+        ...pendingInventoryJob,
+        inventoryActualsApplied: pendingInventoryBaseline,
+        updatedAt: now,
+        synced: false,
+      });
+
+      setShowInventoryUpdateModal(false);
+      setInventoryReviewRows([]);
+      setPendingInventoryJob(null);
+      setPendingInventoryBaseline(null);
+      setInventoryUpdateError('');
+      setApplyingInventoryUpdate(false);
+      onBack();
+    } catch (error) {
+      console.error('Error applying inventory update:', error);
+      setInventoryUpdateError('Inventory update failed before it could be completed. Review inventory levels before trying again.');
+      setApplyingInventoryUpdate(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -1473,6 +1735,7 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
         actualTintOz: parseFloat(actualMaterials.actualTintOz) || undefined,
         actualChipBoxes: parseFloat(actualMaterials.actualChipBoxes) || undefined,
         actualCrackRepairOz: parseFloat(actualMaterials.actualCrackRepairOz) || undefined,
+        inventoryActualsApplied: existingJob?.inventoryActualsApplied,
         actualExpenseAdjustment: parseFloat(actualMaterials.actualExpenseAdjustment) || undefined,
         actualExpenseAdjustmentNotes: actualMaterials.actualExpenseAdjustmentNotes.trim() || undefined,
         products: jobProducts.length > 0 ? jobProducts : undefined,
@@ -1503,6 +1766,31 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
         await addJob(job);
       }
 
+      const { snapshot, deltas } = buildInventoryActualsUpdate(jobSourceFrom(job), new Date().toISOString());
+
+      if (deltas.length > 0) {
+        const shouldUpdateInventory = window.confirm('Actual material values changed. Update inventory from these actuals now?');
+        if (shouldUpdateInventory) {
+          try {
+            const reviewRows = await prepareInventoryReview(deltas);
+            if (reviewRows.length > 0) {
+              setPendingInventoryJob(job);
+              setPendingInventoryBaseline(snapshot);
+              setInventoryReviewRows(reviewRows);
+              setInventoryUpdateError('');
+              setShowInventoryUpdateModal(true);
+              setSaving(false);
+              return;
+            }
+          } catch (inventoryError) {
+            console.error('Error preparing inventory review:', inventoryError);
+            alert('Job saved, but inventory could not be loaded. Inventory was not changed.');
+            onBack();
+            return;
+          }
+        }
+      }
+
       onBack();
     } catch (error) {
       console.error('Error saving job:', error);
@@ -1517,6 +1805,13 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
       style: 'currency',
       currency: 'USD',
     }).format(value);
+  };
+
+  const formatInventoryValue = (value: number, unit: InventoryReviewRow['unit']) => {
+    return value.toLocaleString('en-US', {
+      minimumFractionDigits: unit === 'lbs' ? 0 : 2,
+      maximumFractionDigits: unit === 'lbs' ? 0 : 2,
+    });
   };
 
   // Calculate inventory status for chip blend
@@ -3533,6 +3828,102 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
                   No Thanks
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showInventoryUpdateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="inventory-update-modal-title"
+            className="w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-xl bg-white shadow-xl"
+          >
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+              <h2 id="inventory-update-modal-title" className="text-lg font-semibold text-slate-900">Review Inventory Updates</h2>
+              <button
+                type="button"
+                onClick={handleCancelInventoryUpdate}
+                disabled={applyingInventoryUpdate}
+                aria-label="Close inventory review"
+                className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="max-h-[calc(90vh-9rem)] overflow-auto px-6 py-5">
+              {inventoryUpdateError && (
+                <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {inventoryUpdateError}
+                </div>
+              )}
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-slate-200 text-sm">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-medium text-slate-600">Product</th>
+                      <th className="px-3 py-2 text-right font-medium text-slate-600">Current</th>
+                      <th className="px-3 py-2 text-right font-medium text-slate-600">Used From Actuals</th>
+                      <th className="px-3 py-2 text-right font-medium text-slate-600">New Inventory</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {inventoryReviewRows.map((row) => (
+                      <tr key={row.key} className="align-top">
+                        <td className="px-3 py-3">
+                          <div className="font-medium text-slate-900">{row.productName}</div>
+                          <div className="text-xs text-slate-500">{row.unit}</div>
+                          {row.isMissingInventory && (
+                            <div className="mt-1 text-xs text-amber-600">will be created</div>
+                          )}
+                          {row.warning && (
+                            <div className="mt-1 text-xs text-amber-700">{row.warning}</div>
+                          )}
+                        </td>
+                        <td className="px-3 py-3 text-right font-medium text-slate-700">
+                          {formatInventoryValue(row.currentValue, row.unit)}
+                        </td>
+                        <td className={`px-3 py-3 text-right font-medium ${row.usedDelta < 0 ? 'text-green-600' : 'text-slate-700'}`}>
+                          {row.usedDelta > 0 ? '' : row.usedDelta < 0 ? '-' : ''}
+                          {formatInventoryValue(Math.abs(row.usedDelta), row.unit)}
+                        </td>
+                        <td className="px-3 py-3">
+                          <div className="flex justify-end">
+                            <input
+                              type="number"
+                              value={Number.isFinite(row.newValue) ? row.newValue : 0}
+                              onChange={(e) => updateInventoryReviewNewValue(row.key, e.target.value)}
+                              step={row.unit === 'lbs' ? '1' : '0.01'}
+                              disabled={applyingInventoryUpdate}
+                              className="w-32 rounded-lg border border-slate-300 px-3 py-2 text-right text-sm text-slate-900 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-gf-lime disabled:cursor-not-allowed disabled:bg-slate-100"
+                            />
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-6 py-4">
+              <button
+                type="button"
+                onClick={handleCancelInventoryUpdate}
+                disabled={applyingInventoryUpdate}
+                className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleApplyInventoryUpdate}
+                disabled={applyingInventoryUpdate}
+                className="rounded-lg bg-gf-lime px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gf-dark-green disabled:cursor-not-allowed disabled:bg-slate-400"
+              >
+                {applyingInventoryUpdate ? 'Applying...' : 'Apply Updates'}
+              </button>
             </div>
           </div>
         </div>

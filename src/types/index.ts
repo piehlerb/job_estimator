@@ -213,6 +213,19 @@ export interface ActualCosts {
   actualMarginPct: number;
 }
 
+export interface InventoryActualsApplied {
+  actualBaseCoatGallons?: number;
+  actualTopCoatGallons?: number;
+  actualCyclo1Gallons?: number;
+  actualTintOz?: number;
+  actualChipBoxes?: number;
+  actualCrackRepairOz?: number;
+  chipBlend?: string;
+  baseColor?: string;
+  tintColor?: string;
+  appliedAt: string;
+}
+
 export interface Job {
   id: string;
   name: string;
@@ -270,6 +283,7 @@ export interface Job {
   actualTintOz?: number;         // Combined base + top tint, in oz
   actualChipBoxes?: number;
   actualCrackRepairOz?: number;
+  inventoryActualsApplied?: InventoryActualsApplied;
   actualExpenseAdjustment?: number;
   actualExpenseAdjustmentNotes?: string;
   // Products added to this job

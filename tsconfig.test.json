@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "outDir": ".tmp-tests",
+    "rootDir": ".",
+    "types": ["node"]
+  },
+  "include": [
+    "src/lib/inventoryActuals.ts",
+    "src/lib/inventoryActuals.test.ts"
+  ]
+}
