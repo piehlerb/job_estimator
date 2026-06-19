@@ -65,6 +65,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
   const [commTemplates, setCommTemplates] = useState<CommunicationTemplate[]>([]);
   const [overdueExpanded, setOverdueExpanded] = useState(true);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [showFilterSheet, setShowFilterSheet] = useState(false);
   const [dashboardPricing, setDashboardPricing] = useState<Pricing>(getDefaultPricing());
 
   // Persist filter/sort state whenever it changes
@@ -589,12 +590,18 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
 
   const getStatusColor = (status: JobStatus) => {
     switch (status) {
-      case 'Won': return 'bg-green-100 text-green-800';
-      case 'Lost': return 'bg-red-100 text-red-800';
-      case 'Pending': return 'bg-yellow-100 text-yellow-800';
-      case 'Verbal': return 'bg-blue-100 text-blue-800';
+      case 'Won': return 'bg-[#dcfce7] text-[#15803d]';
+      case 'Lost': return 'bg-[#e2e8f0] text-[#475569]';
+      case 'Pending': return 'bg-[#fef9c3] text-[#a16207]';
+      case 'Verbal': return 'bg-[#dbeafe] text-[#1d4ed8]';
       default: return 'bg-slate-100 text-slate-800';
     }
+  };
+
+  const getMarginColor = (pct: number) => {
+    if (pct >= 35) return 'text-[#15803d]';
+    if (pct >= 22) return 'text-[#a16207]';
+    return 'text-[#dc2626]';
   };
 
   const activeFilterCount = useMemo(() => {
@@ -684,170 +691,214 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
 
   return (
     <div className="max-w-7xl mx-auto">
-      {/* Sticky header + toolbar */}
-      <div className="sticky top-0 z-10 bg-white border-b border-slate-200">
-        {/* Header row */}
-        <div className="flex items-center justify-between px-3 sm:px-6 py-2.5 sm:py-3">
+      {/* Mobile dark search bar — visually extends the Layout header */}
+      <div className="md:hidden bg-[#0a0a0a] px-4 pb-3">
+        <div className="text-[11px] text-slate-400 mb-2">{filteredAndSortedJobs.length} active jobs</div>
+        <div className="relative">
+          <Search size={16} className="absolute left-[13px] top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Search jobs or customers"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-[#1c1c1c] border border-[#2a2a2a] text-white rounded-[11px] py-[11px] pl-[38px] pr-3.5 text-[15px] placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-gf-lime"
+          />
+        </div>
+      </div>
+
+      {/* Sticky tabs + toolbar */}
+      <div className="sticky top-0 z-10">
+        {/* Desktop header row */}
+        <div className="hidden md:flex items-center justify-between px-6 py-3 bg-white border-b border-slate-200">
           <div className="flex items-baseline gap-2.5">
-            <h2 className="text-lg sm:text-xl font-bold text-slate-900">Dashboard</h2>
+            <h2 className="text-xl font-bold text-slate-900">Dashboard</h2>
             <span className="text-xs text-slate-400">{filteredAndSortedJobs.length}/{jobsWithCalc.length}</span>
           </div>
           {canWriteJobs && (
-            <button
-              onClick={onNewJob}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors text-sm"
-            >
+            <button onClick={onNewJob} className="flex items-center gap-1.5 px-3 py-1.5 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors text-sm">
               <Plus size={15} />
               New Job
             </button>
           )}
         </div>
-        {/* Tab row */}
-        <div className="flex border-b border-slate-100">
+
+        {/* Tab bar */}
+        <div className="scrollbar-hide flex gap-1 bg-white border-b border-slate-200 px-2 overflow-x-auto">
           <button
             onClick={() => setViewMode('jobs')}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-medium transition-colors ${
+            className={`flex-1 min-w-[78px] flex items-center justify-center gap-1.5 py-3 text-[13.5px] font-bold whitespace-nowrap transition-colors border-b-[2.5px] ${
               viewMode === 'jobs'
-                ? 'text-gf-dark-green border-b-2 border-gf-lime -mb-px'
-                : 'text-slate-400 hover:text-slate-600'
+                ? 'text-gf-dark-green border-gf-lime'
+                : 'text-slate-400 border-transparent hover:text-slate-600'
             }`}
           >
             Jobs
-            <span className={`text-[10px] font-bold ${viewMode === 'jobs' ? 'text-gf-dark-green' : 'text-slate-300'}`}>({filteredAndSortedJobs.length})</span>
+            <span className={`num px-1.5 py-0.5 rounded-full text-[11px] font-extrabold ${
+              viewMode === 'jobs' ? 'bg-gf-lime/15 text-gf-dark-green' : 'bg-slate-100 text-slate-400'
+            }`}>{filteredAndSortedJobs.length}</span>
           </button>
           <button
             onClick={() => setViewMode('needs-contact')}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-medium transition-colors ${
+            className={`flex-1 min-w-[78px] flex items-center justify-center gap-1.5 py-3 text-[13.5px] font-bold whitespace-nowrap transition-colors border-b-[2.5px] ${
               viewMode === 'needs-contact'
-                ? 'text-orange-600 border-b-2 border-orange-400 -mb-px'
-                : 'text-slate-400 hover:text-slate-600'
+                ? 'text-orange-600 border-orange-400'
+                : 'text-slate-400 border-transparent hover:text-slate-600'
             }`}
           >
-            <PhoneCall size={12} />
             Contact
             {needsContactJobs.length > 0 && (
-              <span className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold ${
-                viewMode === 'needs-contact' ? 'bg-orange-100 text-orange-700' : 'bg-orange-100 text-orange-600'
+              <span className={`num px-1.5 py-0.5 rounded-full text-[11px] font-extrabold ${
+                viewMode === 'needs-contact' ? 'bg-orange-100 text-orange-700' : 'bg-orange-50 text-orange-500'
               }`}>{needsContactJobs.length}</span>
             )}
           </button>
           <button
             onClick={() => setViewMode('today')}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-medium transition-colors ${
+            className={`flex-1 min-w-[78px] flex items-center justify-center gap-1.5 py-3 text-[13.5px] font-bold whitespace-nowrap transition-colors border-b-[2.5px] ${
               viewMode === 'today'
-                ? 'text-blue-600 border-b-2 border-blue-400 -mb-px'
-                : 'text-slate-400 hover:text-slate-600'
+                ? 'text-blue-600 border-blue-400'
+                : 'text-slate-400 border-transparent hover:text-slate-600'
             }`}
           >
-            <Calendar size={12} />
             Today
             {todayTotalCount > 0 && (
-              <span className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold ${
-                viewMode === 'today' ? 'bg-blue-100 text-blue-700' : 'bg-blue-100 text-blue-600'
+              <span className={`num px-1.5 py-0.5 rounded-full text-[11px] font-extrabold ${
+                viewMode === 'today' ? 'bg-blue-100 text-blue-700' : 'bg-blue-50 text-blue-500'
               }`}>{todayTotalCount}</span>
             )}
           </button>
           <button
             onClick={() => setViewMode('reminders')}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-medium transition-colors ${
+            className={`flex-1 min-w-[78px] flex items-center justify-center gap-1.5 py-3 text-[13.5px] font-bold whitespace-nowrap transition-colors border-b-[2.5px] ${
               viewMode === 'reminders'
-                ? 'text-red-600 border-b-2 border-red-400 -mb-px'
-                : 'text-slate-400 hover:text-slate-600'
+                ? 'text-red-600 border-red-400'
+                : 'text-slate-400 border-transparent hover:text-slate-600'
             }`}
           >
-            <Bell size={12} />
             Reminders
             {remindersByDue.length > 0 && (
-              <span className={`inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[10px] font-bold ${
+              <span className={`num min-w-[20px] px-1.5 py-0.5 rounded-full text-[11px] font-extrabold text-center ${
                 remindersNeedingAttentionCount > 0
-                  ? (viewMode === 'reminders' ? 'bg-red-100 text-red-700' : 'bg-red-100 text-red-600')
-                  : (viewMode === 'reminders' ? 'bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-500')
+                  ? (viewMode === 'reminders' ? 'bg-red-100 text-red-700' : 'bg-red-50 text-red-500')
+                  : (viewMode === 'reminders' ? 'bg-slate-200 text-slate-600' : 'bg-slate-100 text-slate-400')
               }`}>{remindersByDue.length}</span>
             )}
           </button>
         </div>
-        {/* Toolbar row */}
-        {viewMode !== 'today' && viewMode !== 'reminders' && (
-        <div className="flex items-center gap-2 px-3 sm:px-6 py-2">
-          <div className="relative flex-1">
-            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-            <input
-              type="text"
-              placeholder="Search..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-7 pr-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gf-lime"
-            />
-          </div>
-          {viewMode === 'jobs' && (
-            <>
-              <button
-                onClick={() => setShowFilters(p => !p)}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-colors shrink-0 ${
-                  showFilters || activeFilterCount > 0
-                    ? 'bg-gf-lime/10 text-gf-dark-green border border-gf-lime/40'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                <SlidersHorizontal size={13} />
-                <span className="hidden sm:inline">Filters</span>
-                {activeFilterCount > 0 && (
-                  <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-gf-lime text-white text-[10px] font-bold">{activeFilterCount}</span>
-                )}
-              </button>
-              <button
-                onClick={() => setShowInactive(p => !p)}
-                title="Show inactive jobs (Lost + past Won)"
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-colors shrink-0 ${
-                  showInactive
-                    ? 'bg-slate-700 text-white'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                <span className="hidden sm:inline">Inactive</span>
-                <span className="sm:hidden">Inact.</span>
-              </button>
-              {isFiltered && (
-                <button
-                  onClick={handleClearFilters}
-                  title="Clear all filters"
-                  className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium text-red-500 hover:bg-red-50 transition-colors shrink-0"
-                >
-                  <X size={12} />
-                  <span className="hidden sm:inline">Clear</span>
-                </button>
+
+        {/* Mobile toolbar (Jobs tab only) */}
+        {viewMode === 'jobs' && (
+          <div className="md:hidden flex items-center gap-2 px-4 py-[11px] bg-[#f8fafc]">
+            <button
+              onClick={() => setShowFilterSheet(true)}
+              className={`flex items-center gap-1.5 px-[13px] py-2 rounded-[10px] border text-[13px] font-bold transition-colors ${
+                activeFilterCount > 0
+                  ? 'bg-gf-lime/10 text-gf-dark-green border-gf-lime/40'
+                  : 'bg-white text-slate-600 border-slate-200'
+              }`}
+            >
+              <SlidersHorizontal size={14} />
+              Filters
+              {activeFilterCount > 0 && (
+                <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-gf-lime text-white text-[10px] font-bold">{activeFilterCount}</span>
               )}
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as 'date' | 'price' | 'margin')}
-                className="px-2 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gf-lime shrink-0"
-              >
-                <option value="date">Recent</option>
-                <option value="price">Price ↓</option>
-                <option value="margin">Margin ↓</option>
-              </select>
-            </>
-          )}
-          <button
-            type="button"
-            onClick={() => setShowReminders((prev) => !prev)}
-            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-colors shrink-0 ${
-              remindersNeedingAttentionCount > 0
-                ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            <Bell size={13} />
-            {remindersNeedingAttentionCount > 0 && <span className="font-bold">{remindersNeedingAttentionCount}</span>}
-          </button>
-        </div>
+            </button>
+            <button
+              onClick={() => setShowInactive(p => !p)}
+              className={`px-[13px] py-2 rounded-[10px] border text-[13px] font-bold transition-colors ${
+                showInactive ? 'bg-slate-700 text-white border-slate-700' : 'bg-white text-slate-600 border-slate-200'
+              }`}
+            >
+              Inactive
+            </button>
+            <div className="flex-1" />
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as 'date' | 'price' | 'margin')}
+              className="px-2.5 py-2 rounded-[10px] border border-slate-200 bg-white text-[13px] font-bold text-slate-600"
+            >
+              <option value="date">Recent</option>
+              <option value="price">Price</option>
+              <option value="margin">Margin</option>
+            </select>
+          </div>
+        )}
+
+        {/* Desktop toolbar */}
+        {viewMode !== 'today' && viewMode !== 'reminders' && (
+          <div className="hidden md:flex items-center gap-2 px-6 py-2 bg-white border-b border-slate-200">
+            <div className="relative flex-1">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Search..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-7 pr-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gf-lime"
+              />
+            </div>
+            {viewMode === 'jobs' && (
+              <>
+                <button
+                  onClick={() => setShowFilters(p => !p)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-colors shrink-0 ${
+                    showFilters || activeFilterCount > 0
+                      ? 'bg-gf-lime/10 text-gf-dark-green border border-gf-lime/40'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  <SlidersHorizontal size={13} />
+                  Filters
+                  {activeFilterCount > 0 && (
+                    <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-gf-lime text-white text-[10px] font-bold">{activeFilterCount}</span>
+                  )}
+                </button>
+                <button
+                  onClick={() => setShowInactive(p => !p)}
+                  title="Show inactive jobs (Lost + past Won)"
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-colors shrink-0 ${
+                    showInactive ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  Inactive
+                </button>
+                {isFiltered && (
+                  <button onClick={handleClearFilters} title="Clear all filters"
+                    className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium text-red-500 hover:bg-red-50 transition-colors shrink-0">
+                    <X size={12} />
+                    Clear
+                  </button>
+                )}
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as 'date' | 'price' | 'margin')}
+                  className="px-2 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gf-lime shrink-0"
+                >
+                  <option value="date">Recent</option>
+                  <option value="price">Price ↓</option>
+                  <option value="margin">Margin ↓</option>
+                </select>
+              </>
+            )}
+            <button
+              type="button"
+              onClick={() => setShowReminders((prev) => !prev)}
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-colors shrink-0 ${
+                remindersNeedingAttentionCount > 0
+                  ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              <Bell size={13} />
+              {remindersNeedingAttentionCount > 0 && <span className="font-bold">{remindersNeedingAttentionCount}</span>}
+            </button>
+          </div>
         )}
       </div>
 
-      {/* Collapsible filter panel */}
+      {/* Desktop inline filter panel */}
       {showFilters && (
-        <div className="bg-slate-50 border-b border-slate-200 px-3 sm:px-6 py-3 space-y-3">
-          {/* Status + Probability in one row */}
+        <div className="hidden md:block bg-slate-50 border-b border-slate-200 px-6 py-3 space-y-3">
           <div className="flex flex-wrap gap-x-6 gap-y-2">
             <div className="flex items-center gap-1.5 flex-wrap">
               <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Status</span>
@@ -868,7 +919,6 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
               ))}
             </div>
           </div>
-          {/* Chip blend */}
           {availableChipBlends.length > 0 && (
             <div className="flex items-center gap-2">
               <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide shrink-0">Chip</span>
@@ -879,7 +929,6 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
               </select>
             </div>
           )}
-          {/* Tags */}
           {availableTags.length > 0 && (
             <div className="flex items-start gap-2 flex-wrap">
               <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide shrink-0 pt-0.5">Tags</span>
@@ -928,49 +977,26 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
                   (new Date(new Date().toISOString().split('T')[0] + 'T00:00:00').getTime() -
                    new Date(reminder.dueAt).getTime()) / (24 * 60 * 60 * 1000)
                 );
-
                 return (
-                  <div
-                    key={`${reminder.jobId}-${reminder.reminderId}`}
-                    className="flex items-start gap-3 px-3 sm:px-6 py-2.5 hover:bg-red-100/50 transition-colors"
-                  >
-                    <button
-                      onClick={() => onEditJob(reminder.jobId)}
-                      className="flex-1 min-w-0 text-left"
-                    >
+                  <div key={`${reminder.jobId}-${reminder.reminderId}`}
+                    className="flex items-start gap-3 px-3 sm:px-6 py-2.5 hover:bg-red-100/50 transition-colors">
+                    <button onClick={() => onEditJob(reminder.jobId)} className="flex-1 min-w-0 text-left">
                       <div className="text-sm font-medium text-slate-900 truncate">{reminder.subject}</div>
                       <div className="text-xs text-slate-500 truncate">
-                        {reminder.jobName}
-                        {reminder.customerName ? ` · ${reminder.customerName}` : ''}
+                        {reminder.jobName}{reminder.customerName ? ` · ${reminder.customerName}` : ''}
                       </div>
                       <div className="text-xs font-medium text-red-600 mt-0.5">
-                        {daysOverdue === 0
-                          ? 'Due today'
-                          : daysOverdue === 1
-                            ? '1 day overdue'
-                            : `${daysOverdue} days overdue`
-                        }
-                        {' · '}
-                        {new Date(reminder.dueAt).toLocaleDateString()}
+                        {daysOverdue === 0 ? 'Due today' : daysOverdue === 1 ? '1 day overdue' : `${daysOverdue} days overdue`}
+                        {' · '}{new Date(reminder.dueAt).toLocaleDateString()}
                       </div>
                     </button>
                     <div className="flex items-center gap-1 shrink-0 pt-0.5">
-                      <button
-                        type="button"
-                        onClick={() => handleCompleteReminder(reminder)}
-                        className="p-1.5 rounded text-green-600 hover:bg-green-100 transition-colors"
-                        title="Mark complete"
-                        disabled={updatingReminder}
-                      >
+                      <button type="button" onClick={() => handleCompleteReminder(reminder)}
+                        className="p-1.5 rounded text-green-600 hover:bg-green-100 transition-colors" title="Mark complete" disabled={updatingReminder}>
                         <Check size={14} />
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteReminder(reminder)}
-                        className="p-1.5 rounded text-red-600 hover:bg-red-100 transition-colors"
-                        title="Delete reminder"
-                        disabled={updatingReminder}
-                      >
+                      <button type="button" onClick={() => handleDeleteReminder(reminder)}
+                        className="p-1.5 rounded text-red-600 hover:bg-red-100 transition-colors" title="Delete reminder" disabled={updatingReminder}>
                         <Trash2 size={14} />
                       </button>
                     </div>
@@ -982,54 +1008,58 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
         </div>
       )}
 
-      {/* Needs Contact tab content */}
+      {/* =========== TAB CONTENT =========== */}
+
+      {/* Needs Contact tab */}
       {viewMode === 'needs-contact' && (
-        <div className="bg-white divide-y divide-slate-100">
+        <div className="md:bg-white md:divide-y md:divide-slate-100">
           {needsContactJobs.length === 0 ? (
-            <div className="p-8 text-center">
+            <div className="p-12 text-center">
               <PhoneCall size={24} className="mx-auto mb-2 text-slate-300" />
               <p className="text-sm text-slate-500">No pending jobs need contact right now.</p>
             </div>
           ) : (
-            needsContactJobs.map(({ job, daysSince }) => (
-              <button key={job.id} onClick={() => onEditJob(job.id)}
-                className="w-full flex items-center gap-3 px-3 sm:px-6 py-3 text-left hover:bg-orange-50/60 active:bg-orange-50 transition-colors">
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-slate-900 truncate">{job.name || 'Untitled Job'}</div>
-                  {job.customerName && <div className="text-xs text-slate-400">{job.customerName}</div>}
-                </div>
-                <span className={`text-sm font-bold shrink-0 ${daysSince > 60 ? 'text-red-500' : 'text-orange-500'}`}>{daysSince}d</span>
-              </button>
-            ))
+            <div className="px-3.5 md:px-0 py-2 md:py-0 flex flex-col gap-2 md:gap-0">
+              {needsContactJobs.map(({ job, daysSince }) => (
+                <button key={job.id} onClick={() => onEditJob(job.id)}
+                  className="w-full bg-white border border-[#fed7aa] md:border-0 md:border-b md:border-slate-100 rounded-[14px] md:rounded-none px-4 md:px-6 py-3.5 md:py-3 flex items-center gap-3 text-left hover:bg-orange-50/60 active:bg-orange-50 transition-colors">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[14.5px] font-bold text-[#0f172a] truncate">{job.name || 'Untitled Job'}</div>
+                    {job.customerName && <div className="text-xs text-slate-400 mt-0.5">{job.customerName}</div>}
+                  </div>
+                  <span className={`num text-[15px] font-extrabold shrink-0 ${daysSince > 60 ? 'text-red-500' : 'text-[#ea580c]'}`}>{daysSince}d</span>
+                </button>
+              ))}
+            </div>
           )}
         </div>
       )}
 
-      {/* Today tab content */}
+      {/* Today tab */}
       {viewMode === 'today' && (
-        <div className="bg-white">
+        <div className="md:bg-white">
           {todayTotalCount === 0 ? (
-            <div className="p-8 text-center">
+            <div className="p-12 text-center">
               <Calendar size={24} className="mx-auto mb-2 text-slate-300" />
               <p className="text-sm text-slate-500">Nothing scheduled for today.</p>
             </div>
           ) : (
-            <div className="divide-y divide-slate-200">
-              {/* Installs section */}
+            <div className="px-3.5 md:px-0 py-3 md:py-0 space-y-3.5 md:space-y-0 md:divide-y md:divide-slate-200">
               {todayItems.installs.length > 0 && (
                 <div>
-                  <div className="flex items-center gap-2 px-3 sm:px-6 py-2 bg-green-50">
+                  <div className="text-[11px] font-extrabold text-[#15803d] tracking-[0.5px] uppercase mb-[7px] pl-1 md:hidden">Installs Today</div>
+                  <div className="hidden md:flex items-center gap-2 px-6 py-2 bg-green-50">
                     <Wrench size={13} className="text-green-600" />
                     <span className="text-xs font-semibold text-green-700 uppercase tracking-wide">Installs</span>
                     <span className="text-[10px] font-bold text-green-600">({todayItems.installs.length})</span>
                   </div>
-                  <div className="divide-y divide-slate-100">
+                  <div className="flex flex-col gap-2 md:gap-0 md:divide-y md:divide-slate-100">
                     {todayItems.installs.map(({ job, dayNumber, totalDays }) => (
                       <button key={job.id} onClick={() => onEditJob(job.id)}
-                        className="w-full flex items-center gap-3 px-3 sm:px-6 py-3 text-left hover:bg-green-50/60 active:bg-green-50 transition-colors">
+                        className="w-full bg-white border border-[#bbf7d0] border-l-[3px] border-l-[#22c55e] md:border-0 md:border-b md:border-slate-100 rounded-[13px] md:rounded-none px-[15px] md:px-6 py-[13px] md:py-3 flex items-center gap-3 text-left hover:bg-green-50/60 transition-colors">
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium text-slate-900 truncate">{job.name || 'Untitled Job'}</div>
-                          {job.customerName && <div className="text-xs text-slate-400">{job.customerName}</div>}
+                          <div className="text-[14.5px] font-bold text-[#0f172a] truncate">{job.name || 'Untitled Job'}</div>
+                          {job.customerName && <div className="text-xs text-slate-400 mt-0.5">{job.customerName}</div>}
                         </div>
                         {totalDays > 1 && (
                           <span className="text-xs font-medium text-green-700 bg-green-100 px-1.5 py-0.5 rounded shrink-0">Day {dayNumber}/{totalDays}</span>
@@ -1039,45 +1069,43 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
                   </div>
                 </div>
               )}
-
-              {/* Estimates section */}
               {todayItems.estimates.length > 0 && (
                 <div>
-                  <div className="flex items-center gap-2 px-3 sm:px-6 py-2 bg-purple-50">
+                  <div className="text-[11px] font-extrabold text-purple-700 tracking-[0.5px] uppercase mb-[7px] pl-1 md:hidden">Estimates Today</div>
+                  <div className="hidden md:flex items-center gap-2 px-6 py-2 bg-purple-50">
                     <FileSearch size={13} className="text-purple-600" />
                     <span className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Estimates</span>
                     <span className="text-[10px] font-bold text-purple-600">({todayItems.estimates.length})</span>
                   </div>
-                  <div className="divide-y divide-slate-100">
+                  <div className="flex flex-col gap-2 md:gap-0 md:divide-y md:divide-slate-100">
                     {todayItems.estimates.map(({ job }) => (
                       <button key={job.id} onClick={() => onEditJob(job.id)}
-                        className="w-full flex items-center gap-3 px-3 sm:px-6 py-3 text-left hover:bg-purple-50/60 active:bg-purple-50 transition-colors">
+                        className="w-full bg-white border border-slate-200 md:border-0 md:border-b md:border-slate-100 rounded-[13px] md:rounded-none px-[15px] md:px-6 py-[13px] md:py-3 flex items-center gap-3 text-left hover:bg-purple-50/60 transition-colors">
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium text-slate-900 truncate">{job.name || 'Untitled Job'}</div>
-                          {job.customerName && <div className="text-xs text-slate-400">{job.customerName}</div>}
+                          <div className="text-[14.5px] font-bold text-[#0f172a] truncate">{job.name || 'Untitled Job'}</div>
+                          {job.customerName && <div className="text-xs text-slate-400 mt-0.5">{job.customerName}</div>}
                         </div>
-                        <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium ${getStatusColor(job.status)}`}>{job.status}</span>
+                        <span className={`shrink-0 px-[9px] py-[3px] rounded-full text-[11px] font-extrabold ${getStatusColor(job.status)}`}>{job.status}</span>
                       </button>
                     ))}
                   </div>
                 </div>
               )}
-
-              {/* Reminders section */}
               {todayItems.reminders.length > 0 && (
                 <div>
-                  <div className="flex items-center gap-2 px-3 sm:px-6 py-2 bg-blue-50">
+                  <div className="text-[11px] font-extrabold text-[#1d4ed8] tracking-[0.5px] uppercase mb-[7px] pl-1 md:hidden">Reminders Today</div>
+                  <div className="hidden md:flex items-center gap-2 px-6 py-2 bg-blue-50">
                     <Bell size={13} className="text-blue-600" />
                     <span className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Reminders</span>
                     <span className="text-[10px] font-bold text-blue-600">({todayItems.reminders.length})</span>
                   </div>
-                  <div className="divide-y divide-slate-100">
+                  <div className="flex flex-col gap-2 md:gap-0 md:divide-y md:divide-slate-100">
                     {todayItems.reminders.map(({ job, reminder }) => (
                       <button key={reminder.id} onClick={() => onEditJob(job.id)}
-                        className="w-full flex items-center gap-3 px-3 sm:px-6 py-3 text-left hover:bg-blue-50/60 active:bg-blue-50 transition-colors">
+                        className="w-full bg-white border border-[#bfdbfe] border-l-[3px] border-l-[#3b82f6] md:border-0 md:border-b md:border-slate-100 rounded-[13px] md:rounded-none px-[15px] md:px-6 py-[13px] md:py-3 flex items-center gap-3 text-left hover:bg-blue-50/60 transition-colors">
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium text-slate-900 truncate">{reminder.subject}</div>
-                          <div className="text-xs text-slate-400">{job.name || 'Untitled Job'}{job.customerName ? ` · ${job.customerName}` : ''}</div>
+                          <div className="text-[14.5px] font-bold text-[#0f172a] truncate">{reminder.subject}</div>
+                          <div className="text-xs text-slate-400 mt-0.5">{job.name || 'Untitled Job'}{job.customerName ? ` · ${job.customerName}` : ''}</div>
                         </div>
                         <div className="flex items-center gap-1 text-xs text-blue-600 shrink-0">
                           <Clock size={11} />
@@ -1093,16 +1121,16 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
         </div>
       )}
 
-      {/* Reminders tab content */}
+      {/* Reminders tab */}
       {viewMode === 'reminders' && (
-        <div className="bg-white">
+        <div className="md:bg-white">
           {remindersByDue.length === 0 ? (
-            <div className="p-8 text-center">
+            <div className="p-12 text-center">
               <Bell size={24} className="mx-auto mb-2 text-slate-300" />
               <p className="text-sm text-slate-500">No pending reminders.</p>
             </div>
           ) : (
-            <div className="divide-y divide-slate-100">
+            <div className="px-3.5 md:px-0 py-2.5 md:py-0 flex flex-col gap-2 md:gap-0 md:divide-y md:divide-slate-100">
               {remindersByDue.map((reminder) => {
                 const now = Date.now();
                 const dueAtTime = new Date(reminder.dueAt).getTime();
@@ -1110,50 +1138,26 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
                 startOfTomorrow.setHours(24, 0, 0, 0);
                 const isPastDue = dueAtTime < now;
                 const isDueTodayOrPast = dueAtTime < startOfTomorrow.getTime();
-
                 return (
-                  <div
-                    key={`${reminder.jobId}-${reminder.reminderId}`}
-                    className={`flex items-start gap-3 px-3 sm:px-6 py-3 ${
-                      isPastDue
-                        ? 'bg-red-50'
-                        : isDueTodayOrPast
-                          ? 'bg-amber-50'
-                          : ''
-                    }`}
-                  >
-                    <button
-                      onClick={() => onEditJob(reminder.jobId)}
-                      className="flex-1 min-w-0 text-left"
-                    >
-                      <div className="text-sm font-medium text-slate-900 truncate">{reminder.subject}</div>
-                      <div className="text-xs text-slate-400 truncate">{reminder.jobName}</div>
-                      {reminder.details && (
-                        <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{reminder.details}</p>
-                      )}
-                      <p className={`text-xs font-medium mt-0.5 ${
-                        isPastDue ? 'text-red-600' : isDueTodayOrPast ? 'text-amber-600' : 'text-slate-500'
-                      }`}>
+                  <div key={`${reminder.jobId}-${reminder.reminderId}`}
+                    className={`bg-white border border-slate-200 md:border-0 md:border-b md:border-slate-100 rounded-[14px] md:rounded-none px-4 md:px-6 py-3.5 md:py-3 flex items-start gap-3 ${
+                      isPastDue ? 'md:bg-red-50' : isDueTodayOrPast ? 'md:bg-amber-50' : ''
+                    }`}>
+                    <button onClick={() => onEditJob(reminder.jobId)} className="flex-1 min-w-0 text-left">
+                      <div className="text-[14.5px] font-bold text-[#0f172a] truncate">{reminder.subject}</div>
+                      <div className="text-xs text-slate-400 mt-0.5 truncate">{reminder.jobName}</div>
+                      {reminder.details && <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{reminder.details}</p>}
+                      <p className={`num text-xs font-bold mt-1.5 ${isPastDue ? 'text-[#dc2626]' : isDueTodayOrPast ? 'text-[#a16207]' : 'text-slate-500'}`}>
                         {new Date(reminder.dueAt).toLocaleString()}
                       </p>
                     </button>
                     <div className="flex items-center gap-1 shrink-0 pt-0.5">
-                      <button
-                        type="button"
-                        onClick={() => handleCompleteReminder(reminder)}
-                        className="p-1.5 rounded text-green-600 hover:bg-green-50 transition-colors"
-                        title="Mark complete"
-                        disabled={updatingReminder}
-                      >
+                      <button type="button" onClick={() => handleCompleteReminder(reminder)}
+                        className="p-1.5 rounded text-green-600 hover:bg-green-50 transition-colors" title="Mark complete" disabled={updatingReminder}>
                         <Check size={14} />
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteReminder(reminder)}
-                        className="p-1.5 rounded text-red-600 hover:bg-red-50 transition-colors"
-                        title="Delete reminder"
-                        disabled={updatingReminder}
-                      >
+                      <button type="button" onClick={() => handleDeleteReminder(reminder)}
+                        className="p-1.5 rounded text-red-600 hover:bg-red-50 transition-colors" title="Delete reminder" disabled={updatingReminder}>
                         <Trash2 size={14} />
                       </button>
                     </div>
@@ -1165,11 +1169,11 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
         </div>
       )}
 
-      {/* Job list */}
+      {/* Jobs tab content */}
       {viewMode !== 'jobs' ? null : loading ? (
-        <div className="p-8 text-center text-sm text-slate-500">Loading jobs...</div>
+        <div className="p-12 text-center text-sm text-slate-500">Loading jobs...</div>
       ) : filteredAndSortedJobs.length === 0 ? (
-        <div className="p-8 text-center">
+        <div className="p-12 text-center">
           <p className="text-sm text-slate-500 mb-4">
             {jobsWithCalc.length === 0 ? "No jobs yet. Create your first job to get started!" : "No jobs match the current filters."}
           </p>
@@ -1181,226 +1185,277 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
         </div>
       ) : (
         <>
-          {/* Mobile list - compact 2-line rows */}
-          <div className="md:hidden bg-white divide-y divide-slate-100">
+          {/* Mobile card list */}
+          <div className="md:hidden px-3.5 py-2.5 pb-[120px] flex flex-col gap-2.5">
             {displayItems.map((item) => {
               if (item.type === 'group') {
                 const isExpanded = expandedGroups.has(item.groupId);
                 const isBundled = item.groupType === 'bundled';
                 const aggMarginPct = item.aggregateTotalPrice > 0 ? ((item.aggregateTotalPrice - item.aggregateTotalCosts) / item.aggregateTotalPrice) * 100 : 0;
                 return (
-                  <div key={item.groupId}>
-                    <div
-                      className={`flex items-center gap-2 px-3 py-2.5 cursor-pointer ${isBundled ? 'bg-blue-50' : 'bg-purple-50'}`}
-                      onClick={() => toggleGroup(item.groupId)}
-                    >
-                      {isExpanded ? <ChevronDown size={13} className="text-slate-400 shrink-0" /> : <ChevronRight size={13} className="text-slate-400 shrink-0" />}
-                      {isBundled ? <Link size={12} className="text-blue-500 shrink-0" /> : <Shuffle size={12} className="text-purple-500 shrink-0" />}
-                      <span className="text-sm font-semibold text-slate-800 truncate flex-1">{item.customerName}</span>
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${isBundled ? 'bg-blue-200 text-blue-800' : 'bg-purple-200 text-purple-800'}`}>
-                        {isBundled ? `${item.jobs.length}×` : `${item.jobs.length} opts`}
-                      </span>
-                      {isBundled && <span className={`text-xs font-bold ${aggMarginPct >= 30 ? 'text-green-600' : 'text-orange-500'}`}>{aggMarginPct.toFixed(0)}%</span>}
-                    </div>
-                    {isExpanded && item.jobs.map(({ job, calc }) => {
-                      const marginPct = job.totalPrice > 0 ? ((job.totalPrice - calc.totalCosts) / job.totalPrice) * 100 : 0;
-                      return (
-                        <div key={job.id}
-                          className={`flex items-center gap-2 px-3 py-2.5 cursor-pointer hover:bg-slate-50 border-l-[3px] ${isBundled ? 'border-blue-300' : 'border-purple-300'}`}
-                          onClick={() => onEditJob(job.id)}>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-sm font-medium text-slate-900 truncate">{job.name || 'Untitled Job'}</span>
-                              <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium ${getStatusColor(job.status)}`}>{job.status}</span>
-                            </div>
-                            <div className="text-xs text-slate-400">${job.totalPrice.toFixed(0)} · <span className={marginPct >= 30 ? 'text-green-600' : 'text-orange-500'}>{marginPct.toFixed(0)}%</span></div>
-                          </div>
-                          <div className="flex items-center gap-0.5">
-                            <button onClick={(e) => { e.stopPropagation(); onViewJobSheet(job.id); }} className="p-1.5 text-slate-400 hover:text-green-600 rounded"><FileText size={14} /></button>
-                            {canWriteJobs && (<button onClick={(e) => { e.stopPropagation(); handleDeleteJob(job.id); }} className="p-1.5 text-slate-400 hover:text-red-500 rounded"><Trash2 size={14} /></button>)}
-                          </div>
+                  <div key={item.groupId} className={`${isBundled ? 'bg-[#eff6ff]' : 'bg-[#faf5ff]'} border ${isBundled ? 'border-[#bfdbfe]' : 'border-[#e9d5ff]'} rounded-[16px] overflow-hidden`}>
+                    <div onClick={() => toggleGroup(item.groupId)}
+                      className="flex items-center gap-[9px] px-4 py-[13px] cursor-pointer">
+                      {isBundled
+                        ? <Link size={16} className="text-blue-500 shrink-0" />
+                        : <Shuffle size={16} className="text-purple-600 shrink-0" />
+                      }
+                      <div className="flex-1 min-w-0">
+                        <div className="font-bold text-[15px] text-[#0f172a] truncate">{item.customerName}</div>
+                        <div className={`text-xs font-semibold mt-0.5 ${isBundled ? 'text-blue-600' : 'text-[#9333ea]'}`}>
+                          {isBundled ? `${item.jobs.length} bundled parts` : `${item.jobs.length} alternative estimates`}
                         </div>
-                      );
-                    })}
+                      </div>
+                      {isBundled && <span className={`num text-xs font-extrabold ${getMarginColor(aggMarginPct)}`}>{aggMarginPct.toFixed(0)}%</span>}
+                      <ChevronDown size={18} className={`text-purple-300 shrink-0 transition-transform ${isExpanded ? '' : '-rotate-90'}`} />
+                    </div>
+                    {isExpanded && (
+                      <div className="px-3 pb-3 flex flex-col gap-2">
+                        {item.jobs.map(({ job, calc }) => {
+                          const marginPct = job.totalPrice > 0 ? ((job.totalPrice - calc.totalCosts) / job.totalPrice) * 100 : 0;
+                          return (
+                            <div key={job.id} onClick={() => onEditJob(job.id)}
+                              className={`bg-white border ${isBundled ? 'border-[#bfdbfe] border-l-[3px] border-l-[#60a5fa]' : 'border-[#e9d5ff] border-l-[3px] border-l-[#c084fc]'} rounded-[11px] px-[13px] py-3 cursor-pointer flex items-center justify-between gap-2`}>
+                              <div className="min-w-0 flex-1">
+                                <div className="font-bold text-sm text-[#0f172a] truncate">{job.name || 'Untitled Job'}</div>
+                                <div className={`num text-xs font-bold mt-0.5 ${getMarginColor(marginPct)}`}>{marginPct.toFixed(0)}% margin</div>
+                              </div>
+                              <span className="num text-[17px] font-extrabold text-[#0f172a] shrink-0">${job.totalPrice.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 );
               }
+
               const { job, calc } = item.jobWithCalc;
               const marginPct = job.totalPrice > 0 ? ((job.totalPrice - calc.totalCosts) / job.totalPrice) * 100 : 0;
+              const metaParts: string[] = [];
+              if (job.customerName) metaParts.push(job.customerName);
+              if (job.estimateDate) {
+                const [y, m, d] = job.estimateDate.split('-').map(Number);
+                if (y && m && d) metaParts.push(new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+              }
+              if (job.floorFootage) metaParts.push(`${job.floorFootage} ft²`);
+
               return (
-                <div key={job.id}
-                  className="flex items-center gap-2 px-3 py-2.5 cursor-pointer hover:bg-slate-50 active:bg-slate-100"
-                  onClick={() => onEditJob(job.id)}>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-sm font-medium text-slate-900 truncate">{job.name || 'Untitled Job'}</span>
-                      <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium ${getStatusColor(job.status)}`}>{job.status}</span>
+                <div key={job.id} onClick={() => onEditJob(job.id)}
+                  className="bg-white border border-slate-200 rounded-[16px] px-4 py-3.5 cursor-pointer shadow-[0_1px_2px_rgba(15,23,42,0.04)] active:bg-slate-50 transition-colors">
+                  <div className="flex items-start justify-between gap-2.5">
+                    <div className="min-w-0 flex-1">
+                      <span className="font-bold text-[15.5px] text-[#0f172a] truncate block">{job.name || 'Untitled Job'}</span>
+                      {metaParts.length > 0 && (
+                        <div className="text-[12.5px] text-slate-400 mt-[3px] truncate">{metaParts.join(' · ')}</div>
+                      )}
                     </div>
-                    <div className="text-xs text-slate-400">
-                      {job.customerName && <span className="mr-1.5">{job.customerName} ·</span>}
-                      ${job.totalPrice.toFixed(0)} · <span className={marginPct >= 30 ? 'text-green-600' : 'text-orange-500'}>{marginPct.toFixed(0)}%</span>
-                      {(job.tags || []).length > 0 && <span className="ml-1.5 text-slate-300">· {(job.tags || []).slice(0, 2).join(', ')}</span>}
-                    </div>
+                    <span className={`shrink-0 px-[9px] py-[3px] rounded-full text-[11px] font-extrabold ${getStatusColor(job.status)}`}>
+                      {job.status}
+                    </span>
                   </div>
-                  <div className="flex items-center gap-0.5">
-                    <button onClick={(e) => { e.stopPropagation(); onViewJobSheet(job.id); }} className="p-1.5 text-slate-400 hover:text-green-600 rounded"><FileText size={14} /></button>
-                    {canWriteJobs && (<button onClick={(e) => { e.stopPropagation(); handleDeleteJob(job.id); }} className="p-1.5 text-slate-400 hover:text-red-500 rounded"><Trash2 size={14} /></button>)}
+                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-[#f1f5f9]">
+                    <div className="flex gap-[5px] flex-wrap">
+                      {(job.tags || []).slice(0, 3).map((tag) => (
+                        <span key={tag} className="text-[11px] font-semibold text-slate-500 bg-[#f1f5f9] px-2 py-[3px] rounded-[6px]">{tag}</span>
+                      ))}
+                    </div>
+                    <div className="flex items-baseline gap-2.5 shrink-0">
+                      <span className={`num text-[12.5px] font-extrabold ${getMarginColor(marginPct)}`}>{marginPct.toFixed(0)}%</span>
+                      <span className="num text-[20px] font-extrabold text-[#0f172a] tracking-tight">${job.totalPrice.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
+                    </div>
                   </div>
                 </div>
               );
             })}
           </div>
 
-            {/* Desktop Table View */}
-            <div className="hidden md:block overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200">
-                    <th className="px-4 lg:px-6 py-3 text-left text-sm font-semibold text-slate-700">Job Name</th>
-                    <th className="px-4 lg:px-6 py-3 text-center text-sm font-semibold text-slate-700">Status</th>
-                    <th className="px-4 lg:px-6 py-3 text-right text-sm font-semibold text-slate-700">Total Cost</th>
-                    <th className="px-4 lg:px-6 py-3 text-right text-sm font-semibold text-slate-700">Total Price</th>
-                    <th className="px-4 lg:px-6 py-3 text-right text-sm font-semibold text-slate-700">Actual Margin</th>
-                    <th className="px-4 lg:px-6 py-3 text-right text-sm font-semibold text-slate-700">Date</th>
-                    <th className="px-4 lg:px-6 py-3 text-right text-sm font-semibold text-slate-700">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {displayItems.map((item) => {
-                    if (item.type === 'group') {
-                      const isExpanded = expandedGroups.has(item.groupId);
-                      const isBundled = item.groupType === 'bundled';
-                      const aggMarginPct = item.aggregateTotalPrice > 0 ? ((item.aggregateTotalPrice - item.aggregateTotalCosts) / item.aggregateTotalPrice) * 100 : 0;
-                      return (
-                        <>
-                          {/* Group header row (desktop) */}
-                          <tr
-                            key={`group-${item.groupId}`}
-                            className={`border-b border-slate-200 cursor-pointer transition-colors ${isBundled ? 'bg-blue-50 hover:bg-blue-100' : 'bg-purple-50 hover:bg-purple-100'}`}
-                            onClick={() => toggleGroup(item.groupId)}
-                          >
-                            <td className="px-4 lg:px-6 py-3 text-sm font-semibold text-slate-900" colSpan={isBundled ? 1 : 5}>
-                              <div className="flex items-center gap-2">
-                                {isExpanded ? <ChevronDown size={14} className="text-slate-500 flex-shrink-0" /> : <ChevronRight size={14} className="text-slate-500 flex-shrink-0" />}
-                                {isBundled ? <Link size={13} className="text-blue-600 flex-shrink-0" /> : <Shuffle size={13} className="text-purple-600 flex-shrink-0" />}
-                                <span>{item.customerName}</span>
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${isBundled ? 'bg-blue-200 text-blue-800' : 'bg-purple-200 text-purple-800'}`}>
-                                  {isBundled ? `Bundle · ${item.jobs.length} parts` : `${item.jobs.length} Alternatives`}
-                                </span>
-                              </div>
-                            </td>
-                            {isBundled && (
-                              <>
-                                <td className="px-4 lg:px-6 py-3 text-sm text-center text-slate-400">—</td>
-                                <td className="px-4 lg:px-6 py-3 text-sm text-right text-slate-700 font-medium">${item.aggregateTotalCosts.toFixed(0)}</td>
-                                <td className="px-4 lg:px-6 py-3 text-sm text-right font-semibold text-slate-900">${item.aggregateTotalPrice.toFixed(0)}</td>
-                                <td className={`px-4 lg:px-6 py-3 text-sm text-right font-bold ${aggMarginPct >= 30 ? 'text-green-600' : 'text-orange-600'}`}>{aggMarginPct.toFixed(0)}%</td>
-                                <td className="px-4 lg:px-6 py-3 text-sm text-right text-slate-400">—</td>
-                                <td className="px-4 lg:px-6 py-3 text-sm text-right text-slate-400">—</td>
-                              </>
-                            )}
-                          </tr>
-                          {/* Group children (desktop) */}
-                          {isExpanded && item.jobs.map(({ job, calc }) => {
-                            const marginPct = job.totalPrice > 0 ? ((job.totalPrice - calc.totalCosts) / job.totalPrice) * 100 : 0;
-                            return (
-                              <tr
-                                key={job.id}
-                                className="border-b border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer"
-                                onClick={() => onEditJob(job.id)}
-                              >
-                                <td className="py-3 text-sm font-medium text-slate-900">
-                                  <div className="flex items-center">
-                                    <div className={`w-1 self-stretch mr-3 rounded-r ${isBundled ? 'bg-blue-300' : 'bg-purple-300'}`} style={{minHeight: '100%'}} />
-                                    <div className="px-2 lg:px-3">
-                                      <div>{job.name || 'Untitled Job'}</div>
-                                      {(job.tags || []).length > 0 && (
-                                        <div className="mt-0.5 flex flex-wrap gap-1">
-                                          {(job.tags || []).slice(0, 3).map((tag) => (
-                                            <span key={tag} className="inline-block px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium">{tag}</span>
-                                          ))}
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                </td>
-                                <td className="px-4 lg:px-6 py-3 text-sm text-center">
-                                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(job.status)}`}>{job.status}</span>
-                                </td>
-                                <td className="px-4 lg:px-6 py-3 text-sm text-slate-600 text-right">${calc.totalCosts.toFixed(0)}</td>
-                                <td className="px-4 lg:px-6 py-3 text-sm font-semibold text-slate-900 text-right">${job.totalPrice.toFixed(0)}</td>
-                                <td className={`px-4 lg:px-6 py-3 text-sm font-semibold text-right ${marginPct >= 30 ? 'text-green-600' : 'text-orange-600'}`}>{marginPct.toFixed(0)}%</td>
-                                <td className="px-4 lg:px-6 py-3 text-sm text-slate-600 text-right">{new Date(job.createdAt).toLocaleDateString()}</td>
-                                <td className="px-4 lg:px-6 py-3 text-sm text-right">
-                                  <div className="flex items-center justify-end gap-2">
-                                    <button onClick={(e) => { e.stopPropagation(); onViewJobSheet(job.id); }} className="text-green-600 hover:text-green-800" title="Job Sheet"><FileText size={18} /></button>
-                                    <button className="text-gf-dark-green hover:text-gf-dark-green font-medium text-xs lg:text-sm">Edit</button>
-                                    {canWriteJobs && (<button onClick={(e) => { e.stopPropagation(); handleDeleteJob(job.id); }} className="text-red-600 hover:text-red-800"><Trash2 size={18} /></button>)}
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </>
-                      );
-                    }
-
-                    const { job, calc } = item.jobWithCalc;
-                    const marginPct = job.totalPrice > 0 ? ((job.totalPrice - calc.totalCosts) / job.totalPrice) * 100 : 0;
+          {/* Desktop table */}
+          <div className="hidden md:block overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  <th className="px-4 lg:px-6 py-3 text-left text-sm font-semibold text-slate-700">Job Name</th>
+                  <th className="px-4 lg:px-6 py-3 text-center text-sm font-semibold text-slate-700">Status</th>
+                  <th className="px-4 lg:px-6 py-3 text-right text-sm font-semibold text-slate-700">Total Cost</th>
+                  <th className="px-4 lg:px-6 py-3 text-right text-sm font-semibold text-slate-700">Total Price</th>
+                  <th className="px-4 lg:px-6 py-3 text-right text-sm font-semibold text-slate-700">Actual Margin</th>
+                  <th className="px-4 lg:px-6 py-3 text-right text-sm font-semibold text-slate-700">Date</th>
+                  <th className="px-4 lg:px-6 py-3 text-right text-sm font-semibold text-slate-700">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {displayItems.map((item) => {
+                  if (item.type === 'group') {
+                    const isExpanded = expandedGroups.has(item.groupId);
+                    const isBundled = item.groupType === 'bundled';
+                    const aggMarginPct = item.aggregateTotalPrice > 0 ? ((item.aggregateTotalPrice - item.aggregateTotalCosts) / item.aggregateTotalPrice) * 100 : 0;
                     return (
-                      <tr
-                        key={job.id}
-                        className="border-b border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer"
-                        onClick={() => onEditJob(job.id)}
-                      >
-                        <td className="px-4 lg:px-6 py-4 text-sm font-medium text-slate-900">
-                          <div>{job.name || 'Untitled Job'}</div>
-                          {(job.tags || []).length > 0 && (
-                            <div className="mt-1 flex flex-wrap gap-1">
-                              {(job.tags || []).slice(0, 3).map((tag) => (
-                                <span key={tag} className="inline-block px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium">{tag}</span>
-                              ))}
+                      <>
+                        <tr key={`group-${item.groupId}`}
+                          className={`border-b border-slate-200 cursor-pointer transition-colors ${isBundled ? 'bg-blue-50 hover:bg-blue-100' : 'bg-purple-50 hover:bg-purple-100'}`}
+                          onClick={() => toggleGroup(item.groupId)}>
+                          <td className="px-4 lg:px-6 py-3 text-sm font-semibold text-slate-900" colSpan={isBundled ? 1 : 5}>
+                            <div className="flex items-center gap-2">
+                              {isExpanded ? <ChevronDown size={14} className="text-slate-500 shrink-0" /> : <ChevronRight size={14} className="text-slate-500 shrink-0" />}
+                              {isBundled ? <Link size={13} className="text-blue-600 shrink-0" /> : <Shuffle size={13} className="text-purple-600 shrink-0" />}
+                              <span>{item.customerName}</span>
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${isBundled ? 'bg-blue-200 text-blue-800' : 'bg-purple-200 text-purple-800'}`}>
+                                {isBundled ? `Bundle · ${item.jobs.length} parts` : `${item.jobs.length} Alternatives`}
+                              </span>
                             </div>
+                          </td>
+                          {isBundled && (
+                            <>
+                              <td className="px-4 lg:px-6 py-3 text-sm text-center text-slate-400">—</td>
+                              <td className="px-4 lg:px-6 py-3 text-sm text-right text-slate-700 font-medium">${item.aggregateTotalCosts.toFixed(0)}</td>
+                              <td className="px-4 lg:px-6 py-3 text-sm text-right font-semibold text-slate-900">${item.aggregateTotalPrice.toFixed(0)}</td>
+                              <td className={`px-4 lg:px-6 py-3 text-sm text-right font-bold ${aggMarginPct >= 30 ? 'text-green-600' : 'text-orange-600'}`}>{aggMarginPct.toFixed(0)}%</td>
+                              <td className="px-4 lg:px-6 py-3 text-sm text-right text-slate-400">—</td>
+                              <td className="px-4 lg:px-6 py-3 text-sm text-right text-slate-400">—</td>
+                            </>
                           )}
-                        </td>
-                        <td className="px-4 lg:px-6 py-4 text-sm text-center">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(job.status)}`}>{job.status}</span>
-                        </td>
-                        <td className="px-4 lg:px-6 py-4 text-sm text-slate-600 text-right">${calc.totalCosts.toFixed(0)}</td>
-                        <td className="px-4 lg:px-6 py-4 text-sm font-semibold text-slate-900 text-right">${job.totalPrice.toFixed(0)}</td>
-                        <td className={`px-4 lg:px-6 py-4 text-sm font-semibold text-right ${marginPct >= 30 ? 'text-green-600' : 'text-orange-600'}`}>{marginPct.toFixed(0)}%</td>
-                        <td className="px-4 lg:px-6 py-4 text-sm text-slate-600 text-right">{new Date(job.createdAt).toLocaleDateString()}</td>
-                        <td className="px-4 lg:px-6 py-4 text-sm text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <button onClick={(e) => { e.stopPropagation(); onViewJobSheet(job.id); }} className="text-green-600 hover:text-green-800" title="Job Sheet"><FileText size={18} /></button>
-                            <button className="text-gf-dark-green hover:text-gf-dark-green font-medium text-xs lg:text-sm">Edit</button>
-                            {canWriteJobs && (<button onClick={(e) => { e.stopPropagation(); handleDeleteJob(job.id); }} className="text-red-600 hover:text-red-800"><Trash2 size={18} /></button>)}
-                          </div>
-                        </td>
-                      </tr>
+                        </tr>
+                        {isExpanded && item.jobs.map(({ job, calc }) => {
+                          const marginPct = job.totalPrice > 0 ? ((job.totalPrice - calc.totalCosts) / job.totalPrice) * 100 : 0;
+                          return (
+                            <tr key={job.id} className="border-b border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => onEditJob(job.id)}>
+                              <td className="py-3 text-sm font-medium text-slate-900">
+                                <div className="flex items-center">
+                                  <div className={`w-1 self-stretch mr-3 rounded-r ${isBundled ? 'bg-blue-300' : 'bg-purple-300'}`} style={{minHeight: '100%'}} />
+                                  <div className="px-2 lg:px-3">
+                                    <div>{job.name || 'Untitled Job'}</div>
+                                    {(job.tags || []).length > 0 && (
+                                      <div className="mt-0.5 flex flex-wrap gap-1">
+                                        {(job.tags || []).slice(0, 3).map((tag) => (
+                                          <span key={tag} className="inline-block px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium">{tag}</span>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-4 lg:px-6 py-3 text-sm text-center">
+                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(job.status)}`}>{job.status}</span>
+                              </td>
+                              <td className="px-4 lg:px-6 py-3 text-sm text-slate-600 text-right">${calc.totalCosts.toFixed(0)}</td>
+                              <td className="px-4 lg:px-6 py-3 text-sm font-semibold text-slate-900 text-right">${job.totalPrice.toFixed(0)}</td>
+                              <td className={`px-4 lg:px-6 py-3 text-sm font-semibold text-right ${marginPct >= 30 ? 'text-green-600' : 'text-orange-600'}`}>{marginPct.toFixed(0)}%</td>
+                              <td className="px-4 lg:px-6 py-3 text-sm text-slate-600 text-right">{new Date(job.createdAt).toLocaleDateString()}</td>
+                              <td className="px-4 lg:px-6 py-3 text-sm text-right">
+                                <div className="flex items-center justify-end gap-2">
+                                  <button onClick={(e) => { e.stopPropagation(); onViewJobSheet(job.id); }} className="text-green-600 hover:text-green-800" title="Job Sheet"><FileText size={18} /></button>
+                                  <button className="text-gf-dark-green font-medium text-xs lg:text-sm">Edit</button>
+                                  {canWriteJobs && (<button onClick={(e) => { e.stopPropagation(); handleDeleteJob(job.id); }} className="text-red-600 hover:text-red-800"><Trash2 size={18} /></button>)}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </>
                     );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
+                  }
 
+                  const { job, calc } = item.jobWithCalc;
+                  const marginPct = job.totalPrice > 0 ? ((job.totalPrice - calc.totalCosts) / job.totalPrice) * 100 : 0;
+                  return (
+                    <tr key={job.id} className="border-b border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => onEditJob(job.id)}>
+                      <td className="px-4 lg:px-6 py-4 text-sm font-medium text-slate-900">
+                        <div>{job.name || 'Untitled Job'}</div>
+                        {(job.tags || []).length > 0 && (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {(job.tags || []).slice(0, 3).map((tag) => (
+                              <span key={tag} className="inline-block px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium">{tag}</span>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 lg:px-6 py-4 text-sm text-center">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(job.status)}`}>{job.status}</span>
+                      </td>
+                      <td className="px-4 lg:px-6 py-4 text-sm text-slate-600 text-right">${calc.totalCosts.toFixed(0)}</td>
+                      <td className="px-4 lg:px-6 py-4 text-sm font-semibold text-slate-900 text-right">${job.totalPrice.toFixed(0)}</td>
+                      <td className={`px-4 lg:px-6 py-4 text-sm font-semibold text-right ${marginPct >= 30 ? 'text-green-600' : 'text-orange-600'}`}>{marginPct.toFixed(0)}%</td>
+                      <td className="px-4 lg:px-6 py-4 text-sm text-slate-600 text-right">{new Date(job.createdAt).toLocaleDateString()}</td>
+                      <td className="px-4 lg:px-6 py-4 text-sm text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button onClick={(e) => { e.stopPropagation(); onViewJobSheet(job.id); }} className="text-green-600 hover:text-green-800" title="Job Sheet"><FileText size={18} /></button>
+                          <button className="text-gf-dark-green font-medium text-xs lg:text-sm">Edit</button>
+                          {canWriteJobs && (<button onClick={(e) => { e.stopPropagation(); handleDeleteJob(job.id); }} className="text-red-600 hover:text-red-800"><Trash2 size={18} /></button>)}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {/* Mobile FAB */}
+      {canWriteJobs && viewMode === 'jobs' && (
+        <div className="md:hidden sticky bottom-[22px] z-[18] flex justify-end px-5 pointer-events-none -mt-[78px]">
+          <button onClick={onNewJob}
+            className="pointer-events-auto flex items-center gap-2 px-[22px] py-[15px] rounded-full bg-gradient-to-r from-gf-lime to-gf-dark-green text-white text-[15px] font-extrabold shadow-lg shadow-gf-lime/25 active:scale-95 transition-transform">
+            <Plus size={20} strokeWidth={2.6} />
+            New Job
+          </button>
+        </div>
+      )}
+
+      {/* Mobile filter bottom sheet */}
+      {showFilterSheet && (
+        <>
+          <div className="md:hidden fixed inset-0 z-40 bg-slate-900/45" onClick={() => setShowFilterSheet(false)} />
+          <div className="md:hidden fixed bottom-0 left-0 right-0 z-[41] bg-white rounded-t-[22px] px-5 pt-[18px] pb-7 animate-sheet-up">
+            <div className="w-[38px] h-1 bg-slate-300 rounded-full mx-auto mb-4" />
+            <div className="flex items-center justify-between mb-4">
+              <span className="font-heading font-extrabold text-[18px]">Filters</span>
+              <button onClick={() => { handleClearFilters(); setShowFilterSheet(false); }}
+                className="text-[13px] font-bold text-red-600">Clear all</button>
+            </div>
+            <div className="text-[11px] font-extrabold text-slate-400 tracking-[0.5px] uppercase mb-2">Status</div>
+            <div className="flex gap-[7px] flex-wrap mb-[18px]">
+              {ALL_STATUSES.map((status) => (
+                <button key={status} onClick={() => handleStatusToggle(status)}
+                  className={`px-[15px] py-2 rounded-full border text-[13px] font-bold transition-colors ${
+                    statusFilter.includes(status) ? getStatusColor(status) + ' border-transparent' : 'bg-white border-slate-200 text-slate-400'
+                  }`}>
+                  {status}
+                </button>
+              ))}
+            </div>
+            <div className="text-[11px] font-extrabold text-slate-400 tracking-[0.5px] uppercase mb-2">Min Probability</div>
+            <div className="flex gap-[7px] flex-wrap mb-[22px]">
+              {[0, 20, 40, 60, 80, 100].map(p => (
+                <button key={p} onClick={() => setProbabilityFilter(p)}
+                  className={`px-[15px] py-2 rounded-full border text-[13px] font-bold transition-colors ${
+                    probabilityFilter === p ? 'bg-blue-100 text-blue-800 border-transparent' : 'bg-white border-slate-200 text-slate-400'
+                  }`}>
+                  {p === 0 ? 'Any' : `≥${p}%`}
+                </button>
+              ))}
+            </div>
+            <button onClick={() => setShowFilterSheet(false)}
+              className="w-full py-[15px] rounded-[13px] bg-gradient-to-r from-gf-lime to-gf-dark-green text-white text-[15px] font-extrabold">
+              Show results
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* Reminder modals (unchanged) */}
       {showReminders && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[85vh] overflow-hidden">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
               <div>
                 <h3 className="text-lg font-semibold text-slate-900">Reminders</h3>
-                <p className="text-xs text-slate-500">
-                  {remindersByDue.length} total, {remindersNeedingAttentionCount} due today or earlier
-                </p>
+                <p className="text-xs text-slate-500">{remindersByDue.length} total, {remindersNeedingAttentionCount} due today or earlier</p>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowReminders(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
-              >
+              <button type="button" onClick={() => setShowReminders(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors">
                 <X size={18} />
               </button>
             </div>
@@ -1416,58 +1471,27 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
                     startOfTomorrow.setHours(24, 0, 0, 0);
                     const isPastDue = dueAtTime < now;
                     const isDueTodayOrPast = dueAtTime < startOfTomorrow.getTime();
-
                     return (
-                      <div
-                        key={`${reminder.jobId}-${reminder.reminderId}`}
+                      <div key={`${reminder.jobId}-${reminder.reminderId}`}
                         className={`w-full text-left p-3 border rounded-lg transition-colors hover:bg-white ${
-                          isPastDue
-                            ? 'border-red-200 bg-red-50'
-                            : isDueTodayOrPast
-                              ? 'border-amber-200 bg-amber-50'
-                              : 'border-slate-200 bg-white'
-                        }`}
-                      >
+                          isPastDue ? 'border-red-200 bg-red-50' : isDueTodayOrPast ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-white'
+                        }`}>
                         <div className="flex items-start justify-between gap-3">
-                          <button
-                            type="button"
-                            onClick={() => setSelectedReminder(reminder)}
-                            className="flex-1 text-left"
-                          >
+                          <button type="button" onClick={() => setSelectedReminder(reminder)} className="flex-1 text-left">
                             <p className="text-sm font-semibold text-slate-900">{reminder.subject}</p>
                             <p className="text-xs text-slate-600 mt-0.5">{reminder.jobName}</p>
-                            {reminder.details && (
-                              <p className="text-xs text-slate-500 mt-1 line-clamp-2">{reminder.details}</p>
-                            )}
-                            <p className={`text-xs font-medium mt-1 ${
-                              isPastDue ? 'text-red-700' : isDueTodayOrPast ? 'text-amber-700' : 'text-slate-600'
-                            }`}>
+                            {reminder.details && <p className="text-xs text-slate-500 mt-1 line-clamp-2">{reminder.details}</p>}
+                            <p className={`text-xs font-medium mt-1 ${isPastDue ? 'text-red-700' : isDueTodayOrPast ? 'text-amber-700' : 'text-slate-600'}`}>
                               {new Date(reminder.dueAt).toLocaleString()}
                             </p>
                           </button>
                           <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleCompleteReminder(reminder);
-                              }}
-                              className="p-1.5 rounded text-green-600 hover:bg-green-50 transition-colors"
-                              title="Mark complete"
-                              disabled={updatingReminder}
-                            >
+                            <button type="button" onClick={(e) => { e.stopPropagation(); handleCompleteReminder(reminder); }}
+                              className="p-1.5 rounded text-green-600 hover:bg-green-50 transition-colors" title="Mark complete" disabled={updatingReminder}>
                               <Check size={14} />
                             </button>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteReminder(reminder);
-                              }}
-                              className="p-1.5 rounded text-red-600 hover:bg-red-50 transition-colors"
-                              title="Delete reminder"
-                              disabled={updatingReminder}
-                            >
+                            <button type="button" onClick={(e) => { e.stopPropagation(); handleDeleteReminder(reminder); }}
+                              className="p-1.5 rounded text-red-600 hover:bg-red-50 transition-colors" title="Delete reminder" disabled={updatingReminder}>
                               <Trash2 size={14} />
                             </button>
                           </div>
@@ -1487,11 +1511,8 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
               <h3 className="text-lg font-semibold text-slate-900">Create Next Reminder</h3>
-              <button
-                type="button"
-                onClick={() => setNextReminderFor(null)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
-              >
+              <button type="button" onClick={() => setNextReminderFor(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors">
                 <X size={18} />
               </button>
             </div>
@@ -1501,39 +1522,29 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
               </p>
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">Subject</label>
-                <input
-                  type="text"
-                  value={nextReminderForm.subject}
+                <input type="text" value={nextReminderForm.subject}
                   onChange={(e) => setNextReminderForm((f) => ({ ...f, subject: e.target.value }))}
                   placeholder="e.g. Follow up call"
-                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime"
-                />
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime" />
               </div>
               <div className="flex gap-3">
                 <div className="flex-1">
                   <label className="block text-xs font-medium text-slate-600 mb-1">Date</label>
-                  <input
-                    type="date"
-                    value={nextReminderForm.dueDate}
+                  <input type="date" value={nextReminderForm.dueDate}
                     onChange={(e) => setNextReminderForm((f) => ({ ...f, dueDate: e.target.value }))}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime"
-                  />
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime" />
                 </div>
                 <div className="flex-1">
                   <label className="block text-xs font-medium text-slate-600 mb-1">Time</label>
-                  <input
-                    type="time"
-                    value={nextReminderForm.dueTime}
+                  <input type="time" value={nextReminderForm.dueTime}
                     onChange={(e) => setNextReminderForm((f) => ({ ...f, dueTime: e.target.value }))}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime"
-                  />
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime" />
                 </div>
               </div>
               {commTemplates.length > 0 && (
                 <div>
                   <label className="block text-xs font-medium text-slate-600 mb-1">Template (optional)</label>
-                  <select
-                    defaultValue=""
+                  <select defaultValue=""
                     onChange={(e) => {
                       const tpl = commTemplates.find(t => t.id === e.target.value);
                       if (tpl) {
@@ -1541,39 +1552,26 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
                         setNextReminderForm((f) => ({ ...f, details: tpl.body.replace(/\[Name\]/gi, firstName) }));
                       }
                     }}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime"
-                  >
+                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime">
                     <option value="">— Select a template —</option>
-                    {commTemplates.map(t => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
-                    ))}
+                    {commTemplates.map(t => (<option key={t.id} value={t.id}>{t.name}</option>))}
                   </select>
                 </div>
               )}
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">Message / Details (optional)</label>
-                <textarea
-                  value={nextReminderForm.details}
+                <textarea value={nextReminderForm.details}
                   onChange={(e) => setNextReminderForm((f) => ({ ...f, details: e.target.value }))}
-                  rows={2}
-                  placeholder="Additional notes..."
-                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime resize-none"
-                />
+                  rows={2} placeholder="Additional notes..."
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime resize-none" />
               </div>
               <div className="pt-1 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={handleCreateNextReminder}
-                  disabled={updatingReminder}
-                  className="px-3 py-2 text-sm font-medium text-white bg-gf-lime rounded-lg hover:bg-gf-dark-green transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed"
-                >
+                <button type="button" onClick={handleCreateNextReminder} disabled={updatingReminder}
+                  className="px-3 py-2 text-sm font-medium text-white bg-gf-lime rounded-lg hover:bg-gf-dark-green transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed">
                   Create Reminder
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setNextReminderFor(null)}
-                  className="px-3 py-2 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
-                >
+                <button type="button" onClick={() => setNextReminderFor(null)}
+                  className="px-3 py-2 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">
                   No Thanks
                 </button>
               </div>
@@ -1587,11 +1585,8 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
               <h3 className="text-lg font-semibold text-slate-900">Reminder</h3>
-              <button
-                type="button"
-                onClick={() => setSelectedReminder(null)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
-              >
+              <button type="button" onClick={() => setSelectedReminder(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors">
                 <X size={18} />
               </button>
             </div>
@@ -1615,27 +1610,16 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
                 <p className="text-sm text-slate-700">{new Date(selectedReminderDetails.reminder.dueAt).toLocaleString()}</p>
               </div>
               <div className="pt-2 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleCompleteReminder(selectedReminder)}
-                  disabled={updatingReminder}
-                  className="px-3 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed"
-                >
+                <button type="button" onClick={() => handleCompleteReminder(selectedReminder)} disabled={updatingReminder}
+                  className="px-3 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed">
                   Mark Complete
                 </button>
-                <button
-                  type="button"
-                  onClick={() => handleDeleteReminder(selectedReminder)}
-                  disabled={updatingReminder}
-                  className="px-3 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed"
-                >
+                <button type="button" onClick={() => handleDeleteReminder(selectedReminder)} disabled={updatingReminder}
+                  className="px-3 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed">
                   Delete
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedReminder(null)}
-                  className="px-3 py-2 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
-                >
+                <button type="button" onClick={() => setSelectedReminder(null)}
+                  className="px-3 py-2 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">
                   Close
                 </button>
               </div>
@@ -1646,5 +1630,3 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
     </div>
   );
 }
-
-

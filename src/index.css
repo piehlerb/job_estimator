@@ -28,6 +28,30 @@
   display: none;
 }
 
+/* Numeric display utility - Archivo for tabular figures */
+.num {
+  font-family: 'Archivo', sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Bottom sheet slide-up animation */
+@keyframes sheetUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+.animate-sheet-up {
+  animation: sheetUp 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Toast pop-in animation */
+@keyframes pop {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-pop {
+  animation: pop 0.2s ease-out;
+}
+
 @layer components {
   .card {
     @apply bg-white rounded-lg shadow-sm border border-slate-200;

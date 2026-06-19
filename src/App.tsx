@@ -246,6 +246,7 @@ function App() {
   // User is authenticated or in offline mode - show main app
   return (
     <Layout
+      currentPage={currentPage}
       sidebarOpen={sidebarOpen}
       onSidebarToggle={() => setSidebarOpen(!sidebarOpen)}
       onNavigate={handleNavigation}

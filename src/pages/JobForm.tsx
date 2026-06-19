@@ -1,4 +1,4 @@
-import { ArrowLeft, Save, ChevronDown, ChevronUp, X, Plus, Trash2, Link, Shuffle, Check, Copy, FileText } from 'lucide-react';
+import { ArrowLeft, Save, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, X, Plus, Trash2, Link, Shuffle, Check, Copy, FileText } from 'lucide-react';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   getAllSystems,
@@ -134,6 +134,8 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
   const [showProductsSection, setShowProductsSection] = useState(false);
   const [selectedProductId, setSelectedProductId] = useState('');
   const [activeTab, setActiveTab] = useState<'details' | 'reminders' | 'actuals'>('details');
+  const [currentStep, setCurrentStep] = useState(0);
+  const STEP_LABELS = ['Customer', 'Measure', 'System', 'Add-ons', 'Price'] as const;
 
   // Actuals state (for Won jobs)
   const [actualInstallSchedule, setActualInstallSchedule] = useState<ActualDaySchedule[]>([]);
@@ -1898,9 +1900,84 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
 
   const selectedLaborers = getSelectedLaborers();
 
+  const marginPct = calculation && parseFloat(formData.totalPrice) > 0
+    ? ((parseFloat(formData.totalPrice) - calculation.totalCosts) / parseFloat(formData.totalPrice)) * 100
+    : 0;
+  const perSqft = calculation && parseFloat(formData.floorFootage) > 0
+    ? parseFloat(formData.totalPrice) / parseFloat(formData.floorFootage)
+    : 0;
+
   return (
-    <div className="p-3 sm:p-4 md:p-6 lg:p-8 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between mb-4 sm:mb-6">
+    <div className="md:p-4 lg:p-8 max-w-6xl mx-auto">
+      {/* Mobile form header */}
+      <div className="md:hidden sticky top-0 z-20 bg-[#0a0a0a] text-white px-3.5 py-3 flex items-center gap-2.5">
+        <button onClick={onBack}
+          className="w-[38px] h-[38px] rounded-[10px] bg-[#1c1c1c] border border-[#2a2a2a] flex items-center justify-center">
+          <ChevronLeft size={20} />
+        </button>
+        <span className="flex-1 font-heading font-extrabold text-[17px]">{jobId ? 'Edit Estimate' : 'New Estimate'}</span>
+        {jobId && onViewJobSheet && (
+          <button type="button" onClick={() => onViewJobSheet(jobId)}
+            className="p-2 rounded-[10px] bg-[#1c1c1c] border border-[#2a2a2a]">
+            <FileText size={16} />
+          </button>
+        )}
+      </div>
+
+      {/* Mobile live total bar */}
+      <div className="md:hidden sticky top-[62px] z-[18] bg-gradient-to-br from-[#0f172a] to-[#1e293b] text-white px-[18px] py-[13px] flex items-center justify-between shadow-lg">
+        <div>
+          <div className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wide flex items-center gap-1.5">
+            {calculation && formData.totalPrice === calculation.suggestedTotal.toFixed(2) && (
+              <span className="text-gf-lime">Suggested ·</span>
+            )}
+            Total Price
+          </div>
+          <div className="num text-[30px] font-black tracking-tight leading-none mt-0.5">
+            ${parseFloat(formData.totalPrice || '0').toLocaleString('en-US', { maximumFractionDigits: 0 })}
+          </div>
+        </div>
+        <div className="flex items-center gap-[18px]">
+          <div className="text-right">
+            <div className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wide">Margin</div>
+            <div className={`num text-[20px] font-extrabold ${marginPct >= 35 ? 'text-[#4ade80]' : marginPct >= 22 ? 'text-amber-400' : 'text-red-400'}`}>
+              {marginPct.toFixed(0)}%
+            </div>
+          </div>
+          {perSqft > 0 && (
+            <div className="text-right">
+              <div className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wide">$/ft²</div>
+              <div className="num text-[20px] font-extrabold">${perSqft.toFixed(2)}</div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Mobile stepper (Details tab only) */}
+      {activeTab === 'details' && (
+        <div className="md:hidden sticky top-[130px] z-[15] bg-white border-b border-slate-200 py-3 px-2.5 flex justify-between overflow-x-auto scrollbar-hide gap-0.5">
+          {STEP_LABELS.map((label, i) => (
+            <button key={i} type="button" onClick={() => setCurrentStep(i)}
+              className="flex flex-col items-center gap-[5px] flex-1 min-w-[60px] bg-transparent border-none cursor-pointer">
+              <span className={`num w-7 h-7 rounded-full border-[1.5px] flex items-center justify-center text-[12.5px] font-extrabold ${
+                currentStep === i
+                  ? 'bg-gf-lime border-gf-lime text-white'
+                  : i < currentStep
+                    ? 'border-gf-lime text-gf-lime'
+                    : 'border-slate-300 text-slate-400'
+              }`}>
+                {i < currentStep ? '✓' : i + 1}
+              </span>
+              <span className={`text-[11px] font-semibold ${
+                currentStep === i ? 'text-slate-900' : 'text-slate-400'
+              }`}>{label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Desktop back button row */}
+      <div className="hidden md:flex items-center justify-between mb-4 sm:mb-6">
         <button
           onClick={onBack}
           className="flex items-center gap-2 text-slate-600 hover:text-slate-900 transition-colors"
@@ -1920,8 +1997,8 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
         )}
       </div>
 
-      <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4 sm:p-6 md:p-8">
-        <div className="flex items-center justify-between mb-4 sm:mb-6">
+      <div className="bg-white md:rounded-lg md:shadow-sm md:border md:border-slate-200 p-4 sm:p-6 md:p-8">
+        <div className="hidden md:flex items-center justify-between mb-4 sm:mb-6">
           <h2 className="text-xl sm:text-2xl font-bold text-slate-900">{jobId ? 'Edit Job' : 'Create New Job'}</h2>
           <div className="flex items-center gap-2">
             {jobId && !existingJob?.groupId && (
@@ -2038,7 +2115,7 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
           />
         )}
 
-        <form id="job-form" onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
+        <form id="job-form" onSubmit={handleSubmit} className="space-y-4 sm:space-y-6 pb-20 md:pb-0">
           <div className="flex items-center gap-2 border-b border-slate-200 pb-3">
             <button
               type="button"
@@ -2084,7 +2161,8 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
 
           {activeTab === 'details' && (
             <>
-          {/* Job Inputs */}
+          {/* Step 0: Customer */}
+          <div className={`${currentStep === 0 ? 'block' : 'hidden'} md:block`}>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             <div className="md:col-span-2 lg:col-span-1">
               <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Job Name *</label>
@@ -2302,7 +2380,12 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
                 </div>
               )}
             </div>
+          </div>
+          </div>
 
+          {/* Step 2: System (part 1) */}
+          <div className={`${currentStep === 2 ? 'block' : 'hidden'} md:block`}>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             <div>
               <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Chip System *</label>
               <select
@@ -2318,7 +2401,12 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
                 ))}
               </select>
             </div>
+          </div>
+          </div>
 
+          {/* Step 1: Measure (part 1) */}
+          <div className={`${currentStep === 1 ? 'block' : 'hidden'} md:block`}>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             <div>
               <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Floor Sq Footage</label>
               <input
@@ -2362,7 +2450,12 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
                 className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
               />
             </div>
+          </div>
+          </div>
 
+          {/* Step 2: System (part 2) */}
+          <div className={`${currentStep === 2 ? 'block' : 'hidden'} md:block`}>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             <div className="relative">
               <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Chip Blend</label>
               <input
@@ -2512,7 +2605,12 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
                 </div>
               </div>
             )}
+          </div>
+          </div>
 
+          {/* Step 3: Add-ons */}
+          <div className={`${currentStep === 3 ? 'block' : 'hidden'} md:block`}>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             <div>
               <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Anti-Slip</label>
               <div className="flex gap-4">
@@ -2675,6 +2773,10 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
             </div>
 
           </div>
+          </div>
+
+          {/* Step 1: Measure (part 2 - Install Days + Schedule) */}
+          <div className={`${currentStep === 1 ? 'block' : 'hidden'} md:block`}>
 
           {/* Install Days - just above daily schedule */}
           <div>
@@ -2706,6 +2808,10 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
               defaultDayHours={pricing.defaultDayHours ?? 8}
             />
           </div>
+          </div>
+
+          {/* Step 4: Price */}
+          <div className={`${currentStep === 4 ? 'block' : 'hidden'} md:block`}>
 
           {/* Calculation Results */}
           {calculation && (
@@ -3205,6 +3311,7 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
               </div>
             </div>
           )}
+          </div>
 
             </>
           )}
@@ -3615,7 +3722,8 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
             />
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+          {/* Desktop save/cancel */}
+          <div className="hidden md:flex flex-col sm:flex-row gap-2 sm:gap-3">
             <button
               type="submit"
               disabled={saving}
@@ -3632,6 +3740,39 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
             >
               Cancel
             </button>
+          </div>
+
+          {/* Mobile bottom nav */}
+          <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-4 py-3 flex items-center gap-3 z-40">
+            {activeTab === 'details' && currentStep > 0 && (
+              <button
+                type="button"
+                onClick={() => setCurrentStep(currentStep - 1)}
+                className="flex items-center gap-1 px-4 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-semibold text-sm"
+              >
+                <ChevronLeft size={16} />
+                Back
+              </button>
+            )}
+            {activeTab === 'details' && currentStep < 4 ? (
+              <button
+                type="button"
+                onClick={() => setCurrentStep(currentStep + 1)}
+                className="flex-1 py-2.5 rounded-xl bg-gf-lime text-white font-bold text-sm text-center"
+              >
+                Continue
+                <ChevronRight size={16} className="inline ml-1" />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={saving}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gf-lime text-white font-bold text-sm disabled:bg-slate-400"
+              >
+                <Save size={16} />
+                {saving ? 'Saving...' : jobId ? 'Update' : 'Save Estimate'}
+              </button>
+            )}
           </div>
         </form>
       </div>
