@@ -1,12 +1,33 @@
-import { Menu, X, Wifi, WifiOff, Cog, Users, DollarSign, Home, Plus, Package, CalendarDays, LogOut, User, RefreshCw, Layers, SlidersHorizontal, BarChart3, Contact, Handshake, ShoppingBag, ShoppingCart, Building2, HardDrive } from 'lucide-react';
+import { Menu, X, Wifi, WifiOff, Cog, Users, DollarSign, Home, Plus, Package, CalendarDays, LogOut, User, RefreshCw, Layers, SlidersHorizontal, BarChart3, Contact, Handshake, ShoppingBag, ShoppingCart, Building2, HardDrive, ChevronLeft } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useSyncStatus } from '../contexts/SyncContext';
 import { SyncStatusIndicator } from './SyncStatusIndicator';
 import { signOut } from '../lib/auth';
 import { APP_VERSION } from '../version';
 
+import type { AppPage } from '../lib/permissions';
+
+const PAGE_TITLES: Partial<Record<AppPage, string>> = {
+  'chip-systems': 'Chip Systems',
+  'chip-blends': 'Chip Blends',
+  'laborers': 'Laborers',
+  'costs': 'Costs',
+  'pricing': 'Pricing',
+  'settings': 'Settings',
+  'inventory': 'Inventory',
+  'shopping-list': 'Shopping List',
+  'calendar': 'Calendar',
+  'reporting': 'Reporting',
+  'customers': 'Customers',
+  'referral-associates': 'Referral Associates',
+  'products': 'Products',
+  'organization': 'Organization',
+  'backup': 'Backup',
+};
+
 interface LayoutProps {
   children: React.ReactNode;
+  currentPage?: string;
   sidebarOpen: boolean;
   onSidebarToggle: () => void;
   onNavigate: (page: 'dashboard' | 'new-job' | 'edit-job' | 'chip-systems' | 'chip-blends' | 'laborers' | 'costs' | 'pricing' | 'settings' | 'inventory' | 'shopping-list' | 'calendar' | 'reporting' | 'customers' | 'referral-associates' | 'products' | 'organization' | 'backup') => void;
@@ -16,6 +37,7 @@ interface LayoutProps {
 
 export default function Layout({
   children,
+  currentPage,
   sidebarOpen,
   onSidebarToggle,
   onNavigate,
@@ -31,7 +53,7 @@ export default function Layout({
   const handleLogout = async () => {
     if (confirm('Are you sure you want to log out?')) {
       await signOut();
-      window.location.reload(); // Reload to show login screen
+      window.location.reload();
     }
   };
 
@@ -52,9 +74,14 @@ export default function Layout({
 
     return lastSyncTime.toLocaleDateString();
   };
+
+  const isDashboard = currentPage === 'dashboard';
+  const isFormPage = currentPage === 'new-job' || currentPage === 'edit-job';
+  const pageTitle = PAGE_TITLES[currentPage as AppPage] || '';
+
   return (
-    <div className="flex h-screen bg-slate-50 overflow-hidden">
-      {/* Backdrop overlay for mobile */}
+    <div className="flex h-screen bg-slate-200 md:bg-slate-50 overflow-hidden">
+      {/* Backdrop overlay for mobile sidebar */}
       {sidebarOpen && (
         <div
           className="fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden"
@@ -62,18 +89,27 @@ export default function Layout({
         />
       )}
 
+      {/* Sidebar — hidden on mobile by default, slides in when toggled */}
       <aside
         className={`fixed inset-y-0 left-0 w-64 bg-black text-white shadow-lg transform transition-transform duration-300 ease-in-out z-40 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         } md:static md:translate-x-0`}
       >
         <div className="flex flex-col h-full">
-          <div className="p-4 md:p-6 border-b border-gray-900">
-            <h1 className="text-xl md:text-2xl font-bold text-gf-electric">GFS</h1>
-            <p className="text-slate-400 text-xs md:text-sm mt-1">Estimation App</p>
-            <div className="mt-3 inline-flex items-center rounded-md bg-gf-electric/20 px-2.5 py-1 text-xs font-semibold text-gf-electric border border-gf-electric/40">
-              Version {APP_VERSION}
+          <div className="p-4 md:p-6 border-b border-gray-900 flex items-center justify-between">
+            <div>
+              <h1 className="text-xl md:text-2xl font-bold text-gf-electric">GFS</h1>
+              <p className="text-slate-400 text-xs md:text-sm mt-1">Estimation App</p>
+              <div className="mt-3 inline-flex items-center rounded-md bg-gf-electric/20 px-2.5 py-1 text-xs font-semibold text-gf-electric border border-gf-electric/40">
+                Version {APP_VERSION}
+              </div>
             </div>
+            <button
+              onClick={onSidebarToggle}
+              className="md:hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-gray-800 transition-colors"
+            >
+              <X size={20} />
+            </button>
           </div>
 
           <nav className="flex-1 overflow-y-auto scrollbar-hide p-2 md:p-4 space-y-1 md:space-y-2">
@@ -239,7 +275,6 @@ export default function Layout({
           </nav>
 
           <div className="p-2 md:p-4 border-t border-gray-900 space-y-2">
-            {/* Organization indicator (if authenticated) */}
             {user && (
               <button
                 onClick={() => onNavigate('organization')}
@@ -257,14 +292,12 @@ export default function Layout({
               </button>
             )}
 
-            {/* Sync Status (if authenticated) */}
             {user && (
               <div className="px-3 py-2 md:px-4 rounded-lg bg-gray-900/50">
                 <SyncStatusIndicator />
               </div>
             )}
 
-            {/* User Info (if authenticated) */}
             {user && (
               <div className="px-3 py-2 md:px-4 rounded-lg bg-gray-900/50">
                 <div className="flex items-center gap-2 mb-2">
@@ -281,7 +314,6 @@ export default function Layout({
               </div>
             )}
 
-            {/* Online/Offline Status */}
             <div className="flex items-center justify-between px-3 py-2 md:px-4 rounded-lg bg-gray-900">
               <div className="flex items-center gap-2">
                 {isOnline ? (
@@ -303,35 +335,77 @@ export default function Layout({
       </aside>
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="bg-white border-b border-slate-200 shadow-sm">
-          <div className="px-3 py-3 md:px-6 md:py-4 flex items-center justify-between">
-            <button
-              onClick={onSidebarToggle}
-              className="md:hidden p-2 rounded-lg hover:bg-slate-100 transition-colors"
-            >
-              {sidebarOpen ? <X size={22} /> : <Menu size={22} />}
-            </button>
+        {/* Mobile header — dark, matches design */}
+        {!isFormPage && (
+          <div className="md:hidden bg-[#0a0a0a] text-white">
+            <div className="px-4 py-3 flex items-center justify-between">
+              {isDashboard ? (
+                <>
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-[34px] h-[34px] rounded-[9px] bg-gradient-to-br from-[#b5e61d] to-[#39b54a] flex items-center justify-center font-heading font-black text-[13px] text-[#0a0a0a] tracking-tight">
+                      GFS
+                    </div>
+                    <div>
+                      <div className="font-heading font-extrabold text-[19px] leading-none">Estimates</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 bg-[#1c1c1c] border border-[#2a2a2a] px-3 py-1.5 rounded-full">
+                      <span className={`w-[7px] h-[7px] rounded-full ${isOnline ? 'bg-[#4cfa3e] shadow-[0_0_8px_#4cfa3e]' : 'bg-orange-400'}`} />
+                      <span className="text-[11px] font-semibold text-slate-300">
+                        {isOnline ? 'Online' : 'Offline'}
+                      </span>
+                    </div>
+                    <button
+                      onClick={onSidebarToggle}
+                      className="p-1.5 rounded-lg bg-[#1c1c1c] border border-[#2a2a2a] text-slate-300"
+                    >
+                      <Menu size={18} />
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2.5">
+                    <button
+                      onClick={() => onNavigate('dashboard')}
+                      className="w-[38px] h-[38px] rounded-[10px] bg-[#1c1c1c] border border-[#2a2a2a] flex items-center justify-center"
+                    >
+                      <ChevronLeft size={20} />
+                    </button>
+                    <span className="font-heading font-extrabold text-[17px]">{pageTitle}</span>
+                  </div>
+                  <button
+                    onClick={onSidebarToggle}
+                    className="p-1.5 rounded-lg bg-[#1c1c1c] border border-[#2a2a2a] text-slate-300"
+                  >
+                    <Menu size={18} />
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
-            <div className="flex-1 hidden md:block" />
-
-            <div className="flex items-center gap-2 md:gap-3">
-              {/* Sync Status (only show when authenticated) */}
+        {/* Desktop header */}
+        <header className="hidden md:block bg-white border-b border-slate-200 shadow-sm">
+          <div className="px-6 py-4 flex items-center justify-between">
+            <div className="flex-1" />
+            <div className="flex items-center gap-3">
               {user && onManualSync && isOnline && !isSyncing && (
                 <button
                   onClick={onManualSync}
-                  className="flex items-center gap-1.5 md:gap-2 px-2 py-1 md:px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full text-xs md:text-sm font-medium transition-colors"
+                  className="flex items-center gap-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full text-sm font-medium transition-colors py-1"
                   title={`Last sync: ${formatLastSyncTime()}`}
                 >
                   <RefreshCw size={14} className="md:w-4 md:h-4" />
-                  <span className="hidden sm:inline">Sync Now</span>
+                  <span>Sync Now</span>
                 </button>
               )}
-
               {!isOnline && (
-                <div className="flex items-center gap-1.5 md:gap-2 px-2 py-1 md:px-3 bg-orange-50 text-orange-700 rounded-full text-xs md:text-sm font-medium">
-                  <WifiOff size={14} className="md:w-4 md:h-4" />
-                  <span className="hidden sm:inline">Offline Mode</span>
-                  <span className="sm:hidden">Offline</span>
+                <div className="flex items-center gap-2 px-3 bg-orange-50 text-orange-700 rounded-full text-sm font-medium py-1">
+                  <WifiOff size={14} />
+                  <span>Offline Mode</span>
                 </div>
               )}
             </div>
