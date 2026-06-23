@@ -3,7 +3,7 @@
  * Shows sync status in the UI with error notifications
  */
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSyncStatus } from '../contexts/SyncContext';
 
 export function SyncStatusIndicator() {

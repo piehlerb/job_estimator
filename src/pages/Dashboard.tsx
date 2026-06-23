@@ -4,6 +4,8 @@ import { getAllJobs, deleteJob, updateJob, getDefaultCosts, getCosts, getPricing
 import { Job, JobCalculation, Costs, Pricing, JobStatus, JobReminder, CommunicationTemplate } from '../types';
 import { calculateJobOutputs } from '../lib/calculations';
 import { useAuth } from '../contexts/AuthContext';
+import { loadOlderJobsFromSupabase } from '../lib/sync';
+import { getJobWorkingSetCutoff } from '../lib/jobSyncPolicy';
 
 interface DashboardProps {
   onViewJobSheet: (id: string) => void;
@@ -67,6 +69,10 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [showFilterSheet, setShowFilterSheet] = useState(false);
   const [dashboardPricing, setDashboardPricing] = useState<Pricing>(getDefaultPricing());
+  const [loadingOlderJobs, setLoadingOlderJobs] = useState(false);
+  const [olderJobsCursor, setOlderJobsCursor] = useState(() => getJobWorkingSetCutoff().date);
+  const [hasMoreOlderJobs, setHasMoreOlderJobs] = useState(true);
+  const [olderJobsMessage, setOlderJobsMessage] = useState('');
 
   // Persist filter/sort state whenever it changes
   useEffect(() => {
@@ -154,6 +160,39 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
       console.error('Error loading jobs:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleLoadOlderJobs = async () => {
+    if (loadingOlderJobs || !hasMoreOlderJobs) return;
+
+    setLoadingOlderJobs(true);
+    setOlderJobsMessage('');
+
+    try {
+      const result = await loadOlderJobsFromSupabase({
+        beforeInstallDate: olderJobsCursor,
+        limit: 100,
+      });
+
+      if (result.errors.length > 0) {
+        setOlderJobsMessage(result.errors[0]);
+        return;
+      }
+
+      if (result.oldestInstallDate) {
+        setOlderJobsCursor(result.oldestInstallDate);
+      }
+      setHasMoreOlderJobs(result.hasMore ?? false);
+
+      if (result.recordsPulled === 0) {
+        setOlderJobsMessage('No older jobs found.');
+      } else {
+        setOlderJobsMessage(`${result.recordsPulled} older job${result.recordsPulled === 1 ? '' : 's'} loaded.`);
+        await loadJobs();
+      }
+    } finally {
+      setLoadingOlderJobs(false);
     }
   };
 
@@ -1182,6 +1221,23 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
               <Plus size={16} /> Create Job
             </button>
           )}
+          {(hasMoreOlderJobs || olderJobsMessage) && (
+            <div className="mt-3 flex flex-col items-center gap-2">
+              {hasMoreOlderJobs && (
+                <button
+                  type="button"
+                  onClick={handleLoadOlderJobs}
+                  disabled={loadingOlderJobs}
+                  className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-white border border-slate-300 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {loadingOlderJobs ? 'Loading...' : 'Load Older Jobs'}
+                </button>
+              )}
+              {olderJobsMessage && (
+                <p className="text-xs text-slate-500 text-center">{olderJobsMessage}</p>
+              )}
+            </div>
+          )}
         </div>
       ) : (
         <>
@@ -1390,6 +1446,23 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
               </tbody>
             </table>
           </div>
+          {(hasMoreOlderJobs || olderJobsMessage) && (
+            <div className="border-t border-slate-200 bg-slate-50 px-3 sm:px-6 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-center gap-2">
+              {hasMoreOlderJobs && (
+                <button
+                  type="button"
+                  onClick={handleLoadOlderJobs}
+                  disabled={loadingOlderJobs}
+                  className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-white border border-slate-300 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {loadingOlderJobs ? 'Loading...' : 'Load Older Jobs'}
+                </button>
+              )}
+              {olderJobsMessage && (
+                <p className="text-xs text-slate-500 text-center">{olderJobsMessage}</p>
+              )}
+            </div>
+          )}
         </>
       )}
 

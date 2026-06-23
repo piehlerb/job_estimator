@@ -12,6 +12,11 @@
   },
   "include": [
     "src/lib/inventoryActuals.ts",
-    "src/lib/inventoryActuals.test.ts"
+    "src/lib/inventoryActuals.test.ts",
+    "src/lib/leadPipeline.ts",
+    "src/lib/leadPipeline.test.ts",
+    "src/lib/jobSyncPolicy.ts",
+    "src/lib/jobSyncPolicy.test.ts",
+    "src/types/index.ts"
   ]
 }

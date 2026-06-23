@@ -121,6 +121,107 @@ export interface Customer {
   deleted?: boolean;
 }
 
+export type LeadStage =
+  | 'New'
+  | 'Contact Attempted'
+  | 'Engaged'
+  | 'Estimate Booked'
+  | 'Estimate Completed'
+  | 'Quoted'
+  | 'Won'
+  | 'Lost'
+  | 'Disqualified';
+
+export type LeadDispositionReason =
+  | 'Not Interested'
+  | 'Out of Territory'
+  | 'Wrong Service'
+  | 'Bad Contact Info'
+  | 'Duplicate'
+  | 'Spam'
+  | 'Unresponsive'
+  | 'Price/Budget'
+  | 'Timing'
+  | 'Other';
+
+export type GhlWebhookEventType =
+  | 'lead.created'
+  | 'appointment.booked'
+  | 'appointment.rescheduled'
+  | 'appointment.canceled'
+  | 'appointment.completed';
+
+export type GhlWebhookProcessingStatus = 'pending' | 'processed' | 'failed' | 'needs_review' | 'ignored';
+
+export interface GhlWebhookSource {
+  id: string;
+  name: string;
+  secretHash?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  deleted?: boolean;
+}
+
+export interface GhlWebhookEvent {
+  id: string;
+  webhookSourceId: string;
+  eventType: GhlWebhookEventType;
+  dedupeKey: string;
+  receivedAt: string;
+  processedAt?: string;
+  processingStatus: GhlWebhookProcessingStatus;
+  errorMessage?: string;
+  rawPayload: Record<string, unknown>;
+  sourceWorkflow?: string;
+  createdAt: string;
+  updatedAt: string;
+  deleted?: boolean;
+}
+
+export interface Lead {
+  id: string;
+  ghlContactId?: string;
+  name?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  source?: string;
+  campaign?: string;
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
+  utmContent?: string;
+  firstSeenAt: string;
+  lastEventAt?: string;
+  stage: LeadStage;
+  dispositionReason?: LeadDispositionReason;
+  dispositionNotes?: string;
+  closedAt?: string;
+  customerId?: string;
+  createdAt: string;
+  updatedAt: string;
+  deleted?: boolean;
+}
+
+export type LeadAppointmentStatus = 'booked' | 'rescheduled' | 'canceled' | 'no_show' | 'completed';
+
+export interface LeadAppointment {
+  id: string;
+  leadId: string;
+  ghlAppointmentId?: string;
+  scheduledStartAt?: string;
+  scheduledEndAt?: string;
+  status: LeadAppointmentStatus;
+  calendarName?: string;
+  assignedUser?: string;
+  createdFromEventId?: string;
+  lastEventId?: string;
+  createdAt: string;
+  updatedAt: string;
+  deleted?: boolean;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -231,6 +332,7 @@ export interface Job {
   name: string;
   customerName?: string;
   customerAddress?: string;
+  leadId?: string;
   systemId: string;
   floorFootage: number;
   verticalFootage: number;

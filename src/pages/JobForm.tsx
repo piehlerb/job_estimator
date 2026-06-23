@@ -21,6 +21,8 @@ import {
   getAllJobsByGroupId,
   getAllTintInventory,
   getAllCommTemplates,
+  getLead,
+  updateLead,
   getTopCoatInventory,
   saveTopCoatInventory,
   getBaseCoatInventory,
@@ -30,7 +32,7 @@ import {
   saveChipInventory,
   saveTintInventory,
 } from '../lib/db';
-import { BaseCoatInventory, BaseColor, ChipSystem, Costs, Pricing, Job, JobCalculation, JobStatus, Laborer, InstallDaySchedule, ActualDaySchedule, ActualCosts, ChipInventory, CoatingRemovalType, Product, JobProduct, BaseCoatColor, JobReminder, JobFollowUp, TintInventory, CommunicationTemplate, JobEvaluation, InventoryActualsApplied, MiscInventory, TopCoatInventory } from '../types';
+import { BaseCoatInventory, BaseColor, ChipSystem, Costs, Pricing, Job, JobCalculation, JobStatus, Laborer, InstallDaySchedule, ActualDaySchedule, ActualCosts, ChipInventory, CoatingRemovalType, Product, JobProduct, BaseCoatColor, JobReminder, JobFollowUp, TintInventory, CommunicationTemplate, JobEvaluation, InventoryActualsApplied, MiscInventory, TopCoatInventory, Lead } from '../types';
 import { calculateJobOutputs, calculateActualCosts } from '../lib/calculations';
 import InstallDayScheduleComponent from '../components/InstallDaySchedule';
 import { convertLegacyJobToSchedule } from '../lib/jobMigration';
@@ -42,6 +44,7 @@ import {
   buildInventoryReviewRows,
   type InventoryReviewRow,
 } from '../lib/inventoryActuals';
+import { stageForLinkedJobStatus } from '../lib/leadPipeline';
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -63,6 +66,7 @@ function parseJobTags(input: string): string[] {
 
 interface JobFormProps {
   jobId?: string;
+  leadId?: string;
   onBack: () => void;
   onEditJob?: (jobId: string) => void;
   onViewJobSheet?: (jobId: string) => void;
@@ -105,7 +109,7 @@ function createDefaultMiscInventory(): MiscInventory {
   };
 }
 
-export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: JobFormProps) {
+export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobSheet }: JobFormProps) {
   const [systems, setSystems] = useState<ChipSystem[]>([]);
   const [costs, setCosts] = useState<Costs>(getDefaultCosts());
   const [pricing, setPricing] = useState<Pricing>(getDefaultPricing());
@@ -127,6 +131,7 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
   const [showTagDropdown, setShowTagDropdown] = useState(false);
   const [availableCustomers, setAvailableCustomers] = useState<CustomerOption[]>([]);
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+  const [linkedLead, setLinkedLead] = useState<Lead | null>(null);
 
   // Products state
   const [jobProducts, setJobProducts] = useState<JobProduct[]>([]);
@@ -203,6 +208,7 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
 
   const [formData, setFormData] = useState({
     name: '',
+    leadId: '',
     customerName: '',
     customerAddress: '',
     system: '',
@@ -408,6 +414,7 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
   const loadData = async () => {
     console.log('[JobForm] Loading data, jobId:', jobId);
     setLoading(true);
+    setLinkedLead(null);
     try {
       const allSystems = await getAllSystems();
       const storedCosts = await getCosts();
@@ -490,6 +497,20 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
         if (defaultSystem) {
           setFormData((prev) => ({ ...prev, system: defaultSystem.id }));
         }
+
+        if (leadId) {
+          const lead = await getLead(leadId);
+          if (lead) {
+            setLinkedLead(lead);
+            setFormData((prev) => ({
+              ...prev,
+              leadId: lead.id,
+              name: prev.name || `${lead.name || 'Lead'} Estimate`,
+              customerName: lead.name || prev.customerName,
+              customerAddress: lead.address || prev.customerAddress,
+            }));
+          }
+        }
       }
 
       if (jobId) {
@@ -498,8 +519,13 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
         console.log('[JobForm] Job loaded:', !!job);
         if (job) {
           setExistingJob(job);
+          if (job.leadId) {
+            const lead = await getLead(job.leadId);
+            setLinkedLead(lead);
+          }
           setFormData({
             name: job.name,
+            leadId: job.leadId || '',
             customerName: job.customerName || '',
             customerAddress: job.customerAddress || '',
             system: job.systemId,
@@ -1631,6 +1657,22 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
     }
   };
 
+  const syncLinkedLeadFromJob = async (job: Job) => {
+    if (!job.leadId) return;
+
+    const lead = await getLead(job.leadId);
+    if (!lead) return;
+
+    const now = new Date().toISOString();
+    const nextStage = stageForLinkedJobStatus(job.status);
+    await updateLead({
+      ...lead,
+      stage: nextStage,
+      closedAt: nextStage === 'Won' || nextStage === 'Lost' ? lead.closedAt || now : lead.closedAt,
+      updatedAt: now,
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -1673,6 +1715,7 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
       // Normalize chip blend name before saving (trim whitespace, title case)
       const normalizedChipBlend = normalizeChipBlendName(formData.chipBlend);
       const normalizedTags = parseJobTags(formData.tags);
+      const savedAt = new Date().toISOString();
 
       // If chip blend is entered and not in the list, add it
       if (normalizedChipBlend && !chipBlends.some((b) => normalizeChipBlendName(b.name) === normalizedChipBlend)) {
@@ -1687,6 +1730,7 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
       const job: Job = {
         id: jobId || generateId(),
         name: formData.name,
+        leadId: formData.leadId || undefined,
         customerName: formData.customerName || undefined,
         customerAddress: formData.customerAddress || undefined,
         systemId: formData.system,
@@ -1757,8 +1801,8 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
         groupId: existingJob?.groupId,
         groupType: existingJob?.groupType,
         isPrimaryEstimate: existingJob?.isPrimaryEstimate,
-        createdAt: existingJob?.createdAt || new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        createdAt: existingJob?.createdAt || savedAt,
+        updatedAt: savedAt,
         synced: false,
       };
 
@@ -1767,6 +1811,7 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
       } else {
         await addJob(job);
       }
+      await syncLinkedLeadFromJob(job);
 
       const { snapshot, deltas } = buildInventoryActualsUpdate(jobSourceFrom(job), new Date().toISOString());
 
@@ -2113,6 +2158,23 @@ export default function JobForm({ jobId, onBack, onEditJob, onViewJobSheet }: Jo
             onUpdate={handleUpdateToCurrentValues}
             onDismiss={handleKeepOriginalValues}
           />
+        )}
+
+        {linkedLead && (
+          <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-semibold">Linked Lead</p>
+                <p className="text-blue-800">
+                  {linkedLead.name || linkedLead.phone || linkedLead.email || 'Unknown Lead'}
+                  {linkedLead.source ? ` from ${linkedLead.source}` : ''}
+                </p>
+              </div>
+              <span className="inline-flex w-fit items-center rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-blue-700">
+                {linkedLead.stage}
+              </span>
+            </div>
+          </div>
         )}
 
         <form id="job-form" onSubmit={handleSubmit} className="space-y-4 sm:space-y-6 pb-20 md:pb-0">

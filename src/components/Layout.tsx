@@ -1,10 +1,9 @@
-import { Menu, X, Wifi, WifiOff, Cog, Users, DollarSign, Home, Plus, Package, CalendarDays, LogOut, User, RefreshCw, Layers, SlidersHorizontal, BarChart3, Contact, Handshake, ShoppingBag, ShoppingCart, Building2, HardDrive, ChevronLeft } from 'lucide-react';
+import { Menu, X, Wifi, WifiOff, Cog, Users, DollarSign, Home, Plus, Package, CalendarDays, LogOut, User, RefreshCw, Layers, SlidersHorizontal, BarChart3, Contact, Handshake, ShoppingBag, ShoppingCart, Building2, HardDrive, ChevronLeft, Megaphone } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useSyncStatus } from '../contexts/SyncContext';
 import { SyncStatusIndicator } from './SyncStatusIndicator';
 import { signOut } from '../lib/auth';
 import { APP_VERSION } from '../version';
-
 import type { AppPage } from '../lib/permissions';
 
 const PAGE_TITLES: Partial<Record<AppPage, string>> = {
@@ -30,7 +29,7 @@ interface LayoutProps {
   currentPage?: string;
   sidebarOpen: boolean;
   onSidebarToggle: () => void;
-  onNavigate: (page: 'dashboard' | 'new-job' | 'edit-job' | 'chip-systems' | 'chip-blends' | 'laborers' | 'costs' | 'pricing' | 'settings' | 'inventory' | 'shopping-list' | 'calendar' | 'reporting' | 'customers' | 'referral-associates' | 'products' | 'organization' | 'backup') => void;
+  onNavigate: (page: AppPage) => void;
   isOnline: boolean;
   onManualSync?: () => void;
 }
@@ -49,6 +48,7 @@ export default function Layout({
   const canWriteJobs = permissions.jobs === 'write';
   const canSeeJobs = permissions.jobs !== 'none';
   const canSeeCalendar = permissions.calendar !== 'none';
+  const canSeeLeads = permissions.customers || permissions.reporting;
 
   const handleLogout = async () => {
     if (confirm('Are you sure you want to log out?')) {
@@ -170,6 +170,16 @@ export default function Layout({
               >
                 <BarChart3 size={18} className="md:w-5 md:h-5" />
                 <span>Reporting</span>
+              </button>
+            )}
+
+            {canSeeLeads && (
+              <button
+                onClick={() => onNavigate('leads')}
+                className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
+              >
+                <Megaphone size={18} className="md:w-5 md:h-5" />
+                <span>Leads</span>
               </button>
             )}
 

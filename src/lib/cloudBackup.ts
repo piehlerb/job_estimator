@@ -140,7 +140,7 @@ async function pruneOldBackups(userId: string, orgId: string | null): Promise<vo
     .from('backups')
     .select('id')
     .order('created_at', { ascending: false })
-    .offset(MAX_BACKUPS);
+    .range(MAX_BACKUPS, MAX_BACKUPS + 999);
 
   if (orgId) {
     query = query.eq('org_id', orgId);

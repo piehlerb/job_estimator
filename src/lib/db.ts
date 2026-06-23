@@ -1,7 +1,7 @@
-import { ChipSystem, PricingVariable, Job, Costs, Laborer, ChipInventory, TintInventory, TopCoatInventory, BaseCoatInventory, MiscInventory, Pricing, Customer, Product, BaseCoatColor, ShoppingItem, CommunicationTemplate, ReferralAssociate, ReferralService } from '../types';
+import { ChipSystem, PricingVariable, Job, Costs, Laborer, ChipInventory, TintInventory, TopCoatInventory, BaseCoatInventory, MiscInventory, Pricing, Customer, Product, BaseCoatColor, ShoppingItem, CommunicationTemplate, ReferralAssociate, ReferralService, Lead, LeadAppointment } from '../types';
 
 const DB_NAME = 'JobEstimator';
-const DB_VERSION = 18; // Bumped to match browser state after worktree sessions
+const DB_VERSION = 20; // Adds lead attribution stores
 
 // Auto-sync flag - can be disabled for batch operations
 let autoSyncEnabled = true;
@@ -96,15 +96,31 @@ export async function initDB(): Promise<IDBDatabase> {
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result;
 
+      const ensureIndex = (
+        store: IDBObjectStore,
+        name: string,
+        keyPath: string
+      ) => {
+        if (!store.indexNames.contains(name)) {
+          store.createIndex(name, keyPath, { unique: false });
+        }
+      };
+
       if (!db.objectStoreNames.contains('systems')) {
         db.createObjectStore('systems', { keyPath: 'id' });
       }
       if (!db.objectStoreNames.contains('pricingVariables')) {
         db.createObjectStore('pricingVariables', { keyPath: 'id' });
       }
-      if (!db.objectStoreNames.contains('jobs')) {
-        db.createObjectStore('jobs', { keyPath: 'id' });
-      }
+      const jobsStore = db.objectStoreNames.contains('jobs')
+        ? request.transaction!.objectStore('jobs')
+        : db.createObjectStore('jobs', { keyPath: 'id' });
+      ensureIndex(jobsStore, 'installDate', 'installDate');
+      ensureIndex(jobsStore, 'estimateDate', 'estimateDate');
+      ensureIndex(jobsStore, 'createdAt', 'createdAt');
+      ensureIndex(jobsStore, 'updatedAt', 'updatedAt');
+      ensureIndex(jobsStore, 'status', 'status');
+      ensureIndex(jobsStore, 'deleted', 'deleted');
       if (!db.objectStoreNames.contains('costs')) {
         db.createObjectStore('costs', { keyPath: 'id' });
       }
@@ -141,6 +157,18 @@ export async function initDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains('customers')) {
         db.createObjectStore('customers', { keyPath: 'id' });
       }
+      const leadsStore = db.objectStoreNames.contains('leads')
+        ? request.transaction!.objectStore('leads')
+        : db.createObjectStore('leads', { keyPath: 'id' });
+      ensureIndex(leadsStore, 'stage', 'stage');
+      ensureIndex(leadsStore, 'updatedAt', 'updatedAt');
+      ensureIndex(leadsStore, 'source', 'source');
+      const leadAppointmentsStore = db.objectStoreNames.contains('leadAppointments')
+        ? request.transaction!.objectStore('leadAppointments')
+        : db.createObjectStore('leadAppointments', { keyPath: 'id' });
+      ensureIndex(leadAppointmentsStore, 'leadId', 'leadId');
+      ensureIndex(leadAppointmentsStore, 'scheduledStartAt', 'scheduledStartAt');
+      ensureIndex(leadAppointmentsStore, 'updatedAt', 'updatedAt');
       if (!db.objectStoreNames.contains('products')) {
         db.createObjectStore('products', { keyPath: 'id' });
       }
@@ -299,6 +327,51 @@ export async function getAllJobsForSync(): Promise<Job[]> {
 
     request.onerror = () => reject(request.error);
     request.onsuccess = () => resolve(request.result || []);
+  });
+}
+
+export async function getJobsByIds(ids: string[]): Promise<Job[]> {
+  const uniqueIds = Array.from(new Set(ids));
+  if (uniqueIds.length === 0) return [];
+
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['jobs'], 'readonly');
+    const store = transaction.objectStore('jobs');
+    const jobs: Job[] = [];
+    let pending = uniqueIds.length;
+    let settled = false;
+
+    const finishOne = () => {
+      pending -= 1;
+      if (pending === 0 && !settled) {
+        settled = true;
+        resolve(jobs);
+      }
+    };
+
+    transaction.onerror = () => {
+      if (!settled) {
+        settled = true;
+        reject(transaction.error);
+      }
+    };
+
+    for (const id of uniqueIds) {
+      const request = store.get(id);
+      request.onerror = () => {
+        if (!settled) {
+          settled = true;
+          reject(request.error);
+        }
+      };
+      request.onsuccess = () => {
+        if (request.result) {
+          jobs.push(request.result);
+        }
+        finishOne();
+      };
+    }
   });
 }
 
@@ -1228,6 +1301,106 @@ export async function deleteCustomer(id: string): Promise<void> {
   });
 
   await queueForSync('customers', id, 'delete');
+  await triggerBackgroundSync();
+}
+
+// Leads
+export async function getAllLeads(): Promise<Lead[]> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['leads'], 'readonly');
+    const store = transaction.objectStore('leads');
+    const request = store.getAll();
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const results = request.result || [];
+      resolve(results.filter((lead: Lead) => !lead.deleted));
+    };
+  });
+}
+
+export async function getAllLeadsForSync(): Promise<Lead[]> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['leads'], 'readonly');
+    const store = transaction.objectStore('leads');
+    const request = store.getAll();
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result || []);
+  });
+}
+
+export async function getLead(id: string): Promise<Lead | null> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['leads'], 'readonly');
+    const store = transaction.objectStore('leads');
+    const request = store.get(id);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const lead = request.result;
+      resolve(lead && !lead.deleted ? lead : null);
+    };
+  });
+}
+
+export async function updateLead(lead: Lead): Promise<void> {
+  const db = await getDB();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(['leads'], 'readwrite');
+    const store = transaction.objectStore('leads');
+    const request = store.put(lead);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve();
+  });
+
+  await queueForSync('leads', lead.id, 'update');
+  await triggerBackgroundSync();
+}
+
+export async function getAllLeadAppointments(): Promise<LeadAppointment[]> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['leadAppointments'], 'readonly');
+    const store = transaction.objectStore('leadAppointments');
+    const request = store.getAll();
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const results = request.result || [];
+      resolve(results.filter((appointment: LeadAppointment) => !appointment.deleted));
+    };
+  });
+}
+
+export async function getAllLeadAppointmentsForSync(): Promise<LeadAppointment[]> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['leadAppointments'], 'readonly');
+    const store = transaction.objectStore('leadAppointments');
+    const request = store.getAll();
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result || []);
+  });
+}
+
+export async function updateLeadAppointment(appointment: LeadAppointment): Promise<void> {
+  const db = await getDB();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(['leadAppointments'], 'readwrite');
+    const store = transaction.objectStore('leadAppointments');
+    const request = store.put(appointment);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve();
+  });
+
+  await queueForSync('leadAppointments', appointment.id, 'update');
   await triggerBackgroundSync();
 }
 

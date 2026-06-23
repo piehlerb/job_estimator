@@ -12,6 +12,7 @@ import Settings from './pages/Settings';
 import Inventory from './pages/Inventory';
 import Calendar from './pages/Calendar';
 import Reporting from './pages/Reporting';
+import Leads from './pages/Leads';
 import Customers from './pages/Customers';
 import ReferralAssociates from './pages/ReferralAssociates';
 import Products from './pages/Products';
@@ -35,6 +36,7 @@ function App() {
   const [currentPage, setCurrentPage] = useState<Page>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [editingJobId, setEditingJobId] = useState<string | null>(null);
+  const [leadIdForNewJob, setLeadIdForNewJob] = useState<string | null>(null);
   const [returnPage, setReturnPage] = useState<Page>('dashboard');
   const [offlineMode, setOfflineMode] = useState(false);
   const isOnline = useOnlineStatus();
@@ -193,6 +195,7 @@ function App() {
     }
     setCurrentPage(target);
     if (jobId) setEditingJobId(jobId);
+    if (target !== 'new-job' || !jobId) setLeadIdForNewJob(null);
     if (returnTo) {
       setReturnPage(returnTo);
     } else if (currentPage !== 'edit-job' && currentPage !== 'new-job' && currentPage !== 'job-sheet') {
@@ -204,6 +207,18 @@ function App() {
   const handleBackToDashboard = () => {
     setCurrentPage(returnPage);
     setEditingJobId(null);
+    setLeadIdForNewJob(null);
+  };
+
+  const handleNewJobFromLead = (leadId: string) => {
+    if (organization && permissions.jobs !== 'write') return;
+    if (organization && !isPageAllowed('new-job', permissions)) return;
+
+    setEditingJobId(null);
+    setLeadIdForNewJob(leadId);
+    setReturnPage('leads');
+    setCurrentPage('new-job');
+    setSidebarOpen(false);
   };
 
   const handleLoginSuccess = () => {
@@ -261,7 +276,11 @@ function App() {
         />
       )}
       {currentPage === 'new-job' && (
-        <JobForm onBack={handleBackToDashboard} onEditJob={(id) => handleNavigation('edit-job', id)} />
+        <JobForm
+          leadId={leadIdForNewJob || undefined}
+          onBack={handleBackToDashboard}
+          onEditJob={(id) => handleNavigation('edit-job', id)}
+        />
       )}
       {currentPage === 'edit-job' && editingJobId && (
         <JobForm key={editingJobId} jobId={editingJobId} onBack={handleBackToDashboard} onEditJob={(id) => handleNavigation('edit-job', id)} onViewJobSheet={(id) => handleNavigation('job-sheet', id)} />
@@ -292,6 +311,12 @@ function App() {
       )}
       {currentPage === 'reporting' && (
         <Reporting onEditJob={(id) => handleNavigation('edit-job', id)} />
+      )}
+      {currentPage === 'leads' && (
+        <Leads
+          onNewJobFromLead={handleNewJobFromLead}
+          onEditJob={(id) => handleNavigation('edit-job', id)}
+        />
       )}
       {currentPage === 'customers' && (
         <Customers />
