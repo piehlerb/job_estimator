@@ -3,9 +3,10 @@
  * Provides sync status and error notifications throughout the app
  */
 
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import type { ReactNode } from 'react';
 import type { SyncResult } from '../types';
-import { hasPendingChanges, getPendingChangesCount } from '../lib/syncQueue';
+import { getPendingChangesCount } from '../lib/syncQueue';
 
 interface SyncContextType {
   isSyncing: boolean;
@@ -22,7 +23,7 @@ interface SyncContextType {
 
 const SyncContext = createContext<SyncContextType | undefined>(undefined);
 
-export function SyncProvider({ children }: { children: React.ReactNode }) {
+export function SyncProvider({ children }: { children: ReactNode }) {
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncResult, setLastSyncResult] = useState<SyncResult | null>(null);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);

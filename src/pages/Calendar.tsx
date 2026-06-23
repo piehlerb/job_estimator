@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { getAllJobs } from '../lib/db';
 import { Job, JobStatus, JobReminder } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import { loadJobsByDateRangeFromSupabase } from '../lib/sync';
 
 type FilterType = 'All' | 'Won' | 'Verbal' | 'Pending';
 type DateMode = 'install' | 'estimate';
@@ -24,6 +25,7 @@ export default function Calendar({ onEditJob }: CalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [filter, setFilter] = useState<FilterType>(installOnly ? 'Won' : 'All');
   const [dateMode, setDateMode] = useState<DateMode>('install');
+  const [loadingMonthJobs, setLoadingMonthJobs] = useState(false);
 
   useEffect(() => {
     loadJobs();
@@ -58,6 +60,40 @@ export default function Calendar({ onEditJob }: CalendarProps) {
   const lastDayOfMonth = new Date(year, month + 1, 0);
   const daysInMonth = lastDayOfMonth.getDate();
   const startingDayOfWeek = firstDayOfMonth.getDay();
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadVisibleMonth = async () => {
+      const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+      const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
+
+      setLoadingMonthJobs(true);
+      try {
+        const result = await loadJobsByDateRangeFromSupabase({
+          startDate,
+          endDate,
+          dateField: dateMode,
+        });
+
+        if (!cancelled && result.errors.length === 0 && result.recordsPulled > 0) {
+          await loadJobs();
+        }
+      } catch (error) {
+        console.warn('Unable to load calendar month from Supabase:', error);
+      } finally {
+        if (!cancelled) {
+          setLoadingMonthJobs(false);
+        }
+      }
+    };
+
+    loadVisibleMonth();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [year, month, daysInMonth, dateMode]);
 
   // Get jobs for a specific date
   const getJobsForDate = (day: number): Job[] => {
@@ -146,7 +182,10 @@ export default function Calendar({ onEditJob }: CalendarProps) {
       <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-6">
         <div>
           <h2 className="text-3xl font-bold text-slate-900">Calendar</h2>
-          <p className="text-slate-600 mt-1">View jobs by {dateMode === 'install' ? 'install' : 'estimate'} date</p>
+          <p className="text-slate-600 mt-1">
+            View jobs by {dateMode === 'install' ? 'install' : 'estimate'} date
+            {loadingMonthJobs ? ' - updating month...' : ''}
+          </p>
         </div>
       </div>
 

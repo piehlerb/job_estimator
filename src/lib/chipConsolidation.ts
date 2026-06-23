@@ -18,7 +18,7 @@ import {
   ChipBlend,
 } from './db';
 import { normalizeChipBlendName } from './syncHelpers';
-import { ChipInventory, Job } from '../types';
+import { ChipInventory } from '../types';
 
 export interface ConsolidationResult {
   blendsConsolidated: number;

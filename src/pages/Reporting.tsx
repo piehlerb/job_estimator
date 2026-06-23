@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { getAllJobs, getAllLaborers, getCosts, getDefaultCosts, getPricing, getDefaultPricing } from '../lib/db';
 import { calculateJobOutputs, calculateActualCosts } from '../lib/calculations';
 import { ActualCosts, Costs, Job, JobCalculation, JobStatus, Laborer, Pricing } from '../types';
+import { loadAllHistoricalJobsFromSupabase } from '../lib/sync';
 
 interface JobWithCalc {
   job: Job;
@@ -56,6 +57,8 @@ export default function Reporting({ onEditJob }: ReportingProps) {
   const [jobsWithCalc, setJobsWithCalc] = useState<JobWithCalc[]>([]);
   const [allLaborers, setAllLaborers] = useState<Laborer[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [historyMessage, setHistoryMessage] = useState('');
   const [activeView, setActiveView] = useState<ReportView>('tags');
 
   // Tag report filters
@@ -142,6 +145,27 @@ export default function Reporting({ onEditJob }: ReportingProps) {
       console.error('Error loading reporting data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleLoadFullHistory = async () => {
+    if (loadingHistory) return;
+
+    setLoadingHistory(true);
+    setHistoryMessage('');
+
+    try {
+      const result = await loadAllHistoricalJobsFromSupabase();
+
+      if (result.errors.length > 0) {
+        setHistoryMessage(result.errors[0]);
+        return;
+      }
+
+      setHistoryMessage(`${result.recordsPulled} historical job${result.recordsPulled === 1 ? '' : 's'} loaded.`);
+      await loadData();
+    } finally {
+      setLoadingHistory(false);
     }
   };
 
@@ -415,6 +439,20 @@ export default function Reporting({ onEditJob }: ReportingProps) {
       <div className="mb-4 sm:mb-6">
         <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">Reporting</h1>
         <p className="text-sm sm:text-base text-slate-600 mt-1">Reports and analytics</p>
+      </div>
+
+      <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row sm:items-center gap-2">
+        <button
+          type="button"
+          onClick={handleLoadFullHistory}
+          disabled={loadingHistory}
+          className="inline-flex items-center justify-center px-3 py-2 rounded-lg bg-white border border-slate-300 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          {loadingHistory ? 'Loading History...' : 'Load Full Job History'}
+        </button>
+        {historyMessage && (
+          <p className="text-xs text-slate-500">{historyMessage}</p>
+        )}
       </div>
 
       {/* Tab Navigation */}

@@ -72,6 +72,7 @@ export type AppPage =
   | 'shopping-list'
   | 'calendar'
   | 'reporting'
+  | 'leads'
   | 'customers'
   | 'referral-associates'
   | 'products'
@@ -99,6 +100,8 @@ export function isPageAllowed(page: AppPage, p: MemberPermissions): boolean {
       return p.inventory;
     case 'reporting':
       return p.reporting;
+    case 'leads':
+      return p.customers || p.reporting;
     case 'customers':
       return p.customers;
     case 'referral-associates':

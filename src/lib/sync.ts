@@ -22,6 +22,8 @@ import {
   getPricing,
   getAllLaborersForSync,
   getAllCustomersForSync,
+  getAllLeadsForSync,
+  getAllLeadAppointmentsForSync,
   getAllProductsForSync,
   getAllBaseCoatColorsForSync,
   getAllChipBlendsForSync,
@@ -32,20 +34,25 @@ import {
   getAllCommTemplatesForSync,
   getAllReferralAssociatesForSync,
   getAllReferralServicesForSync,
+  getJobsByIds,
   getTopCoatInventory,
   getBaseCoatInventory,
   getMiscInventory,
 } from './db';
 import {
+  buildJobWorkingSetOrFilter,
+  getJobWorkingSetCutoff,
+} from './jobSyncPolicy';
+import {
   getSyncQueue,
   clearSyncQueue,
   hasPendingChanges as checkPendingChanges,
-  getPendingChangesCount,
 } from './syncQueue';
 
 // Sync state stored in IndexedDB
 const SYNC_STATE_KEY = 'sync_state';
 const BATCH_SIZE = 50; // Process records in batches
+const SELECT_PAGE_SIZE = 500; // Supabase/PostgREST page size for reads
 
 // Current organization context — set by AuthContext when user logs in.
 // When set, push attaches org_id to records and pull filters by org_id.
@@ -57,6 +64,97 @@ export function setSyncOrgContext(orgId: string | null): void {
 
 export function getSyncOrgContext(): string | null {
   return _currentOrgId;
+}
+
+function getScopedTableQuery(tableName: string, userId: string): any {
+  return _currentOrgId
+    ? supabase.from(tableName).select('*').eq('org_id', _currentOrgId)
+    : supabase.from(tableName).select('*').eq('user_id', userId).is('org_id', null);
+}
+
+async function fetchPagedRows(buildQuery: () => any): Promise<{ data: any[]; error: any | null }> {
+  const rows: any[] = [];
+  let from = 0;
+
+  while (true) {
+    const to = from + SELECT_PAGE_SIZE - 1;
+    const { data, error } = await buildQuery().range(from, to);
+
+    if (error) {
+      return { data: rows, error };
+    }
+
+    const page = data || [];
+    rows.push(...page);
+
+    if (page.length < SELECT_PAGE_SIZE) {
+      return { data: rows, error: null };
+    }
+
+    from += SELECT_PAGE_SIZE;
+  }
+}
+
+async function storeRemoteRecords(
+  db: IDBDatabase,
+  tableName: string,
+  data: any[]
+): Promise<{ recordsPulled: number; conflicts: number; errors: string[] }> {
+  const errors: string[] = [];
+  let recordsPulled = 0;
+  let conflicts = 0;
+
+  if (!data || data.length === 0) {
+    return { recordsPulled, conflicts, errors };
+  }
+
+  const storeName = getIndexedDBStoreName(tableName);
+  const recordsToStore = data.map((record: any) => {
+    const { user_id, synced_at, ...rest } = record;
+    return objectToCamelCase(rest);
+  });
+
+  for (const record of recordsToStore) {
+    try {
+      const result = await new Promise<{ wasConflict: boolean }>((resolve, reject) => {
+        const tx = db.transaction(storeName, 'readwrite');
+        const store = tx.objectStore(storeName);
+        const getRequest = store.get(record.id);
+
+        getRequest.onerror = () => reject(getRequest.error);
+        getRequest.onsuccess = () => {
+          const existing = getRequest.result;
+
+          if (existing) {
+            const { winner, source } = resolveConflict(existing, record);
+
+            if (source === 'remote') {
+              const putRequest = store.put(winner);
+              putRequest.onerror = () => reject(putRequest.error);
+              putRequest.onsuccess = () => resolve({ wasConflict: true });
+            } else {
+              resolve({ wasConflict: false });
+            }
+          } else {
+            const putRequest = store.put(record);
+            putRequest.onerror = () => reject(putRequest.error);
+            putRequest.onsuccess = () => resolve({ wasConflict: false });
+          }
+        };
+
+        tx.onerror = () => reject(tx.error);
+      });
+
+      if (result.wasConflict) {
+        conflicts++;
+      }
+      recordsPulled++;
+    } catch (error: any) {
+      errors.push(`${storeName}[${record.id}]: ${error.message}`);
+    }
+  }
+
+  return { recordsPulled, conflicts, errors };
 }
 
 /**
@@ -163,6 +261,8 @@ export async function pushToSupabase(): Promise<{
       pricing: async () => [await getPricing()].filter(Boolean),
       laborers: getAllLaborersForSync,
       customers: getAllCustomersForSync,
+      leads: getAllLeadsForSync,
+      leadAppointments: getAllLeadAppointmentsForSync,
       products: getAllProductsForSync,
       baseCoatColors: getAllBaseCoatColorsForSync,
       chipBlends: getAllChipBlendsForSync,
@@ -187,11 +287,12 @@ export async function pushToSupabase(): Promise<{
           continue;
         }
 
-        // Get all records from store, then filter to only changed ones
-        const allRecords = await getter();
-        const changedRecords = allRecords.filter((record: any) =>
-          recordIds.has(record.id)
-        );
+        // Jobs are the growing table; read queued IDs directly instead of scanning
+        // the entire local store. Other stores are small enough to keep the
+        // existing broad getter pattern.
+        const changedRecords = storeName === 'jobs'
+          ? await getJobsByIds(Array.from(recordIds))
+          : (await getter()).filter((record: any) => recordIds.has(record.id));
 
         if (changedRecords.length === 0) {
           console.log(`[Sync] No changed records found for ${storeName}`);
@@ -289,6 +390,8 @@ export async function pushAllToSupabase(options?: { bumpTimestamps?: boolean }):
       { store: 'costs', getter: async () => [await getCosts()].filter(Boolean) },
       { store: 'pricing', getter: async () => [await getPricing()].filter(Boolean) },
       { store: 'customers', getter: getAllCustomersForSync },
+      { store: 'leads', getter: getAllLeadsForSync },
+      { store: 'leadAppointments', getter: getAllLeadAppointmentsForSync },
       { store: 'products', getter: getAllProductsForSync },
       { store: 'laborers', getter: getAllLaborersForSync },
       { store: 'baseCoatColors', getter: getAllBaseCoatColorsForSync },
@@ -388,6 +491,8 @@ export async function pullFromSupabase(): Promise<{
       'pricing',
       'laborers',
       'customers',
+      'leads',
+      'lead_appointments',
       'products',
       'base_coat_colors',
       'chip_blends',
@@ -407,17 +512,20 @@ export async function pullFromSupabase(): Promise<{
 
     for (const tableName of tablesToSync) {
       try {
-        // Build query — filter by org when in org context, otherwise personal records only
-        let query = _currentOrgId
-          ? supabase.from(tableName).select('*').eq('org_id', _currentOrgId)
-          : supabase.from(tableName).select('*').eq('user_id', user.id).is('org_id', null);
+        const { data, error } = await fetchPagedRows(() => {
+          let query = getScopedTableQuery(tableName, user.id);
 
-        // If we have a last sync time, only pull updated records
-        if (lastSync) {
-          query = query.gt('updated_at', lastSync);
-        }
+          // Incremental pulls always fetch every updated record, including old
+          // jobs. First/full job pulls cache only the active and recent working
+          // set; older inactive jobs are loaded explicitly when needed.
+          if (lastSync) {
+            query = query.gt('updated_at', lastSync);
+          } else if (tableName === 'jobs') {
+            query = query.or(buildJobWorkingSetOrFilter(getJobWorkingSetCutoff()));
+          }
 
-        const { data, error } = await query;
+          return query.order('updated_at', { ascending: true }).order('id', { ascending: true });
+        });
 
         if (error) {
           errors.push(`${tableName}: ${error.message}`);
@@ -426,58 +534,10 @@ export async function pullFromSupabase(): Promise<{
 
         if (!data || data.length === 0) continue;
 
-        // Get corresponding IndexedDB store name using helper
-        const storeName = getIndexedDBStoreName(tableName);
-
-        // Convert to camelCase
-        const recordsToStore = data.map((record: any) => {
-          const { user_id, synced_at, ...rest } = record;
-          return objectToCamelCase(rest);
-        });
-
-        // Store records in IndexedDB using proper Promise wrappers for native IndexedDB
-        for (const record of recordsToStore) {
-          try {
-            const result = await new Promise<{ wasConflict: boolean }>((resolve, reject) => {
-              const tx = db.transaction(storeName, 'readwrite');
-              const store = tx.objectStore(storeName);
-              const getRequest = store.get(record.id);
-
-              getRequest.onerror = () => reject(getRequest.error);
-              getRequest.onsuccess = () => {
-                const existing = getRequest.result;
-
-                if (existing) {
-                  // Conflict resolution: last-write-wins
-                  const { winner, source } = resolveConflict(existing, record);
-
-                  if (source === 'remote') {
-                    const putRequest = store.put(winner);
-                    putRequest.onerror = () => reject(putRequest.error);
-                    putRequest.onsuccess = () => resolve({ wasConflict: true });
-                  } else {
-                    // If local wins, don't overwrite
-                    resolve({ wasConflict: false });
-                  }
-                } else {
-                  // New record from remote
-                  const putRequest = store.put(record);
-                  putRequest.onerror = () => reject(putRequest.error);
-                  putRequest.onsuccess = () => resolve({ wasConflict: false });
-                }
-              };
-
-              tx.onerror = () => reject(tx.error);
-            });
-
-            if (result.wasConflict) {
-              conflicts++;
-            }
-            recordsPulled++;
-          } catch (error: any) {
-            errors.push(`${storeName}[${record.id}]: ${error.message}`);
-          }
-        }
+        const storeResult = await storeRemoteRecords(db, tableName, data);
+        recordsPulled += storeResult.recordsPulled;
+        conflicts += storeResult.conflicts;
+        errors.push(...storeResult.errors);
       } catch (error: any) {
         errors.push(`${tableName}: ${error.message}`);
       }
@@ -487,6 +547,162 @@ export async function pullFromSupabase(): Promise<{
   } catch (error: any) {
     errors.push(`Pull failed: ${error.message}`);
     return { recordsPulled: 0, conflicts: 0, errors };
+  }
+}
+
+export interface HistoricalJobLoadResult {
+  recordsPulled: number;
+  conflicts: number;
+  errors: string[];
+  hasMore?: boolean;
+  oldestInstallDate?: string;
+}
+
+export type JobHistoryDateField = 'install' | 'estimate' | 'created';
+
+function getJobHistoryDateColumn(dateField: JobHistoryDateField): string {
+  switch (dateField) {
+    case 'estimate':
+      return 'estimate_date';
+    case 'created':
+      return 'created_at';
+    case 'install':
+    default:
+      return 'install_date';
+  }
+}
+
+function getDateRangeValue(date: string, dateField: JobHistoryDateField, boundary: 'start' | 'end'): string {
+  if (dateField !== 'created') return date;
+  return boundary === 'start' ? `${date}T00:00:00.000Z` : `${date}T23:59:59.999Z`;
+}
+
+async function ensureAuthenticatedUser() {
+  const user = await getCurrentUser();
+  if (!user) {
+    throw new Error('User not authenticated');
+  }
+  return user;
+}
+
+export async function loadOlderJobsFromSupabase(options?: {
+  beforeInstallDate?: string;
+  limit?: number;
+}): Promise<HistoricalJobLoadResult> {
+  const errors: string[] = [];
+  let recordsPulled = 0;
+  let conflicts = 0;
+
+  try {
+    const user = await ensureAuthenticatedUser();
+    const db = await openDB();
+    const cutoff = options?.beforeInstallDate || getJobWorkingSetCutoff().date;
+    const limit = Math.max(1, Math.min(options?.limit ?? 100, 500));
+
+    const { data, error } = await getScopedTableQuery('jobs', user.id)
+      .lt('install_date', cutoff)
+      .order('install_date', { ascending: false })
+      .order('updated_at', { ascending: false })
+      .limit(limit + 1);
+
+    if (error) {
+      return { recordsPulled, conflicts, errors: [`jobs: ${error.message}`], hasMore: false };
+    }
+
+    const page = (data || []).slice(0, limit);
+    const oldestInstallDate = page
+      .map((job: any) => job.install_date)
+      .filter(Boolean)
+      .sort()[0];
+    const storeResult = await storeRemoteRecords(db, 'jobs', page);
+
+    recordsPulled += storeResult.recordsPulled;
+    conflicts += storeResult.conflicts;
+    errors.push(...storeResult.errors);
+
+    return {
+      recordsPulled,
+      conflicts,
+      errors,
+      hasMore: (data || []).length > limit,
+      oldestInstallDate,
+    };
+  } catch (error: any) {
+    errors.push(`Historical jobs load failed: ${error.message}`);
+    return { recordsPulled, conflicts, errors, hasMore: false };
+  }
+}
+
+export async function loadJobsByDateRangeFromSupabase(options: {
+  startDate: string;
+  endDate: string;
+  dateField?: JobHistoryDateField;
+}): Promise<HistoricalJobLoadResult> {
+  const errors: string[] = [];
+  let recordsPulled = 0;
+  let conflicts = 0;
+
+  try {
+    const user = await ensureAuthenticatedUser();
+    const db = await openDB();
+    const dateField = options.dateField || 'install';
+    const column = getJobHistoryDateColumn(dateField);
+    const startValue = getDateRangeValue(options.startDate, dateField, 'start');
+    const endValue = getDateRangeValue(options.endDate, dateField, 'end');
+
+    const { data, error } = await fetchPagedRows(() =>
+      getScopedTableQuery('jobs', user.id)
+        .gte(column, startValue)
+        .lte(column, endValue)
+        .order(column, { ascending: true })
+        .order('updated_at', { ascending: true })
+        .order('id', { ascending: true })
+    );
+
+    if (error) {
+      return { recordsPulled, conflicts, errors: [`jobs: ${error.message}`] };
+    }
+
+    const storeResult = await storeRemoteRecords(db, 'jobs', data);
+    recordsPulled += storeResult.recordsPulled;
+    conflicts += storeResult.conflicts;
+    errors.push(...storeResult.errors);
+
+    return { recordsPulled, conflicts, errors };
+  } catch (error: any) {
+    errors.push(`Job date range load failed: ${error.message}`);
+    return { recordsPulled, conflicts, errors };
+  }
+}
+
+export async function loadAllHistoricalJobsFromSupabase(): Promise<HistoricalJobLoadResult> {
+  const errors: string[] = [];
+  let recordsPulled = 0;
+  let conflicts = 0;
+
+  try {
+    const user = await ensureAuthenticatedUser();
+    const db = await openDB();
+
+    const { data, error } = await fetchPagedRows(() =>
+      getScopedTableQuery('jobs', user.id)
+        .order('updated_at', { ascending: true })
+        .order('id', { ascending: true })
+    );
+
+    if (error) {
+      return { recordsPulled, conflicts, errors: [`jobs: ${error.message}`] };
+    }
+
+    const storeResult = await storeRemoteRecords(db, 'jobs', data);
+    recordsPulled += storeResult.recordsPulled;
+    conflicts += storeResult.conflicts;
+    errors.push(...storeResult.errors);
+
+    return { recordsPulled, conflicts, errors };
+  } catch (error: any) {
+    errors.push(`Full job history load failed: ${error.message}`);
+    return { recordsPulled, conflicts, errors };
   }
 }
 
