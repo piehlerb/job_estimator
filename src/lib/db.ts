@@ -1,4 +1,5 @@
 import { ChipSystem, PricingVariable, Job, Costs, Laborer, ChipInventory, TintInventory, TopCoatInventory, BaseCoatInventory, MiscInventory, Pricing, Customer, Product, BaseCoatColor, ShoppingItem, CommunicationTemplate, ReferralAssociate, ReferralService, Lead, LeadAppointment } from '../types';
+import { softDeleteLead } from './leadMutations';
 
 const DB_NAME = 'JobEstimator';
 const DB_VERSION = 20; // Adds lead attribution stores
@@ -1359,6 +1360,30 @@ export async function updateLead(lead: Lead): Promise<void> {
   });
 
   await queueForSync('leads', lead.id, 'update');
+  await triggerBackgroundSync();
+}
+
+export async function deleteLead(id: string): Promise<void> {
+  const db = await getDB();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(['leads'], 'readwrite');
+    const store = transaction.objectStore('leads');
+    const getRequest = store.get(id);
+
+    getRequest.onerror = () => reject(getRequest.error);
+    getRequest.onsuccess = () => {
+      const lead = getRequest.result as Lead | undefined;
+      if (lead) {
+        const putRequest = store.put(softDeleteLead(lead));
+        putRequest.onerror = () => reject(putRequest.error);
+        putRequest.onsuccess = () => resolve();
+      } else {
+        resolve();
+      }
+    };
+  });
+
+  await queueForSync('leads', id, 'delete');
   await triggerBackgroundSync();
 }
 
