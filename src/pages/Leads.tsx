@@ -2,16 +2,21 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock,
+  Edit2,
   ExternalLink,
   Filter,
   Plus,
   RefreshCw,
+  Save,
   Search,
+  Trash2,
+  X,
   XCircle,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
-import { getAllJobs, getAllLeadAppointments, getAllLeads, updateLead } from '../lib/db';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { deleteLead, getAllJobs, getAllLeadAppointments, getAllLeads, updateLead } from '../lib/db';
 import { LEAD_DISPOSITION_REASONS, LEAD_STAGES } from '../lib/leadPipeline';
+import { applyLeadEdit } from '../lib/leadMutations';
 import type { Job, Lead, LeadAppointment, LeadDispositionReason, LeadStage } from '../types';
 
 interface LeadsProps {
@@ -21,6 +26,48 @@ interface LeadsProps {
 
 const TERMINAL_STAGES = new Set<LeadStage>(['Won', 'Lost', 'Disqualified']);
 const DISPOSITION_STAGES = new Set<LeadStage>(['Lost', 'Disqualified']);
+
+type LeadEditForm = {
+  name: string;
+  phone: string;
+  email: string;
+  address: string;
+  source: string;
+  campaign: string;
+  stage: LeadStage;
+  dispositionReason: LeadDispositionReason | '';
+  dispositionNotes: string;
+};
+
+const EMPTY_LEAD_FORM: LeadEditForm = {
+  name: '',
+  phone: '',
+  email: '',
+  address: '',
+  source: '',
+  campaign: '',
+  stage: 'New',
+  dispositionReason: '',
+  dispositionNotes: '',
+};
+
+function getLeadDisplayName(lead: Lead): string {
+  return lead.name || lead.phone || lead.email || 'Unknown Lead';
+}
+
+function formFromLead(lead: Lead): LeadEditForm {
+  return {
+    name: lead.name || '',
+    phone: lead.phone || '',
+    email: lead.email || '',
+    address: lead.address || '',
+    source: lead.source || '',
+    campaign: lead.campaign || '',
+    stage: lead.stage,
+    dispositionReason: lead.dispositionReason || '',
+    dispositionNotes: lead.dispositionNotes || '',
+  };
+}
 
 function formatDateTime(value?: string): string {
   if (!value) return 'No date';
@@ -94,6 +141,11 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
   const [stageFilter, setStageFilter] = useState<LeadStage | 'all'>('all');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
   const [updatingLeadId, setUpdatingLeadId] = useState<string | null>(null);
+  const [editingLead, setEditingLead] = useState<Lead | null>(null);
+  const [editForm, setEditForm] = useState<LeadEditForm>(EMPTY_LEAD_FORM);
+  const [editError, setEditError] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [deletingLeadId, setDeletingLeadId] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -218,6 +270,79 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
     }
   };
 
+  const openEditLead = (lead: Lead) => {
+    setEditingLead(lead);
+    setEditForm(formFromLead(lead));
+    setEditError('');
+  };
+
+  const closeEditLead = () => {
+    if (savingEdit) return;
+    setEditingLead(null);
+    setEditForm(EMPTY_LEAD_FORM);
+    setEditError('');
+  };
+
+  const handleEditStageChange = (stage: LeadStage) => {
+    setEditForm((current) => ({
+      ...current,
+      stage,
+      ...(!DISPOSITION_STAGES.has(stage)
+        ? { dispositionReason: '' as const, dispositionNotes: '' }
+        : {}),
+    }));
+  };
+
+  const handleSaveEdit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!editingLead) return;
+
+    const nextLead = applyLeadEdit(editingLead, editForm);
+
+    setSavingEdit(true);
+    setEditError('');
+    try {
+      await updateLead(nextLead);
+      setLeads((current) => current.map((item) => (item.id === nextLead.id ? nextLead : item)));
+      setEditingLead(null);
+      setEditForm(EMPTY_LEAD_FORM);
+    } catch (error) {
+      console.error('Error saving lead:', error);
+      setEditError('Unable to save this lead. Please try again.');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleDeleteLead = async (lead: Lead) => {
+    const linkedJob = jobByLead.get(lead.id);
+    const displayName = getLeadDisplayName(lead);
+    const confirmed = window.confirm(
+      linkedJob
+        ? `Delete ${displayName}? The linked job "${linkedJob.name || 'Untitled Job'}" will not be deleted.`
+        : `Delete ${displayName}? This will hide the lead from this list.`
+    );
+
+    if (!confirmed) return;
+
+    setDeletingLeadId(lead.id);
+    try {
+      await deleteLead(lead.id);
+      setLeads((current) => current.filter((item) => item.id !== lead.id));
+      if (editingLead?.id === lead.id) {
+        setEditingLead(null);
+        setEditForm(EMPTY_LEAD_FORM);
+      }
+    } catch (error) {
+      console.error('Error deleting lead:', error);
+      window.alert('Unable to delete this lead. Please try again.');
+    } finally {
+      setDeletingLeadId(null);
+    }
+  };
+
+  const editCanSetDisposition = DISPOSITION_STAGES.has(editForm.stage);
+
   return (
     <div className="p-3 sm:p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
       <div className="mb-4 sm:mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -320,6 +445,7 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
                   <th className="px-4 py-3 text-left font-semibold text-slate-600">Disposition</th>
                   <th className="px-4 py-3 text-left font-semibold text-slate-600">Appointment</th>
                   <th className="px-4 py-3 text-left font-semibold text-slate-600">Job</th>
+                  <th className="px-4 py-3 text-right font-semibold text-slate-600">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
@@ -327,7 +453,8 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
                   const latestAppointment = latestAppointmentByLead.get(lead.id);
                   const linkedJob = jobByLead.get(lead.id);
                   const canSetDisposition = DISPOSITION_STAGES.has(lead.stage);
-                  const displayName = lead.name || lead.phone || lead.email || 'Unknown Lead';
+                  const displayName = getLeadDisplayName(lead);
+                  const isLeadBusy = updatingLeadId === lead.id || deletingLeadId === lead.id;
 
                   return (
                     <tr key={lead.id} className="align-top hover:bg-slate-50/60">
@@ -439,6 +566,33 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
                           </button>
                         )}
                       </td>
+
+                      <td className="px-4 py-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openEditLead(lead)}
+                            disabled={isLeadBusy}
+                            title="Edit lead"
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            <Edit2 size={15} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteLead(lead)}
+                            disabled={isLeadBusy}
+                            title="Delete lead"
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-200 text-red-600 transition-colors hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {deletingLeadId === lead.id ? (
+                              <RefreshCw size={15} className="animate-spin" />
+                            ) : (
+                              <Trash2 size={15} />
+                            )}
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}
@@ -447,6 +601,167 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
           </div>
         )}
       </div>
+
+      {editingLead && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-3 sm:p-6">
+          <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 sm:px-6 sm:py-4">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Edit Lead</h2>
+                <p className="text-xs text-slate-500">
+                  Last event {formatRelativeDate(editingLead.lastEventAt || editingLead.updatedAt)}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeEditLead}
+                disabled={savingEdit}
+                title="Close"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="space-y-4 px-4 py-4 sm:px-6 sm:py-5">
+              {editError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {editError}
+                </div>
+              )}
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase text-slate-500">Name</span>
+                  <input
+                    type="text"
+                    value={editForm.name}
+                    onChange={(event) => setEditForm((current) => ({ ...current, name: event.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-gf-lime"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase text-slate-500">Phone</span>
+                  <input
+                    type="tel"
+                    value={editForm.phone}
+                    onChange={(event) => setEditForm((current) => ({ ...current, phone: event.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-gf-lime"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase text-slate-500">Email</span>
+                  <input
+                    type="email"
+                    value={editForm.email}
+                    onChange={(event) => setEditForm((current) => ({ ...current, email: event.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-gf-lime"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase text-slate-500">Source</span>
+                  <input
+                    type="text"
+                    value={editForm.source}
+                    onChange={(event) => setEditForm((current) => ({ ...current, source: event.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-gf-lime"
+                  />
+                </label>
+
+                <label className="block sm:col-span-2">
+                  <span className="text-xs font-semibold uppercase text-slate-500">Address</span>
+                  <input
+                    type="text"
+                    value={editForm.address}
+                    onChange={(event) => setEditForm((current) => ({ ...current, address: event.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-gf-lime"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase text-slate-500">Campaign</span>
+                  <input
+                    type="text"
+                    value={editForm.campaign}
+                    onChange={(event) => setEditForm((current) => ({ ...current, campaign: event.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-gf-lime"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase text-slate-500">Stage</span>
+                  <select
+                    value={editForm.stage}
+                    onChange={(event) => handleEditStageChange(event.target.value as LeadStage)}
+                    className={`mt-1 w-full rounded-lg border-0 px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-gf-lime ${stageBadgeClass(editForm.stage)}`}
+                  >
+                    {LEAD_STAGES.map((stage) => (
+                      <option key={stage} value={stage}>
+                        {stage}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase text-slate-500">Disposition Reason</span>
+                  <select
+                    value={editForm.dispositionReason}
+                    disabled={!editCanSetDisposition}
+                    onChange={(event) =>
+                      setEditForm((current) => ({
+                        ...current,
+                        dispositionReason: event.target.value as LeadDispositionReason | '',
+                      }))
+                    }
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-gf-lime disabled:bg-slate-100 disabled:text-slate-400"
+                  >
+                    <option value="">{editCanSetDisposition ? 'No reason' : 'Only lost/disqualified'}</option>
+                    {LEAD_DISPOSITION_REASONS.map((reason) => (
+                      <option key={reason} value={reason}>
+                        {reason}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block sm:col-span-2">
+                  <span className="text-xs font-semibold uppercase text-slate-500">Disposition Notes</span>
+                  <textarea
+                    value={editForm.dispositionNotes}
+                    disabled={!editCanSetDisposition}
+                    onChange={(event) => setEditForm((current) => ({ ...current, dispositionNotes: event.target.value }))}
+                    rows={3}
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-gf-lime disabled:bg-slate-100 disabled:text-slate-400"
+                  />
+                </label>
+              </div>
+
+              <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={closeEditLead}
+                  disabled={savingEdit}
+                  className="inline-flex items-center justify-center rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingEdit}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-gf-lime px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-gf-dark-green disabled:cursor-not-allowed disabled:bg-slate-400"
+                >
+                  {savingEdit ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}
+                  {savingEdit ? 'Saving...' : 'Save Lead'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
