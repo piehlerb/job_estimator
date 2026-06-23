@@ -98,7 +98,7 @@ export function useAutoSync(options: UseAutoSyncOptions = {}) {
     return performSync(false);
   };
 
-  // Effect: Sync on mount (app startup) — wait for org context to be established first
+  // Effect: Sync on mount (app startup) - wait for org context to be established first
   useEffect(() => {
     if (!user || !enabled || orgLoading) return;
 
@@ -106,14 +106,13 @@ export function useAutoSync(options: UseAutoSyncOptions = {}) {
       console.log('App started, performing initial sync...');
 
       // One-time repair: records previously pushed without org_id have org_id = NULL in
-      // Supabase, so other devices can't pull them. Push everything with bumpTimestamps=true
-      // so the updated_at values are "now" — ensuring the other device's lastSync filter
-      // doesn't exclude them. Then clear our own lastSync to force a full pull this session.
+      // Supabase, so other devices can't pull them. Then clear our own lastSync
+      // to force a full pull this session.
       const repairKey = `org_id_repair_v2_done_${user.id}`;
       if (!localStorage.getItem(repairKey)) {
         console.log('[Sync] Running one-time org_id repair push...');
         try {
-          await pushAllToSupabase(); // No timestamp bumping — preserves original updatedAt so conflict resolution works correctly
+          await pushAllToSupabase(); // No timestamp bumping; preserves original updatedAt so conflict resolution works correctly
           await clearLastSyncTimestamp(); // force full pull on this device too
           localStorage.setItem(repairKey, '1');
           console.log('[Sync] org_id repair complete');
@@ -122,10 +121,24 @@ export function useAutoSync(options: UseAutoSyncOptions = {}) {
         }
       }
 
-      // Auto cloud backup disabled — was causing database issues
+      // One-time backfill for the GHL lead pipeline. Devices may already have a
+      // sync cursor newer than webhook-created lead rows, so force one full pull
+      // after the lead tables are introduced.
+      const leadPipelineBackfillKey = `lead_pipeline_backfill_v1_done_${user.id}`;
+      const needsLeadPipelineBackfill = !localStorage.getItem(leadPipelineBackfillKey);
+      if (needsLeadPipelineBackfill) {
+        console.log('[Sync] Clearing sync cursor for lead pipeline backfill...');
+        await clearLastSyncTimestamp();
+      }
+
+      // Auto cloud backup disabled - was causing database issues
       // To re-enable, restore the daily backup block here
 
-      performSync(true); // Silent sync on startup
+      const result = await performSync(true); // Silent sync on startup
+      if (needsLeadPipelineBackfill && result?.success) {
+        localStorage.setItem(leadPipelineBackfillKey, '1');
+        console.log('[Sync] Lead pipeline backfill complete');
+      }
     };
 
     startup();

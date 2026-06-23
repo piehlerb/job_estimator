@@ -719,13 +719,17 @@ export async function syncWithSupabase(): Promise<SyncResult> {
     // Then pull remote changes
     const pullResult = await pullFromSupabase();
 
-    // Update last sync timestamp
-    await setLastSyncTimestamp(startTime);
-
     const allErrors = [...pullResult.errors, ...pushResult.errors];
+    const success = allErrors.length === 0;
+
+    if (success) {
+      await setLastSyncTimestamp(startTime);
+    } else {
+      console.warn('[Sync] Not advancing sync cursor because sync completed with errors', allErrors);
+    }
 
     return {
-      success: allErrors.length === 0,
+      success,
       recordsPushed: pushResult.recordsPushed,
       recordsPulled: pullResult.recordsPulled,
       conflicts: pullResult.conflicts,
