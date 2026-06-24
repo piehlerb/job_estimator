@@ -856,6 +856,9 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
   const handleStatusChange = (newStatus: JobStatus) => {
     const probMap: Record<JobStatus, string> = { Won: '100', Lost: '0', Pending: '20', Verbal: '80' };
     setFormData(prev => ({ ...prev, status: newStatus, probability: probMap[newStatus] }));
+    if (newStatus === 'Lost') {
+      setReminders(prev => prev.filter(r => r.completed));
+    }
   };
 
   const handleSystemChange = (systemId: string) => {
