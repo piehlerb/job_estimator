@@ -445,7 +445,6 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
                   <th className="px-4 py-3 text-left font-semibold text-slate-600">Disposition</th>
                   <th className="px-4 py-3 text-left font-semibold text-slate-600">Appointment</th>
                   <th className="px-4 py-3 text-left font-semibold text-slate-600">Job</th>
-                  <th className="px-4 py-3 text-right font-semibold text-slate-600">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
@@ -465,6 +464,30 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
                           {lead.email && <div>{lead.email}</div>}
                           {lead.address && <div className="max-w-xs truncate">{lead.address}</div>}
                           <div>Last event {formatRelativeDate(lead.lastEventAt || lead.updatedAt)}</div>
+                        </div>
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openEditLead(lead)}
+                            disabled={isLeadBusy}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            <Edit2 size={13} />
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteLead(lead)}
+                            disabled={isLeadBusy}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 px-2.5 py-1.5 text-xs font-semibold text-red-600 transition-colors hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {deletingLeadId === lead.id ? (
+                              <RefreshCw size={13} className="animate-spin" />
+                            ) : (
+                              <Trash2 size={13} />
+                            )}
+                            Delete
+                          </button>
                         </div>
                       </td>
 
@@ -567,32 +590,6 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
                         )}
                       </td>
 
-                      <td className="px-4 py-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={() => openEditLead(lead)}
-                            disabled={isLeadBusy}
-                            title="Edit lead"
-                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            <Edit2 size={15} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteLead(lead)}
-                            disabled={isLeadBusy}
-                            title="Delete lead"
-                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-200 text-red-600 transition-colors hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            {deletingLeadId === lead.id ? (
-                              <RefreshCw size={15} className="animate-spin" />
-                            ) : (
-                              <Trash2 size={15} />
-                            )}
-                          </button>
-                        </div>
-                      </td>
                     </tr>
                   );
                 })}
