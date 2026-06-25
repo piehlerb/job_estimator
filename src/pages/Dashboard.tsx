@@ -304,10 +304,10 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
       );
     }
 
-    // Apply status filter — when showing inactive, also include Lost regardless of filter
+    // Apply status filter
     if (statusFilter.length > 0) {
       filtered = filtered.filter(({ job }) =>
-        statusFilter.includes(job.status) || (showInactive && job.status === 'Lost')
+        statusFilter.includes(job.status)
       );
     }
 
