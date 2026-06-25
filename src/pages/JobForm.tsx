@@ -871,6 +871,9 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
   const handleStatusChange = (newStatus: JobStatus) => {
     const probMap: Record<JobStatus, string> = { Won: '100', Lost: '0', Pending: '20', Verbal: '80' };
     setFormData(prev => ({ ...prev, status: newStatus, probability: probMap[newStatus] }));
+    if (newStatus === 'Lost') {
+      setReminders(prev => prev.filter(r => r.completed));
+    }
   };
 
   const handleSystemChange = (systemId: string) => {
@@ -2002,6 +2005,18 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
           <ChevronLeft size={20} />
         </button>
         <span className="flex-1 font-heading font-extrabold text-[17px]">{jobId ? 'Edit Estimate' : 'New Estimate'}</span>
+        {jobId && !existingJob?.groupId && (
+          <>
+            <button type="button" onClick={() => handleOpenGroupModal('alternative')}
+              className="p-2 rounded-[10px] bg-[#1c1c1c] border border-[#2a2a2a]" title="Add Alternative">
+              <Shuffle size={16} />
+            </button>
+            <button type="button" onClick={() => handleOpenGroupModal('bundled')}
+              className="p-2 rounded-[10px] bg-[#1c1c1c] border border-[#2a2a2a]" title="Add Bundle">
+              <Link size={16} />
+            </button>
+          </>
+        )}
         {jobId && onViewJobSheet && (
           <button type="button" onClick={() => onViewJobSheet(jobId)}
             className="p-2 rounded-[10px] bg-[#1c1c1c] border border-[#2a2a2a]">
@@ -2199,23 +2214,6 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
             onUpdate={handleUpdateToCurrentValues}
             onDismiss={handleKeepOriginalValues}
           />
-        )}
-
-        {linkedLead && (
-          <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="font-semibold">Linked Lead</p>
-                <p className="text-blue-800">
-                  {linkedLead.name || linkedLead.phone || linkedLead.email || 'Unknown Lead'}
-                  {linkedLead.source ? ` from ${linkedLead.source}` : ''}
-                </p>
-              </div>
-              <span className="inline-flex w-fit items-center rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-blue-700">
-                {linkedLead.stage}
-              </span>
-            </div>
-          </div>
         )}
 
         <form id="job-form" onSubmit={handleSubmit} className="space-y-4 sm:space-y-6 pb-20 md:pb-0">
@@ -3861,6 +3859,23 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
               className="w-full sm:w-48 px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
             />
           </div>
+
+          {linkedLead && (
+            <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="font-semibold">Linked Lead</p>
+                  <p className="text-blue-800">
+                    {linkedLead.name || linkedLead.phone || linkedLead.email || 'Unknown Lead'}
+                    {linkedLead.source ? ` from ${linkedLead.source}` : ''}
+                  </p>
+                </div>
+                <span className="inline-flex w-fit items-center rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-blue-700">
+                  {linkedLead.stage}
+                </span>
+              </div>
+            </div>
+          )}
 
           {/* Desktop save/cancel */}
           <div className="hidden md:flex flex-col sm:flex-row gap-2 sm:gap-3">
