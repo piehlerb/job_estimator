@@ -321,6 +321,9 @@ function validateMiscInventory(inventory: unknown): string[] {
 
   if (!isValidString(i.id)) errors.push('MiscInventory missing valid id');
   if (!isValidNumber(i.crackRepair)) errors.push('MiscInventory missing valid crackRepair');
+  if (i.moistureMitigation !== undefined && !isValidNumber(i.moistureMitigation)) {
+    errors.push('MiscInventory missing valid moistureMitigation');
+  }
   if (!isValidNumber(i.silicaSand)) errors.push('MiscInventory missing valid silicaSand');
   if (!isValidNumber(i.shot)) errors.push('MiscInventory missing valid shot');
   if (!isValidISODate(i.updatedAt)) errors.push('MiscInventory missing valid updatedAt');

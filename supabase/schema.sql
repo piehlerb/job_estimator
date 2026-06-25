@@ -116,6 +116,8 @@ CREATE TABLE IF NOT EXISTS jobs (
   photos JSONB,
   reminders JSONB DEFAULT '[]'::jsonb,
   inventory_actuals_applied JSONB,
+  actual_moisture_mitigation_gallons NUMERIC,
+  actual_slab_temp NUMERIC,
 
   synced BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -160,11 +162,12 @@ CREATE TABLE IF NOT EXISTS basecoat_inventory (
   UNIQUE(user_id) -- Only one record per user
 );
 
--- Miscellaneous Inventory (singleton - crack repair, silica sand, shot)
+-- Miscellaneous Inventory (singleton - crack repair, moisture mitigation, silica sand, shot)
 CREATE TABLE IF NOT EXISTS misc_inventory (
   id TEXT PRIMARY KEY,
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   crack_repair NUMERIC NOT NULL,
+  moisture_mitigation NUMERIC NOT NULL DEFAULT 0,
   silica_sand NUMERIC NOT NULL,
   shot NUMERIC NOT NULL,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -306,7 +309,7 @@ COMMENT ON TABLE jobs IS 'Job estimation records with historical snapshots';
 COMMENT ON TABLE chip_inventory IS 'Chip inventory by blend';
 COMMENT ON TABLE topcoat_inventory IS 'Top coat inventory levels (singleton per user)';
 COMMENT ON TABLE basecoat_inventory IS 'Base coat inventory levels (singleton per user)';
-COMMENT ON TABLE misc_inventory IS 'Miscellaneous inventory (crack repair, silica sand, shot)';
+COMMENT ON TABLE misc_inventory IS 'Miscellaneous inventory (crack repair, moisture mitigation, silica sand, shot)';
 COMMENT ON TABLE sync_queue IS 'Pending sync operations for offline support';
 COMMENT ON TABLE sync_log IS 'Audit trail of sync operations';
 COMMENT ON TABLE user_preferences IS 'User-specific preferences and settings';

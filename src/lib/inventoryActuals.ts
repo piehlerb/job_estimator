@@ -15,6 +15,7 @@ export interface InventoryActualsSource {
   actualTintOz?: number;
   actualChipBoxes?: number;
   actualCrackRepairOz?: number;
+  actualMoistureMitigationGallons?: number;
   chipBlend?: string;
   baseColor?: string;
   tintColor?: string;
@@ -32,7 +33,7 @@ export type InventoryTarget =
   | { kind: 'base'; field: keyof Pick<BaseCoatInventory, 'baseA' | 'baseBGrey' | 'baseBTan' | 'baseBClear'> }
   | { kind: 'top'; field: keyof Pick<TopCoatInventory, 'topA' | 'topB'> }
   | { kind: 'tint'; color: string }
-  | { kind: 'misc'; field: keyof Pick<MiscInventory, 'crackRepair'> };
+  | { kind: 'misc'; field: keyof Pick<MiscInventory, 'crackRepair' | 'moistureMitigation'> };
 
 export interface InventoryActualDeltaRow {
   key: string;
@@ -94,6 +95,11 @@ export function buildInventoryActualsSnapshot(
 
   const actualCrackRepairOz = numeric(source.actualCrackRepairOz);
   if (actualCrackRepairOz !== undefined) snapshot.actualCrackRepairOz = actualCrackRepairOz;
+
+  const actualMoistureMitigationGallons = numeric(source.actualMoistureMitigationGallons);
+  if (actualMoistureMitigationGallons !== undefined) {
+    snapshot.actualMoistureMitigationGallons = actualMoistureMitigationGallons;
+  }
 
   if (source.chipBlend) snapshot.chipBlend = normalizeChipBlendName(source.chipBlend);
   if (source.baseColor) snapshot.baseColor = source.baseColor;
@@ -198,6 +204,16 @@ function addSnapshotAmounts(
       unit: 'gal',
       usedDelta: (snapshot.actualCrackRepairOz / 128) * multiplier,
       target: { kind: 'misc', field: 'crackRepair' },
+    });
+  }
+
+  if (snapshot.actualMoistureMitigationGallons) {
+    addAmount(map, {
+      key: 'misc:moistureMitigation',
+      productName: 'Moisture Mitigation',
+      unit: 'gal',
+      usedDelta: snapshot.actualMoistureMitigationGallons * multiplier,
+      target: { kind: 'misc', field: 'moistureMitigation' },
     });
   }
 }

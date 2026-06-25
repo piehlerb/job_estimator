@@ -1,4 +1,4 @@
-import { ChipSystem, Costs, Laborer, JobCalculation, InstallDaySchedule, ActualDaySchedule, ActualCosts, Pricing, CoatingRemovalType } from '../types';
+import { ChipSystem, Costs, Laborer, JobCalculation, InstallDaySchedule, ActualDaySchedule, ActualCosts, Pricing, CoatingRemovalType } from '../types/index.js';
 
 interface JobInputs {
   floorFootage: number;
@@ -375,6 +375,7 @@ interface ActualCostParams {
   actualTintOz: number;
   actualChipBoxes: number;
   actualCrackRepairOz: number;
+  actualMoistureMitigationGallons: number;
   chipBoxCost: number;
   totalPrice: number;
   installDays: number;
@@ -398,6 +399,7 @@ export function calculateActualCosts(
     actualTintOz,
     actualChipBoxes,
     actualCrackRepairOz,
+    actualMoistureMitigationGallons,
     chipBoxCost,
     totalPrice,
     installDays,
@@ -415,6 +417,7 @@ export function calculateActualCosts(
     consumablesCost,
     cyclo1CostPerGal,
     tintCostPerQuart,
+    moistureMitigationCostPerGal = 0,
   } = costs;
 
   const actualChipCost = actualChipBoxes * chipBoxCost;
@@ -423,6 +426,9 @@ export function calculateActualCosts(
   const actualCyclo1Cost = actualCyclo1Gallons * cyclo1CostPerGal;
   const actualTintCost = actualTintOz > 0 ? (actualTintOz / 32) * tintCostPerQuart : 0;
   const actualCrackRepairCost = actualCrackRepairOz > 0 ? (actualCrackRepairOz / 128) * crackFillCostPerGal : 0;
+  const actualMoistureMitigationCost = actualMoistureMitigationGallons > 0
+    ? actualMoistureMitigationGallons * moistureMitigationCostPerGal
+    : 0;
 
   const actualTotalHours = actualSchedule.reduce((sum, day) => sum + day.hours, 0);
 
@@ -456,7 +462,8 @@ export function calculateActualCosts(
   const actualExpenseAdjustment = expenseAdj ?? 0;
 
   const actualTotalCosts = actualChipCost + actualBaseCost + actualTopCost + actualCyclo1Cost
-    + actualTintCost + actualCrackRepairCost + actualGasGeneratorCost + actualGasHeaterCost + actualGasTravelCost
+    + actualTintCost + actualCrackRepairCost + actualMoistureMitigationCost
+    + actualGasGeneratorCost + actualGasHeaterCost + actualGasTravelCost
     + actualLaborCost + actualConsumablesCost + actualRoyaltyCost + actualExpenseAdjustment;
 
   const actualMargin = totalPrice - actualTotalCosts;
@@ -469,6 +476,7 @@ export function calculateActualCosts(
     actualCyclo1Cost,
     actualTintCost,
     actualCrackRepairCost,
+    actualMoistureMitigationCost,
     actualGasGeneratorCost,
     actualGasHeaterCost,
     actualGasTravelCost,

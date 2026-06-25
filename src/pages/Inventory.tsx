@@ -63,6 +63,7 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
   const [miscInventory, setMiscInventory] = useState<MiscInventory>({
     id: 'current',
     crackRepair: 0,
+    moistureMitigation: 0,
     silicaSand: 0,
     shot: 0,
     updatedAt: new Date().toISOString(),
@@ -76,6 +77,7 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
   const [baseBGreyCommitment, setBaseBGreyCommitment] = useState<CoatCommitment>({ committed: 0, potential: 0 });
   const [baseBTanCommitment, setBaseBTanCommitment] = useState<CoatCommitment>({ committed: 0, potential: 0 });
   const [baseBClearCommitment, setBaseBClearCommitment] = useState<CoatCommitment>({ committed: 0, potential: 0 });
+  const [moistureMitigationCommitment, setMoistureMitigationCommitment] = useState<CoatCommitment>({ committed: 0, potential: 0 });
 
   const [tintInventory, setTintInventory] = useState<TintInventory[]>([]);
   const [tintCommitments, setTintCommitments] = useState<{ color: string; committed: number; potential: number }[]>([]);
@@ -116,7 +118,7 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
       setTintInventory(tints);
       if (topCoat) setTopCoatInventory(topCoat);
       if (baseCoat) setBaseCoatInventory(baseCoat);
-      if (misc) setMiscInventory(misc);
+      if (misc) setMiscInventory({ ...misc, moistureMitigation: misc.moistureMitigation ?? 0 });
 
       // Calculate commitments from jobs that are today or in the future
       const costs = currentCosts || getDefaultCosts();
@@ -145,6 +147,8 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
       // Use current costs for new additive fields if snapshot doesn't have them
       antiSlipCostPerGal: job.costsSnapshot.antiSlipCostPerGal ?? currentCosts.antiSlipCostPerGal,
       abrasionResistanceCostPerGal: job.costsSnapshot.abrasionResistanceCostPerGal ?? currentCosts.abrasionResistanceCostPerGal,
+      moistureMitigationCostPerGal: job.costsSnapshot.moistureMitigationCostPerGal ?? currentCosts.moistureMitigationCostPerGal,
+      moistureMitigationSpreadRate: job.costsSnapshot.moistureMitigationSpreadRate ?? currentCosts.moistureMitigationSpreadRate,
     });
 
     // Helper to merge job pricing snapshot with current pricing
@@ -402,6 +406,44 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
     setBaseBClearCommitment({
       committed: (clearCommitted * 2) / 3,
       potential: (clearPotential * 2) / 3,
+    });
+
+    const calculateMoistureMitigationForJobs = (jobList: Job[]) => {
+      return jobList.reduce((sum, job) => {
+        const mergedCosts = getMergedCosts(job);
+        const mergedPricing = getMergedPricing(job);
+        const calc = calculateJobOutputs(
+          {
+            floorFootage: job.floorFootage,
+            verticalFootage: job.verticalFootage,
+            crackFillFactor: job.crackFillFactor,
+            travelDistance: job.travelDistance,
+            installDate: job.installDate,
+            installDays: job.installDays,
+            jobHours: job.jobHours,
+            totalPrice: job.totalPrice,
+            includeBasecoatTint: job.includeBasecoatTint || false,
+            includeTopcoatTint: job.includeTopcoatTint || false,
+            antiSlip: job.antiSlip || false,
+            abrasionResistance: job.abrasionResistance || false,
+            cyclo1Topcoat: job.cyclo1Topcoat || false,
+            cyclo1Coats: job.cyclo1Coats || 0,
+            coatingRemoval: job.coatingRemoval || 'None',
+            moistureMitigation: job.moistureMitigation || false,
+            tags: job.tags,
+          },
+          job.systemSnapshot,
+          mergedCosts,
+          job.laborersSnapshot,
+          mergedPricing
+        );
+        return sum + calc.moistureMitigationGallons;
+      }, 0);
+    };
+
+    setMoistureMitigationCommitment({
+      committed: calculateMoistureMitigationForJobs(wonJobs),
+      potential: calculateMoistureMitigationForJobs(wonAndPendingJobs),
     });
   };
 
@@ -934,6 +976,10 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
               <tr className="border-b border-slate-200">
                 <th className="text-left py-3 px-2 font-semibold">Product</th>
                 <th className="text-right py-3 px-2 font-semibold">On Hand</th>
+                <th className="text-right py-3 px-2 font-semibold">Committed</th>
+                <th className="text-right py-3 px-2 font-semibold">Available</th>
+                <th className="text-right py-3 px-2 font-semibold">Potential</th>
+                <th className="text-right py-3 px-2 font-semibold">Avail (Potential)</th>
               </tr>
             </thead>
             <tbody>
@@ -951,6 +997,33 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
                   />
                   <span className="ml-2 text-slate-500">gal</span>
                 </td>
+                <td className="py-3 px-2 text-right text-slate-400">-</td>
+                <td className="py-3 px-2 text-right text-slate-400">-</td>
+                <td className="py-3 px-2 text-right text-slate-400">-</td>
+                <td className="py-3 px-2 text-right text-slate-400">-</td>
+              </tr>
+              <tr className="border-b border-slate-100">
+                <td className="py-3 px-2 font-medium">Moisture Mitigation</td>
+                <td className="py-3 px-2 text-right">
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={miscInventory.moistureMitigation}
+                    onChange={(e) =>
+                      setMiscInventory({ ...miscInventory, moistureMitigation: parseFloat(e.target.value) || 0 })
+                    }
+                    className="w-24 px-2 py-1 border border-slate-300 rounded text-right"
+                  />
+                  <span className="ml-2 text-slate-500">gal</span>
+                </td>
+                <td className="py-3 px-2 text-right">{moistureMitigationCommitment.committed.toFixed(2)}</td>
+                <td className={`py-3 px-2 text-right font-semibold ${getAvailable(miscInventory.moistureMitigation, moistureMitigationCommitment.committed) < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                  {getAvailable(miscInventory.moistureMitigation, moistureMitigationCommitment.committed).toFixed(2)}
+                </td>
+                <td className="py-3 px-2 text-right text-slate-500">{moistureMitigationCommitment.potential.toFixed(2)}</td>
+                <td className={`py-3 px-2 text-right ${getAvailablePotential(miscInventory.moistureMitigation, moistureMitigationCommitment.potential) < 0 ? 'text-red-400' : 'text-slate-500'}`}>
+                  {getAvailablePotential(miscInventory.moistureMitigation, moistureMitigationCommitment.potential).toFixed(2)}
+                </td>
               </tr>
               <tr className="border-b border-slate-100">
                 <td className="py-3 px-2 font-medium">Silica Sand</td>
@@ -966,6 +1039,10 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
                   />
                   <span className="ml-2 text-slate-500">buckets</span>
                 </td>
+                <td className="py-3 px-2 text-right text-slate-400">-</td>
+                <td className="py-3 px-2 text-right text-slate-400">-</td>
+                <td className="py-3 px-2 text-right text-slate-400">-</td>
+                <td className="py-3 px-2 text-right text-slate-400">-</td>
               </tr>
               <tr className="border-b border-slate-100">
                 <td className="py-3 px-2 font-medium">Shot</td>
@@ -981,6 +1058,10 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
                   />
                   <span className="ml-2 text-slate-500">buckets</span>
                 </td>
+                <td className="py-3 px-2 text-right text-slate-400">-</td>
+                <td className="py-3 px-2 text-right text-slate-400">-</td>
+                <td className="py-3 px-2 text-right text-slate-400">-</td>
+                <td className="py-3 px-2 text-right text-slate-400">-</td>
               </tr>
             </tbody>
           </table>
@@ -993,6 +1074,7 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
         jobs={allJobs}
         baseCoatInventory={baseCoatInventory}
         topCoatInventory={topCoatInventory}
+        miscInventory={miscInventory}
         chipInventory={chipInventory}
         tintInventory={tintInventory}
         currentCosts={summaryCurrentCosts}

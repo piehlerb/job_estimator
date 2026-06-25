@@ -1198,7 +1198,10 @@ export async function getMiscInventory(): Promise<MiscInventory | null> {
     const request = store.get('current');
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result || null);
+    request.onsuccess = () => {
+      const result = request.result;
+      resolve(result ? { ...result, moistureMitigation: result.moistureMitigation ?? 0 } : null);
+    };
   });
 }
 
@@ -1207,7 +1210,7 @@ export async function saveMiscInventory(inventory: MiscInventory): Promise<void>
   await new Promise<void>((resolve, reject) => {
     const transaction = db.transaction(['miscInventory'], 'readwrite');
     const store = transaction.objectStore('miscInventory');
-    const request = store.put({ ...inventory, id: 'current' });
+    const request = store.put({ ...inventory, id: 'current', moistureMitigation: inventory.moistureMitigation ?? 0 });
 
     request.onerror = () => reject(request.error);
     request.onsuccess = () => resolve();

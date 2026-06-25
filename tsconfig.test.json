@@ -13,6 +13,10 @@
   "include": [
     "src/lib/inventoryActuals.ts",
     "src/lib/inventoryActuals.test.ts",
+    "src/lib/calculations.ts",
+    "src/lib/calculations.test.ts",
+    "src/lib/reminderCoverage.ts",
+    "src/lib/reminderCoverage.test.ts",
     "src/lib/leadPipeline.ts",
     "src/lib/leadPipeline.test.ts",
     "src/lib/leadMutations.ts",

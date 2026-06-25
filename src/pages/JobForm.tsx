@@ -1,4 +1,4 @@
-import { ArrowLeft, Save, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, X, Plus, Trash2, Link, Shuffle, Check, Copy, FileText } from 'lucide-react';
+import { ArrowLeft, Save, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, X, Plus, Trash2, Link, Shuffle, Check, Copy, FileText, Search } from 'lucide-react';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   getAllSystems,
@@ -45,6 +45,7 @@ import {
   type InventoryReviewRow,
 } from '../lib/inventoryActuals';
 import { stageForLinkedJobStatus } from '../lib/leadPipeline';
+import { findPendingJobsWithoutActiveReminders } from '../lib/reminderCoverage';
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -103,6 +104,7 @@ function createDefaultMiscInventory(): MiscInventory {
   return {
     id: 'current',
     crackRepair: 0,
+    moistureMitigation: 0,
     silicaSand: 0,
     shot: 0,
     updatedAt: new Date().toISOString(),
@@ -151,6 +153,8 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
     actualTintOz: '',
     actualChipBoxes: '',
     actualCrackRepairOz: '',
+    actualMoistureMitigationGallons: '',
+    actualSlabTemp: '',
     actualExpenseAdjustment: '',
     actualExpenseAdjustmentNotes: '',
   });
@@ -168,6 +172,9 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [editingReminderId, setEditingReminderId] = useState<string | null>(null);
   const [savingReminder, setSavingReminder] = useState(false);
+  const [checkingMissingReminders, setCheckingMissingReminders] = useState(false);
+  const [showMissingRemindersModal, setShowMissingRemindersModal] = useState(false);
+  const [pendingJobsWithoutReminders, setPendingJobsWithoutReminders] = useState<Job[]>([]);
   const [reminderForm, setReminderForm] = useState({
     subject: '',
     details: '',
@@ -291,6 +298,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
         actualTintOz: parseFloat(actualMaterials.actualTintOz) || 0,
         actualChipBoxes: parseFloat(actualMaterials.actualChipBoxes) || 0,
         actualCrackRepairOz: parseFloat(actualMaterials.actualCrackRepairOz) || 0,
+        actualMoistureMitigationGallons: parseFloat(actualMaterials.actualMoistureMitigationGallons) || 0,
         chipBoxCost,
         totalPrice: parseFloat(formData.totalPrice) || 0,
         installDays: parseFloat(formData.installDays) || 1,
@@ -585,7 +593,12 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
             // Pre-populate from estimated schedule as starting point
             setActualInstallSchedule(schedule.map(d => ({ ...d })));
           }
-          if (job.actualBaseCoatGallons != null || job.actualTopCoatGallons != null) {
+          if (
+            job.actualBaseCoatGallons != null ||
+            job.actualTopCoatGallons != null ||
+            job.actualMoistureMitigationGallons != null ||
+            job.actualSlabTemp != null
+          ) {
             actualsInitialized.current = true;
           }
           setActualMaterials({
@@ -595,6 +608,8 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
             actualTintOz: job.actualTintOz?.toString() || '',
             actualChipBoxes: job.actualChipBoxes?.toString() || '',
             actualCrackRepairOz: job.actualCrackRepairOz?.toString() || '',
+            actualMoistureMitigationGallons: job.actualMoistureMitigationGallons?.toString() || '',
+            actualSlabTemp: job.actualSlabTemp?.toString() || '',
             actualExpenseAdjustment: job.actualExpenseAdjustment?.toString() || '',
             actualExpenseAdjustmentNotes: job.actualExpenseAdjustmentNotes || '',
           });
@@ -1147,6 +1162,29 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
     }
   };
 
+  const handleFindPendingJobsWithoutReminders = async () => {
+    setCheckingMissingReminders(true);
+    try {
+      const allJobs = await getAllJobs();
+      setPendingJobsWithoutReminders(findPendingJobsWithoutActiveReminders(allJobs));
+      setShowMissingRemindersModal(true);
+    } catch (error) {
+      console.error('Error checking pending jobs without reminders:', error);
+      alert('Error checking pending jobs without reminders. Please try again.');
+    } finally {
+      setCheckingMissingReminders(false);
+    }
+  };
+
+  const handleOpenMissingReminderJob = (targetJobId: string) => {
+    setShowMissingRemindersModal(false);
+    if (targetJobId === jobId) {
+      setActiveTab('reminders');
+      return;
+    }
+    onEditJob?.(targetJobId);
+  };
+
   const persistFollowUpChanges = async (nextFollowUps: JobFollowUp[]) => {
     setFollowUps(nextFollowUps);
 
@@ -1452,6 +1490,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
     actualTintOz: job.actualTintOz,
     actualChipBoxes: job.actualChipBoxes,
     actualCrackRepairOz: job.actualCrackRepairOz,
+    actualMoistureMitigationGallons: job.actualMoistureMitigationGallons,
     chipBlend: job.chipBlend,
     baseColor: job.baseColor,
     tintColor: job.tintColor,
@@ -1525,7 +1564,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
       const now = new Date().toISOString();
       let topInventory = topInventoryRecord ?? createDefaultTopCoatInventory();
       let baseInventory = baseInventoryRecord ?? createDefaultBaseCoatInventory();
-      let miscInventory = miscInventoryRecord ?? createDefaultMiscInventory();
+      let miscInventory = { ...createDefaultMiscInventory(), ...miscInventoryRecord };
       let hasTopChanges = false;
       let hasBaseChanges = false;
       let hasMiscChanges = false;
@@ -1781,6 +1820,8 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
         actualTintOz: parseFloat(actualMaterials.actualTintOz) || undefined,
         actualChipBoxes: parseFloat(actualMaterials.actualChipBoxes) || undefined,
         actualCrackRepairOz: parseFloat(actualMaterials.actualCrackRepairOz) || undefined,
+        actualMoistureMitigationGallons: parseFloat(actualMaterials.actualMoistureMitigationGallons) || undefined,
+        actualSlabTemp: parseFloat(actualMaterials.actualSlabTemp) || undefined,
         inventoryActualsApplied: existingJob?.inventoryActualsApplied,
         actualExpenseAdjustment: parseFloat(actualMaterials.actualExpenseAdjustment) || undefined,
         actualExpenseAdjustmentNotes: actualMaterials.actualExpenseAdjustmentNotes.trim() || undefined,
@@ -3488,6 +3529,34 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
                       className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime"
                     />
                   </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      MVB (gal)
+                      {calculation && <span className="ml-1 text-slate-400 font-normal">est. {calculation.moistureMitigationGallons.toFixed(1)}</span>}
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      placeholder={calculation ? calculation.moistureMitigationGallons.toFixed(1) : '0'}
+                      value={actualMaterials.actualMoistureMitigationGallons}
+                      onChange={(e) => setActualMaterials(prev => ({ ...prev, actualMoistureMitigationGallons: e.target.value }))}
+                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Slab Temp (deg F)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      placeholder="0"
+                      value={actualMaterials.actualSlabTemp}
+                      onChange={(e) => setActualMaterials(prev => ({ ...prev, actualSlabTemp: e.target.value }))}
+                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -3543,6 +3612,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
                           { label: 'Cyclo1', est: calculation.cyclo1Cost, act: actualCalculation.actualCyclo1Cost },
                           { label: 'Tint', est: calculation.tintCost, act: actualCalculation.actualTintCost },
                           { label: 'Crack Repair', est: calculation.crackFillCost, act: actualCalculation.actualCrackRepairCost },
+                          { label: 'MVB', est: calculation.moistureMitigationMaterialCost, act: actualCalculation.actualMoistureMitigationCost },
                           {
                             label: 'Gas',
                             est: calculation.gasGeneratorCost + calculation.gasHeaterCost + calculation.gasTravelCost,
@@ -3606,19 +3676,30 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
 
           {activeTab === 'reminders' && (
             <div className="rounded-lg border border-slate-200 p-4 sm:p-5 bg-slate-50">
-              <div className="flex items-center justify-between mb-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-3">
                 <div>
                   <h3 className="text-sm sm:text-base font-semibold text-slate-900">Reminders</h3>
                   <p className="text-xs text-slate-500 mt-1">Task reminders related to this job.</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={openAddReminder}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-medium bg-gf-lime text-white rounded-lg hover:bg-gf-dark-green transition-colors"
-                >
-                  <Plus size={14} />
-                  Add Reminder
-                </button>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <button
+                    type="button"
+                    onClick={handleFindPendingJobsWithoutReminders}
+                    disabled={checkingMissingReminders}
+                    className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-medium text-gf-dark-green bg-white border border-slate-200 rounded-lg hover:border-gf-lime hover:bg-green-50 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <Search size={14} />
+                    {checkingMissingReminders ? 'Checking...' : 'Find Missing'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openAddReminder}
+                    className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-medium bg-gf-lime text-white rounded-lg hover:bg-gf-dark-green transition-colors"
+                  >
+                    <Plus size={14} />
+                    Add Reminder
+                  </button>
+                </div>
               </div>
 
               {reminders.length === 0 ? (
@@ -3845,6 +3926,61 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
           </div>
         </form>
       </div>
+      {showMissingRemindersModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="missing-reminders-modal-title"
+            className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[85vh] overflow-hidden"
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+              <h2 id="missing-reminders-modal-title" className="text-lg font-semibold text-slate-900">
+                Pending Estimates Without Reminders
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowMissingRemindersModal(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                aria-label="Close pending estimates without reminders"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="px-6 py-5">
+              {pendingJobsWithoutReminders.length === 0 ? (
+                <p className="text-sm text-slate-600">All pending estimates have an active reminder.</p>
+              ) : (
+                <div className="max-h-[60vh] overflow-auto divide-y divide-slate-100 border border-slate-200 rounded-lg">
+                  {pendingJobsWithoutReminders.map((missingJob) => {
+                    const estimateDate = missingJob.estimateDate || missingJob.createdAt.slice(0, 10);
+                    const canOpenJob = missingJob.id === jobId || Boolean(onEditJob);
+                    return (
+                      <div key={missingJob.id} className="flex flex-col gap-3 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-slate-900">{missingJob.name}</p>
+                          <p className="text-xs text-slate-600">
+                            {missingJob.customerName || 'No customer'} - Estimate {new Date(`${estimateDate}T12:00:00`).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenMissingReminderJob(missingJob.id)}
+                          disabled={!canOpenJob}
+                          className="inline-flex items-center justify-center rounded-lg bg-gf-lime px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-gf-dark-green disabled:cursor-not-allowed disabled:bg-slate-300"
+                        >
+                          {missingJob.id === jobId ? 'Current Job' : 'Open'}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {showReminderModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg">

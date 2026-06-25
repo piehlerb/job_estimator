@@ -15,6 +15,7 @@ const baseSource: InventoryActualsSource = {
   actualTintOz: 24,
   actualChipBoxes: 7,
   actualCrackRepairOz: 64,
+  actualMoistureMitigationGallons: 5,
   chipBlend: 'shoreline',
   baseColor: 'Grey',
   tintColor: 'Slate Gray',
@@ -80,6 +81,7 @@ describe('inventory actual delta rows', () => {
     assert.equal(byKey['top:topB'], 6);
     assert.equal(byKey['tint:Slate Gray'], 24);
     assert.equal(byKey['misc:crackRepair'], 0.5);
+    assert.equal(byKey['misc:moistureMitigation'], 5);
   });
 
   test('saving with No leaves the baseline unchanged so a later Yes applies accumulated delta', () => {
@@ -160,6 +162,25 @@ describe('inventory actual delta rows', () => {
 
     assert.equal(baseRow?.usedDelta, 12);
     assert.equal(baseRow?.warning, 'No matching Base B inventory bucket exists for this base color.');
+  });
+
+  test('moisture mitigation actuals update misc inventory by gallons', () => {
+    const baseline = buildInventoryActualsSnapshot(
+      { actualMoistureMitigationGallons: 2 },
+      '2026-06-12T09:00:00.000Z'
+    );
+    const current = buildInventoryActualsSnapshot(
+      { actualMoistureMitigationGallons: 6 },
+      '2026-06-12T11:00:00.000Z'
+    );
+
+    const row = buildInventoryActualDeltaRows(current, baseline).find(
+      (delta) => delta.key === 'misc:moistureMitigation'
+    );
+
+    assert.equal(row?.productName, 'Moisture Mitigation');
+    assert.equal(row?.unit, 'gal');
+    assert.equal(row?.usedDelta, 4);
   });
 
   test('review rows default missing inventory to zero and calculate editable new values', () => {

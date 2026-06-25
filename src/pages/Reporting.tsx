@@ -323,6 +323,7 @@ export default function Reporting({ onEditJob }: ReportingProps) {
               actualTintOz: job.actualTintOz || 0,
               actualChipBoxes: job.actualChipBoxes || 0,
               actualCrackRepairOz: job.actualCrackRepairOz || 0,
+              actualMoistureMitigationGallons: job.actualMoistureMitigationGallons || 0,
               chipBoxCost: job.systemSnapshot?.boxCost ?? 0,
               totalPrice: job.totalPrice,
               installDays: job.installDays,

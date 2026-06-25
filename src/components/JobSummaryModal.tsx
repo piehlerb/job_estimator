@@ -9,6 +9,7 @@ import {
   Pricing,
   BaseCoatInventory,
   TopCoatInventory,
+  MiscInventory,
   ChipInventory,
   TintInventory,
 } from '../types';
@@ -19,6 +20,7 @@ interface JobSummaryModalProps {
   jobs: Job[];
   baseCoatInventory: BaseCoatInventory;
   topCoatInventory: TopCoatInventory;
+  miscInventory: MiscInventory;
   chipInventory: ChipInventory[];
   tintInventory: TintInventory[];
   currentCosts: Costs;
@@ -38,6 +40,7 @@ interface JobMaterialRow {
   chipLbs: number;
   tintColor: string | null;
   tintOz: number;
+  moistureMitigationGallons: number;
 }
 
 function parseLocalDate(dateStr: string): Date {
@@ -85,6 +88,7 @@ export default function JobSummaryModal({
   jobs,
   baseCoatInventory,
   topCoatInventory,
+  miscInventory,
   chipInventory,
   tintInventory,
   currentCosts,
@@ -105,6 +109,10 @@ export default function JobSummaryModal({
     antiSlipCostPerGal: job.costsSnapshot.antiSlipCostPerGal ?? currentCosts.antiSlipCostPerGal,
     abrasionResistanceCostPerGal:
       job.costsSnapshot.abrasionResistanceCostPerGal ?? currentCosts.abrasionResistanceCostPerGal,
+    moistureMitigationCostPerGal:
+      job.costsSnapshot.moistureMitigationCostPerGal ?? currentCosts.moistureMitigationCostPerGal,
+    moistureMitigationSpreadRate:
+      job.costsSnapshot.moistureMitigationSpreadRate ?? currentCosts.moistureMitigationSpreadRate,
   });
 
   const getMergedPricing = (job: Job): Pricing =>
@@ -187,8 +195,9 @@ export default function JobSummaryModal({
       const hasTint = job.includeBasecoatTint || job.includeTopcoatTint;
       const tintColor = hasTint && job.tintColor ? job.tintColor : null;
       const tintOz = calc.tintNeeded;
+      const moistureMitigationGallons = calc.moistureMitigationGallons;
 
-      return { job, baseA, baseBGrey, baseBTan, baseBClear, topA, topB, chipBlend, chipLbs, tintColor, tintOz };
+      return { job, baseA, baseBGrey, baseBTan, baseBClear, topA, topB, chipBlend, chipLbs, tintColor, tintOz, moistureMitigationGallons };
     });
   }, [filteredJobs, currentCosts, currentPricing]);
 
@@ -201,6 +210,7 @@ export default function JobSummaryModal({
     const baseBClear = activeRows.reduce((s, r) => s + r.baseBClear, 0);
     const topA = activeRows.reduce((s, r) => s + r.topA, 0);
     const topB = activeRows.reduce((s, r) => s + r.topB, 0);
+    const moistureMitigation = activeRows.reduce((s, r) => s + r.moistureMitigationGallons, 0);
 
     // Sequential chip reclaim simulation: reclaim from Job N feeds into Job N+1
     const reclaimRate = (currentPricing.chipReclaimRate ?? 0) / 100;
@@ -251,7 +261,7 @@ export default function JobSummaryModal({
     ]);
     const allTintColors = [...allTintColorsSet].sort();
 
-    return { baseA, baseBGrey, baseBTan, baseBClear, topA, topB, chipByBlend, tintByColor, allChipBlends, allTintColors, reclaimRate };
+    return { baseA, baseBGrey, baseBTan, baseBClear, topA, topB, moistureMitigation, chipByBlend, tintByColor, allChipBlends, allTintColors, reclaimRate };
   }, [jobMaterials, ignoredJobIds, chipInventory, tintInventory, currentPricing]);
 
   const toggleIgnored = (jobId: string) => {
@@ -326,6 +336,7 @@ export default function JobSummaryModal({
                   <th className="py-3 px-3 text-left font-semibold text-slate-600">Base B</th>
                   <th className="py-3 px-3 text-right font-semibold text-slate-600">Top A (gal)</th>
                   <th className="py-3 px-3 text-right font-semibold text-slate-600">Top B (gal)</th>
+                  <th className="py-3 px-3 text-right font-semibold text-slate-600">MVB (gal)</th>
                   <th className="py-3 px-3 text-left font-semibold text-slate-600">Chip</th>
                   <th className="py-3 px-3 text-left font-semibold text-slate-600">Tint</th>
                 </tr>
@@ -333,7 +344,7 @@ export default function JobSummaryModal({
               <tbody>
                 {jobMaterials.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="py-10 text-center text-slate-400">
+                    <td colSpan={12} className="py-10 text-center text-slate-400">
                       No jobs scheduled in the next {dayWindow} days
                     </td>
                   </tr>
@@ -380,6 +391,9 @@ export default function JobSummaryModal({
                         </td>
                         <td className="py-3 px-3 text-right tabular-nums">{row.topA.toFixed(2)}</td>
                         <td className="py-3 px-3 text-right tabular-nums">{row.topB.toFixed(2)}</td>
+                        <td className="py-3 px-3 text-right tabular-nums">
+                          {row.moistureMitigationGallons > 0 ? row.moistureMitigationGallons.toFixed(2) : <span className="text-slate-400">-</span>}
+                        </td>
                         <td className="py-3 px-3 text-slate-600 whitespace-nowrap">
                           {row.chipBlend && row.chipLbs > 0 ? (
                             <span>
@@ -439,6 +453,16 @@ export default function JobSummaryModal({
                 {/* Topcoat */}
                 {totals.topA > 0 && <MaterialRow label="Top A" unit="gal" required={totals.topA} onHand={topCoatInventory.topA} />}
                 {totals.topB > 0 && <MaterialRow label="Top B" unit="gal" required={totals.topB} onHand={topCoatInventory.topB} />}
+
+                {/* Misc */}
+                {totals.moistureMitigation > 0 && (
+                  <MaterialRow
+                    label="Moisture Mitigation"
+                    unit="gal"
+                    required={totals.moistureMitigation}
+                    onHand={miscInventory.moistureMitigation ?? 0}
+                  />
+                )}
 
                 {/* Chip by blend — required accounts for sequential reclaim */}
                 {totals.allChipBlends.map((blend) => {

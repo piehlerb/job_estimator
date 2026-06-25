@@ -301,6 +301,7 @@ export interface ActualCosts {
   actualCyclo1Cost: number;
   actualTintCost: number;
   actualCrackRepairCost: number;
+  actualMoistureMitigationCost: number;
   actualGasGeneratorCost: number;
   actualGasHeaterCost: number;
   actualGasTravelCost: number;
@@ -321,6 +322,7 @@ export interface InventoryActualsApplied {
   actualTintOz?: number;
   actualChipBoxes?: number;
   actualCrackRepairOz?: number;
+  actualMoistureMitigationGallons?: number;
   chipBlend?: string;
   baseColor?: string;
   tintColor?: string;
@@ -385,6 +387,8 @@ export interface Job {
   actualTintOz?: number;         // Combined base + top tint, in oz
   actualChipBoxes?: number;
   actualCrackRepairOz?: number;
+  actualMoistureMitigationGallons?: number;
+  actualSlabTemp?: number;
   inventoryActualsApplied?: InventoryActualsApplied;
   actualExpenseAdjustment?: number;
   actualExpenseAdjustmentNotes?: string;
@@ -447,6 +451,7 @@ export interface BaseCoatInventory {
 export interface MiscInventory {
   id: string;
   crackRepair: number; // gallons
+  moistureMitigation: number; // gallons
   silicaSand: number; // buckets
   shot: number; // buckets
   updatedAt: string;
