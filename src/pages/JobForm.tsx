@@ -1743,14 +1743,6 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
         }
       }
 
-      if (hasMissingActuals) {
-        const proceed = window.confirm('Some actual pricing fields are empty. Save anyway?');
-        if (!proceed) {
-          setSaving(false);
-          return;
-        }
-      }
-
       // Calculate total hours from schedule
       const totalHours = installSchedule.reduce((sum, day) => sum + day.hours, 0);
 
@@ -1972,17 +1964,6 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
     coatingRemovalPrice: calculation.suggestedCoatingRemovalPrice > 0,
     moistureMitigationPrice: calculation.suggestedMoistureMitigationPrice > 0,
   } : null;
-  // Save-time warning: warn if actual is zero/empty when suggested > 0
-  const hasMissingActuals = calculation ? (
-    (calculation.suggestedCrackPrice > 0 && !(parseFloat(formData.actualCrackPrice) > 0)) ||
-    (calculation.suggestedFloorPrice > 0 && !(parseFloat(formData.actualFloorPrice) > 0)) ||
-    (calculation.suggestedVerticalPrice > 0 && !(parseFloat(formData.actualVerticalPrice) > 0)) ||
-    (calculation.suggestedAntiSlipPrice > 0 && !(parseFloat(formData.actualAntiSlipPrice) > 0)) ||
-    (calculation.suggestedAbrasionResistancePrice > 0 && !(parseFloat(formData.actualAbrasionResistancePrice) > 0)) ||
-    (calculation.suggestedCoatingRemovalPrice > 0 && !(parseFloat(formData.actualCoatingRemovalPrice) > 0)) ||
-    (calculation.suggestedMoistureMitigationPrice > 0 && !(parseFloat(formData.actualMoistureMitigationPrice) > 0))
-  ) : false;
-
   if (loading) {
     return <div className="p-6 text-center">Loading...</div>;
   }
