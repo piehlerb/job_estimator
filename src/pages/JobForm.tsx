@@ -37,7 +37,7 @@ import { calculateJobOutputs, calculateActualCosts } from '../lib/calculations';
 import InstallDayScheduleComponent from '../components/InstallDaySchedule';
 import { convertLegacyJobToSchedule } from '../lib/jobMigration';
 import { compareSnapshots, SnapshotChanges } from '../lib/snapshotComparison';
-import SnapshotChangeBanner from '../components/SnapshotChangeBanner';
+import SnapshotChangeBanner, { SelectedChanges } from '../components/SnapshotChangeBanner';
 import { normalizeChipBlendName } from '../lib/syncHelpers';
 import {
   buildInventoryActualsUpdate,
@@ -121,6 +121,8 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
   const [saving, setSaving] = useState(false);
   const [calculation, setCalculation] = useState<JobCalculation | null>(null);
   const [usedPricing, setUsedPricing] = useState<Pricing>(getDefaultPricing());
+  const [usedCosts, setUsedCosts] = useState<Costs>(getDefaultCosts());
+  const [usedSystem, setUsedSystem] = useState<ChipSystem | null>(null);
   const [existingJob, setExistingJob] = useState<Job | null>(null);
   const [chipBlends, setChipBlends] = useState<ChipBlend[]>([]);
   const [chipBlendInput, setChipBlendInput] = useState('');
@@ -201,7 +203,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
   // Snapshot comparison state
   const [snapshotChanges, setSnapshotChanges] = useState<SnapshotChanges | null>(null);
   const [showSnapshotBanner, setShowSnapshotBanner] = useState(false);
-  const [useCurrentValues, setUseCurrentValues] = useState(false);
+  const [acceptedChanges, setAcceptedChanges] = useState<SelectedChanges | null>(null);
 
   // Estimate group state
   const [groupJobs, setGroupJobs] = useState<Job[]>([]);
@@ -269,7 +271,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
 
   useEffect(() => {
     calculateCosts();
-  }, [formData, systems, costs, pricing, activeLaborers, installSchedule, useCurrentValues, existingJob]);
+  }, [formData, systems, costs, pricing, activeLaborers, installSchedule, existingJob]);
 
   // Reactively compute actual costs when actuals change
   useEffect(() => {
@@ -277,10 +279,8 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
       setActualCalculation(null);
       return;
     }
-    const costsToUse = existingJob && !useCurrentValues
-      ? { ...getDefaultCosts(), ...existingJob.costsSnapshot }
-      : costs;
-    const pricingToUse = existingJob && !useCurrentValues && existingJob.pricingSnapshot
+    const costsToUse = { ...getDefaultCosts(), ...existingJob.costsSnapshot };
+    const pricingToUse = existingJob.pricingSnapshot
       ? { ...getDefaultPricing(), ...existingJob.pricingSnapshot }
       : pricing;
     const laborersToUse = [
@@ -312,7 +312,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
       laborersToUse
     );
     setActualCalculation(calc);
-  }, [actualInstallSchedule, actualMaterials, formData.totalPrice, formData.installDays, formData.installDate, formData.travelDistance, formData.disableGasHeater, existingJob, activeLaborers, costs, pricing, useCurrentValues]);
+  }, [actualInstallSchedule, actualMaterials, formData.totalPrice, formData.installDays, formData.installDate, formData.travelDistance, formData.disableGasHeater, existingJob, activeLaborers, costs, pricing]);
 
 
   const productsTotalPrice = useMemo(
@@ -690,20 +690,19 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
       return;
     }
 
-    // Use snapshot costs/pricing if editing existing job, otherwise use current costs/pricing
-    // If user chose to use current values, override with current values
-    const costsToUse = existingJob && !useCurrentValues
+    // Use snapshot costs if editing existing job, otherwise use current costs
+    // existingJob.costsSnapshot already reflects any selective updates the user accepted
+    const costsToUse = existingJob
       ? {
           ...getDefaultCosts(),
           ...existingJob.costsSnapshot,
-          // Override with current costs for new fields if snapshot doesn't have them
           antiSlipCostPerGal: existingJob.costsSnapshot.antiSlipCostPerGal ?? costs.antiSlipCostPerGal,
           abrasionResistanceCostPerGal: existingJob.costsSnapshot.abrasionResistanceCostPerGal ?? costs.abrasionResistanceCostPerGal,
           moistureMitigationCostPerGal: existingJob.costsSnapshot.moistureMitigationCostPerGal ?? costs.moistureMitigationCostPerGal,
           moistureMitigationSpreadRate: existingJob.costsSnapshot.moistureMitigationSpreadRate ?? costs.moistureMitigationSpreadRate,
         }
       : costs;
-    const pricingToUse = existingJob && !useCurrentValues && existingJob.pricingSnapshot
+    const pricingToUse = existingJob && existingJob.pricingSnapshot
       ? { ...getDefaultPricing(), ...existingJob.pricingSnapshot }
       : pricing;
     setUsedPricing(pricingToUse);
@@ -711,7 +710,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
     // For system snapshot, merge current defaults for fields added after the snapshot was taken.
     // If the user changed the system from the original, use the newly selected system directly.
     const systemChanged = existingJob && formData.system !== existingJob.systemId;
-    const systemToUse = existingJob && !useCurrentValues && !systemChanged
+    const systemToUse = existingJob && !systemChanged
       ? {
           ...existingJob.systemSnapshot,
           baseCoats: existingJob.systemSnapshot.baseCoats ?? selectedSystem?.baseCoats ?? 1,
@@ -748,6 +747,8 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
 
     const calc = calculateJobOutputs(inputs, systemToUse, costsToUse, laborersToUse, pricingToUse);
     setCalculation(calc);
+    setUsedCosts(costsToUse);
+    setUsedSystem(systemToUse);
   };
 
   // Auto-populate actual pricing from suggested pricing when calculation first becomes available
@@ -1462,17 +1463,32 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
     }
   };
 
-  const handleUpdateToCurrentValues = async () => {
-    setUseCurrentValues(true);
+  const handleUpdateToCurrentValues = async (selected: SelectedChanges) => {
+    setAcceptedChanges(selected);
     setShowSnapshotBanner(false);
 
     if (existingJob) {
       const selectedSystem = systems.find((s) => s.id === formData.system);
+
+      // Selectively merge: only update fields the user accepted
+      const mergedCosts = { ...existingJob.costsSnapshot };
+      for (const field of selected.costFields) {
+        (mergedCosts as Record<string, unknown>)[field] = (costs as Record<string, unknown>)[field];
+      }
+
+      const mergedSystem = existingJob.systemSnapshot
+        ? { ...existingJob.systemSnapshot }
+        : selectedSystem || existingJob.systemSnapshot;
+      if (selectedSystem && selected.systemFields.length > 0) {
+        for (const field of selected.systemFields) {
+          (mergedSystem as Record<string, unknown>)[field] = (selectedSystem as Record<string, unknown>)[field];
+        }
+      }
+
       const updatedJob: Job = {
         ...existingJob,
-        costsSnapshot: costs,
-        pricingSnapshot: pricing,
-        systemSnapshot: selectedSystem || existingJob.systemSnapshot,
+        costsSnapshot: mergedCosts,
+        systemSnapshot: mergedSystem,
         updatedAt: new Date().toISOString(),
         synced: false,
       };
@@ -1482,7 +1498,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
   };
 
   const handleKeepOriginalValues = () => {
-    setUseCurrentValues(false);
+    setAcceptedChanges(null);
     setShowSnapshotBanner(false);
   };
 
@@ -1827,11 +1843,9 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
         followUps: followUps.length > 0
           ? [...followUps].sort((a, b) => a.date.localeCompare(b.date))
           : undefined,
-        // Update snapshots if user chose to use current values, otherwise preserve original
-        // Laborers can be edited, so always save current selection
-        costsSnapshot: existingJob && !useCurrentValues ? existingJob.costsSnapshot : costs,
-        pricingSnapshot: existingJob && !useCurrentValues ? existingJob.pricingSnapshot : pricing,
-        systemSnapshot: existingJob && !useCurrentValues ? existingJob.systemSnapshot : selectedSystem,
+        costsSnapshot: usedCosts,
+        pricingSnapshot: usedPricing,
+        systemSnapshot: usedSystem || selectedSystem,
         laborersSnapshot: laborersToSave,
         // Preserve group fields
         groupId: existingJob?.groupId,

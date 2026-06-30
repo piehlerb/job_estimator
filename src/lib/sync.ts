@@ -278,6 +278,10 @@ export async function pushToSupabase(): Promise<{
       jobs: getAllJobsForSync,
     };
 
+    // Track which changes were successfully pushed so we can clear them
+    // even if other stores fail
+    const successfulChanges: Array<{ storeName: string; recordId: string }> = [];
+
     // Process each store with pending changes
     for (const [storeName, recordIds] of changesByStore.entries()) {
       try {
@@ -296,6 +300,10 @@ export async function pushToSupabase(): Promise<{
 
         if (changedRecords.length === 0) {
           console.log(`[Sync] No changed records found for ${storeName}`);
+          // Record not found locally — clear from queue to prevent infinite retry
+          for (const recordId of recordIds) {
+            successfulChanges.push({ storeName, recordId });
+          }
           continue;
         }
 
@@ -321,6 +329,7 @@ export async function pushToSupabase(): Promise<{
 
         // Batch insert/upsert
         const batches = batchArray(recordsToSync, BATCH_SIZE);
+        let storeHadError = false;
 
         for (const batch of batches) {
           const { error } = await supabase.from(tableName).upsert(batch, {
@@ -336,6 +345,7 @@ export async function pushToSupabase(): Promise<{
                 error.hint || ''
               }`
             );
+            storeHadError = true;
           } else {
             console.log(
               `[Sync] Successfully synced ${batch.length} record(s) to ${tableName}`
@@ -343,15 +353,28 @@ export async function pushToSupabase(): Promise<{
             recordsPushed += batch.length;
           }
         }
+
+        // Track successfully pushed records for queue clearing
+        if (!storeHadError) {
+          for (const recordId of recordIds) {
+            successfulChanges.push({ storeName, recordId });
+          }
+        }
       } catch (error: any) {
         errors.push(`${storeName}: ${error.message}`);
       }
     }
 
-    // Clear the sync queue after successful push
-    if (errors.length === 0) {
-      await clearSyncQueue();
-      console.log('[Sync] Cleared sync queue after successful push');
+    // Clear successfully pushed changes from the queue, even if some stores failed
+    if (successfulChanges.length > 0) {
+      const changesToClear = successfulChanges.map(c => ({
+        storeName: c.storeName,
+        recordId: c.recordId,
+        operation: 'update' as const,
+        timestamp: '',
+      }));
+      await clearSyncQueue(changesToClear);
+      console.log(`[Sync] Cleared ${successfulChanges.length} successfully pushed change(s) from queue`);
     }
 
     return { recordsPushed, errors };
@@ -722,10 +745,16 @@ export async function syncWithSupabase(): Promise<SyncResult> {
     const allErrors = [...pullResult.errors, ...pushResult.errors];
     const success = allErrors.length === 0;
 
-    if (success) {
+    // Advance lastSync if pull succeeded — push errors shouldn't block
+    // future pulls from fetching new data
+    if (pullResult.errors.length === 0) {
       await setLastSyncTimestamp(startTime);
     } else {
-      console.warn('[Sync] Not advancing sync cursor because sync completed with errors', allErrors);
+      console.warn('[Sync] Not advancing sync cursor because pull had errors', pullResult.errors);
+    }
+
+    if (pushResult.errors.length > 0) {
+      console.warn('[Sync] Push completed with errors (queue retains failed items)', pushResult.errors);
     }
 
     return {
