@@ -45,7 +45,6 @@ import {
   type InventoryReviewRow,
 } from '../lib/inventoryActuals';
 import { stageForLinkedJobStatus } from '../lib/leadPipeline';
-import { findPendingJobsWithoutActiveReminders } from '../lib/reminderCoverage';
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -174,9 +173,6 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [editingReminderId, setEditingReminderId] = useState<string | null>(null);
   const [savingReminder, setSavingReminder] = useState(false);
-  const [checkingMissingReminders, setCheckingMissingReminders] = useState(false);
-  const [showMissingRemindersModal, setShowMissingRemindersModal] = useState(false);
-  const [pendingJobsWithoutReminders, setPendingJobsWithoutReminders] = useState<Job[]>([]);
   const [reminderForm, setReminderForm] = useState({
     subject: '',
     details: '',
@@ -1166,28 +1162,6 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
     }
   };
 
-  const handleFindPendingJobsWithoutReminders = async () => {
-    setCheckingMissingReminders(true);
-    try {
-      const allJobs = await getAllJobs();
-      setPendingJobsWithoutReminders(findPendingJobsWithoutActiveReminders(allJobs));
-      setShowMissingRemindersModal(true);
-    } catch (error) {
-      console.error('Error checking pending jobs without reminders:', error);
-      alert('Error checking pending jobs without reminders. Please try again.');
-    } finally {
-      setCheckingMissingReminders(false);
-    }
-  };
-
-  const handleOpenMissingReminderJob = (targetJobId: string) => {
-    setShowMissingRemindersModal(false);
-    if (targetJobId === jobId) {
-      setActiveTab('reminders');
-      return;
-    }
-    onEditJob?.(targetJobId);
-  };
 
   const persistFollowUpChanges = async (nextFollowUps: JobFollowUp[]) => {
     setFollowUps(nextFollowUps);
@@ -3677,15 +3651,6 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                   <button
                     type="button"
-                    onClick={handleFindPendingJobsWithoutReminders}
-                    disabled={checkingMissingReminders}
-                    className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-medium text-gf-dark-green bg-white border border-slate-200 rounded-lg hover:border-gf-lime hover:bg-green-50 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    <Search size={14} />
-                    {checkingMissingReminders ? 'Checking...' : 'Find Missing'}
-                  </button>
-                  <button
-                    type="button"
                     onClick={openAddReminder}
                     className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-medium bg-gf-lime text-white rounded-lg hover:bg-gf-dark-green transition-colors"
                   >
@@ -3936,60 +3901,6 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
           </div>
         </form>
       </div>
-      {showMissingRemindersModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="missing-reminders-modal-title"
-            className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[85vh] overflow-hidden"
-          >
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
-              <h2 id="missing-reminders-modal-title" className="text-lg font-semibold text-slate-900">
-                Pending Estimates Without Reminders
-              </h2>
-              <button
-                type="button"
-                onClick={() => setShowMissingRemindersModal(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
-                aria-label="Close pending estimates without reminders"
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <div className="px-6 py-5">
-              {pendingJobsWithoutReminders.length === 0 ? (
-                <p className="text-sm text-slate-600">All pending estimates have an active reminder.</p>
-              ) : (
-                <div className="max-h-[60vh] overflow-auto divide-y divide-slate-100 border border-slate-200 rounded-lg">
-                  {pendingJobsWithoutReminders.map((missingJob) => {
-                    const estimateDate = missingJob.estimateDate || missingJob.createdAt.slice(0, 10);
-                    const canOpenJob = missingJob.id === jobId || Boolean(onEditJob);
-                    return (
-                      <div key={missingJob.id} className="flex flex-col gap-3 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-slate-900">{missingJob.name}</p>
-                          <p className="text-xs text-slate-600">
-                            {missingJob.customerName || 'No customer'} - Estimate {new Date(`${estimateDate}T12:00:00`).toLocaleDateString()}
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => handleOpenMissingReminderJob(missingJob.id)}
-                          disabled={!canOpenJob}
-                          className="inline-flex items-center justify-center rounded-lg bg-gf-lime px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-gf-dark-green disabled:cursor-not-allowed disabled:bg-slate-300"
-                        >
-                          {missingJob.id === jobId ? 'Current Job' : 'Open'}
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       {showReminderModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
