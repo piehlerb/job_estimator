@@ -6,6 +6,7 @@ import { calculateJobOutputs } from '../lib/calculations';
 import { useAuth } from '../contexts/AuthContext';
 import { loadOlderJobsFromSupabase } from '../lib/sync';
 import { getJobWorkingSetCutoff } from '../lib/jobSyncPolicy';
+import { findPendingJobsWithoutActiveReminders } from '../lib/reminderCoverage';
 
 interface DashboardProps {
   onViewJobSheet: (id: string) => void;
@@ -62,6 +63,9 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
   const [showReminders, setShowReminders] = useState(false);
   const [selectedReminder, setSelectedReminder] = useState<ReminderItem | null>(null);
   const [updatingReminder, setUpdatingReminder] = useState(false);
+  const [checkingMissingReminders, setCheckingMissingReminders] = useState(false);
+  const [showMissingRemindersModal, setShowMissingRemindersModal] = useState(false);
+  const [pendingJobsWithoutReminders, setPendingJobsWithoutReminders] = useState<Job[]>([]);
   const [nextReminderFor, setNextReminderFor] = useState<{ jobId: string; jobName: string; customerName?: string } | null>(null);
   const [nextReminderForm, setNextReminderForm] = useState({ subject: '', dueDate: '', dueTime: '', details: '' });
   const [commTemplates, setCommTemplates] = useState<CommunicationTemplate[]>([]);
@@ -627,6 +631,20 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
     }
   };
 
+  const handleFindMissingReminders = async () => {
+    setCheckingMissingReminders(true);
+    try {
+      const allJobs = await getAllJobs();
+      setPendingJobsWithoutReminders(findPendingJobsWithoutActiveReminders(allJobs));
+      setShowMissingRemindersModal(true);
+    } catch (error) {
+      console.error('Error checking pending jobs without reminders:', error);
+      alert('Error checking pending jobs without reminders. Please try again.');
+    } finally {
+      setCheckingMissingReminders(false);
+    }
+  };
+
   const getStatusColor = (status: JobStatus) => {
     switch (status) {
       case 'Won': return 'bg-[#dcfce7] text-[#15803d]';
@@ -824,6 +842,21 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
             )}
           </button>
         </div>
+
+        {/* Find missing reminders button */}
+        {viewMode === 'reminders' && (
+          <div className="flex items-center justify-end px-4 md:px-6 py-2 bg-white border-b border-slate-100">
+            <button
+              type="button"
+              onClick={handleFindMissingReminders}
+              disabled={checkingMissingReminders}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-medium text-gf-dark-green bg-white border border-slate-200 rounded-lg hover:border-gf-lime hover:bg-green-50 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Search size={14} />
+              {checkingMissingReminders ? 'Checking...' : 'Find Missing'}
+            </button>
+          </div>
+        )}
 
         {/* Mobile toolbar (Jobs tab only) */}
         {viewMode === 'jobs' && (
@@ -1696,6 +1729,58 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
                   Close
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {showMissingRemindersModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="missing-reminders-modal-title"
+            className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[85vh] overflow-hidden"
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+              <h2 id="missing-reminders-modal-title" className="text-lg font-semibold text-slate-900">
+                Pending Estimates Without Reminders
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowMissingRemindersModal(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                aria-label="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="px-6 py-5">
+              {pendingJobsWithoutReminders.length === 0 ? (
+                <p className="text-sm text-slate-600">All pending estimates have an active reminder.</p>
+              ) : (
+                <div className="max-h-[60vh] overflow-auto divide-y divide-slate-100 border border-slate-200 rounded-lg">
+                  {pendingJobsWithoutReminders.map((missingJob) => {
+                    const estimateDate = missingJob.estimateDate || missingJob.createdAt.slice(0, 10);
+                    return (
+                      <div key={missingJob.id} className="flex flex-col gap-3 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-slate-900">{missingJob.name}</p>
+                          <p className="text-xs text-slate-600">
+                            {missingJob.customerName || 'No customer'} - Estimate {new Date(`${estimateDate}T12:00:00`).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => { setShowMissingRemindersModal(false); onEditJob(missingJob.id); }}
+                          className="inline-flex items-center justify-center rounded-lg bg-gf-lime px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-gf-dark-green"
+                        >
+                          Open
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </div>
