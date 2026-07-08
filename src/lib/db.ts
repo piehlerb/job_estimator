@@ -1,8 +1,9 @@
-import { ChipSystem, PricingVariable, Job, Costs, Laborer, ChipInventory, TintInventory, TopCoatInventory, BaseCoatInventory, MiscInventory, Pricing, Customer, Product, BaseCoatColor, ShoppingItem, CommunicationTemplate, ReferralAssociate, ReferralService, Lead, LeadAppointment } from '../types';
+import { ChipSystem, PricingVariable, Job, Costs, Laborer, ChipInventory, TintInventory, CoatingInventory, TopCoatInventory, BaseCoatInventory, MiscInventory, Pricing, Customer, Product, BaseCoatColor, ShoppingItem, CommunicationTemplate, ReferralAssociate, ReferralService, Lead, LeadAppointment } from '../types';
 import { softDeleteLead } from './leadMutations';
+import { DEFAULT_COATING_SKUS, LEGACY_COATING_FIELDS, coatingSkuId, findCoatingSku } from './coatingSkus';
 
 const DB_NAME = 'JobEstimator';
-const DB_VERSION = 20; // Adds lead attribution stores
+const DB_VERSION = 21; // Adds SKU-level coatingInventory store
 
 // Auto-sync flag - can be disabled for batch operations
 let autoSyncEnabled = true;
@@ -178,6 +179,9 @@ export async function initDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains('tintInventory')) {
         db.createObjectStore('tintInventory', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('coatingInventory')) {
+        db.createObjectStore('coatingInventory', { keyPath: 'id' });
       }
       if (!db.objectStoreNames.contains('shoppingItems')) {
         db.createObjectStore('shoppingItems', { keyPath: 'id' });
@@ -1125,6 +1129,181 @@ export async function deleteTintInventory(id: string): Promise<void> {
 
   await queueForSync('tintInventory', id, 'delete');
   await triggerBackgroundSync();
+}
+
+// Coating Inventory (SKU-level: part + variant + color)
+export async function getAllCoatingInventory(): Promise<CoatingInventory[]> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['coatingInventory'], 'readonly');
+    const store = transaction.objectStore('coatingInventory');
+    const request = store.getAll();
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const results = request.result || [];
+      resolve(results.filter((inv: CoatingInventory) => !inv.deleted));
+    };
+  });
+}
+
+// Sync version - returns all records including deleted
+export async function getAllCoatingInventoryForSync(): Promise<CoatingInventory[]> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['coatingInventory'], 'readonly');
+    const store = transaction.objectStore('coatingInventory');
+    const request = store.getAll();
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result || []);
+  });
+}
+
+export async function saveCoatingInventory(inventory: CoatingInventory): Promise<void> {
+  const db = await getDB();
+  const record: CoatingInventory = {
+    ...inventory,
+    updatedAt: inventory.updatedAt || new Date().toISOString(),
+  };
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(['coatingInventory'], 'readwrite');
+    const store = transaction.objectStore('coatingInventory');
+    const request = store.put(record);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve();
+  });
+
+  await queueForSync('coatingInventory', record.id, 'update');
+  await triggerBackgroundSync();
+}
+
+export async function deleteCoatingInventory(id: string): Promise<void> {
+  const db = await getDB();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(['coatingInventory'], 'readwrite');
+    const store = transaction.objectStore('coatingInventory');
+    const getRequest = store.get(id);
+
+    getRequest.onerror = () => reject(getRequest.error);
+    getRequest.onsuccess = () => {
+      const existing = getRequest.result;
+      if (existing) {
+        const putRequest = store.put({ ...existing, deleted: true, updatedAt: new Date().toISOString() });
+        putRequest.onerror = () => reject(putRequest.error);
+        putRequest.onsuccess = () => resolve();
+      } else {
+        resolve();
+      }
+    };
+  });
+
+  await queueForSync('coatingInventory', id, 'delete');
+  await triggerBackgroundSync();
+}
+
+/**
+ * One-time idempotent conversion of the legacy TopCoatInventory/BaseCoatInventory
+ * singletons into SKU-level CoatingInventory rows.
+ *
+ * If the coatingInventory store already has non-deleted records this is a no-op.
+ * Otherwise it seeds all DEFAULT_COATING_SKUS, copying gallons from the legacy
+ * singleton fields (via LEGACY_COATING_FIELDS) and 0 for new flavor SKUs.
+ * Uses deterministic ids (coatingSkuId) so repeated runs across devices converge,
+ * and skips ids that already exist (even soft-deleted) so it never resurrects
+ * records the user deleted.
+ *
+ * Rows that carry real legacy values get a current timestamp; pure zero defaults
+ * get an old sentinel timestamp so a fresh device's seeds always lose last-write-wins
+ * against real data synced from another device.
+ *
+ * Returns the number of SKU rows created.
+ */
+const COATING_SEED_EPOCH = '2020-01-01T00:00:00.000Z';
+
+export async function ensureCoatingInventorySeeded(): Promise<number> {
+  const all = await getAllCoatingInventoryForSync();
+  if (all.some((inv) => !inv.deleted)) {
+    return 0;
+  }
+
+  const existingIds = new Set(all.map((inv) => inv.id));
+  const [top, base] = await Promise.all([getTopCoatInventory(), getBaseCoatInventory()]);
+
+  // Map deterministic SKU id -> gallons from the legacy singleton fields.
+  // Only populated when the legacy singleton actually exists on this device.
+  const legacyGallons = new Map<string, number>();
+  for (const [field, coords] of Object.entries(LEGACY_COATING_FIELDS)) {
+    const source: any = field.startsWith('top') ? top : base;
+    if (!source) continue;
+    const value = source[field];
+    legacyGallons.set(coatingSkuId(coords), typeof value === 'number' && !isNaN(value) ? value : 0);
+  }
+
+  let created = 0;
+  const now = new Date().toISOString();
+  for (const coords of DEFAULT_COATING_SKUS) {
+    const id = coatingSkuId(coords);
+    if (existingIds.has(id)) continue; // don't resurrect deleted rows
+    const fromLegacy = legacyGallons.has(id);
+    await saveCoatingInventory({
+      id,
+      part: coords.part,
+      variant: coords.variant,
+      color: coords.color,
+      gallons: legacyGallons.get(id) ?? 0,
+      sortOrder: coords.sortOrder,
+      updatedAt: fromLegacy ? now : COATING_SEED_EPOCH,
+    });
+    created++;
+  }
+  return created;
+}
+
+/**
+ * Force-update the six legacy coating SKUs from TopCoatInventory/BaseCoatInventory
+ * singleton values (used when importing an old backup that predates SKU-level
+ * coating inventory). Creates the SKU row if missing, otherwise overwrites gallons.
+ *
+ * Returns the number of SKU rows written.
+ */
+export async function applyLegacyCoatingToSkus(
+  top: TopCoatInventory | null,
+  base: BaseCoatInventory | null
+): Promise<number> {
+  if (!top && !base) return 0;
+
+  const all = await getAllCoatingInventoryForSync();
+  const now = new Date().toISOString();
+  let written = 0;
+
+  for (const [field, coords] of Object.entries(LEGACY_COATING_FIELDS)) {
+    const source: any = field.startsWith('top') ? top : base;
+    if (!source) continue;
+    const gallons = source[field];
+    if (typeof gallons !== 'number' || isNaN(gallons)) continue;
+
+    const existing =
+      all.find((inv) => inv.id === coatingSkuId(coords)) ||
+      findCoatingSku(all, coords.part, coords.variant, coords.color);
+
+    if (existing) {
+      await saveCoatingInventory({ ...existing, gallons, deleted: false, updatedAt: now });
+    } else {
+      await saveCoatingInventory({
+        id: coatingSkuId(coords),
+        part: coords.part,
+        variant: coords.variant,
+        color: coords.color,
+        gallons,
+        sortOrder: coords.sortOrder,
+        updatedAt: now,
+      });
+    }
+    written++;
+  }
+  return written;
 }
 
 // Top Coat Inventory - single record

@@ -29,6 +29,7 @@ const SEED_BASE_COAT_COLORS: BaseCoatColor[] = [
   { id: 'fblphl4khzbo8mc2xed4va', name: 'Grey',  createdAt: NOW, updatedAt: NOW, deleted: false },
   { id: 'dbv6nt4olee3yj7tdd6qnf', name: 'Tan',   createdAt: NOW, updatedAt: NOW, deleted: false },
   { id: '244nqxa62if3326yqv9voy', name: 'Clear',  createdAt: NOW, updatedAt: NOW, deleted: false },
+  { id: 'k8vw2mfqx4jn7hs3tp9dye', name: 'Mocha',  createdAt: NOW, updatedAt: NOW, deleted: false },
 ];
 
 // ── Chip Systems ──────────────────────────────────────────────────────────────

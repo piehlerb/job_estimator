@@ -1,12 +1,20 @@
 import type {
-  BaseCoatInventory,
   ChipInventory,
+  CoatingInventory,
+  InventoryActualResolvedLine,
   InventoryActualsApplied,
+  InventoryTarget,
+  JobMaterialAllocation,
   MiscInventory,
   TintInventory,
-  TopCoatInventory,
 } from '../types/index.js';
+import { coatingSkuKey, coatingSkuLabel, findCoatingSku } from './coatingSkus.js';
+import { resolveJobMaterials } from './materialAllocation.js';
 import { normalizeChipBlendName } from './syncHelpers.js';
+
+// Re-exported for existing importers; the type now lives in types/index.ts
+// because resolved lines are persisted (and synced) data.
+export type { InventoryTarget } from '../types/index.js';
 
 export interface InventoryActualsSource {
   actualBaseCoatGallons?: number;
@@ -21,19 +29,13 @@ export interface InventoryActualsSource {
   tintColor?: string;
   includeBasecoatTint?: boolean;
   includeTopcoatTint?: boolean;
+  materialAllocation?: JobMaterialAllocation;
 }
 
 export interface InventoryActualsUpdateSource extends InventoryActualsSource {
   inventoryActualsApplied?: InventoryActualsApplied;
   appliedAt?: string;
 }
-
-export type InventoryTarget =
-  | { kind: 'chip'; blend: string }
-  | { kind: 'base'; field: keyof Pick<BaseCoatInventory, 'baseA' | 'baseBGrey' | 'baseBTan' | 'baseBClear'> }
-  | { kind: 'top'; field: keyof Pick<TopCoatInventory, 'topA' | 'topB'> }
-  | { kind: 'tint'; color: string }
-  | { kind: 'misc'; field: keyof Pick<MiscInventory, 'crackRepair' | 'moistureMitigation'> };
 
 export interface InventoryActualDeltaRow {
   key: string;
@@ -55,8 +57,7 @@ export interface InventoryReviewInputs {
   deltas: InventoryActualDeltaRow[];
   chipInventory: ChipInventory[];
   tintInventory: TintInventory[];
-  topCoatInventory: TopCoatInventory | null;
-  baseCoatInventory: BaseCoatInventory | null;
+  coatingInventory: CoatingInventory[];
   miscInventory: MiscInventory | null;
 }
 
@@ -69,6 +70,104 @@ function numeric(value: number | undefined): number | undefined {
 
 function combineWarnings(...warnings: Array<string | undefined>): string | undefined {
   return warnings.filter(Boolean).join(' ') || undefined;
+}
+
+/**
+ * Resolve a source's actual quantities into complete inventory deduction
+ * lines, honoring the job's material allocation override via the shared
+ * resolver. The lines are persisted on the snapshot (resolvedLines) and are
+ * authoritative for later reversal.
+ */
+export function buildResolvedLines(
+  source: InventoryActualsSource
+): { lines: InventoryActualResolvedLine[]; warnings: string[] } {
+  const lines: InventoryActualResolvedLine[] = [];
+  const hasTint = Boolean(source.includeBasecoatTint || source.includeTopcoatTint);
+
+  const resolved = resolveJobMaterials({
+    baseGallons: numeric(source.actualBaseCoatGallons) ?? 0,
+    topGallons: numeric(source.actualTopCoatGallons) ?? 0,
+    baseColor: source.baseColor,
+    tintColor: source.tintColor,
+    includeBasecoatTint: source.includeBasecoatTint,
+    includeTopcoatTint: source.includeTopcoatTint,
+    override: source.materialAllocation,
+  });
+
+  const actualChipBoxes = numeric(source.actualChipBoxes);
+  if (source.chipBlend && actualChipBoxes !== undefined) {
+    const blend = normalizeChipBlendName(source.chipBlend);
+    lines.push({
+      key: `chip:${blend}`,
+      label: `${blend} Chips`,
+      unit: 'lbs',
+      amount: actualChipBoxes * 40,
+      target: { kind: 'chip', blend },
+    });
+  }
+
+  for (const line of resolved.coating) {
+    lines.push({
+      key: line.key,
+      label: line.label,
+      unit: 'gal',
+      amount: line.gallons,
+      target: { kind: 'coating', part: line.part, variant: line.variant, color: line.color },
+    });
+  }
+
+  // The user enters ONE combined actual tint number; distribute it across the
+  // planned tint lines proportionally to their planned oz.
+  const actualTintOz = numeric(source.actualTintOz);
+  if (actualTintOz !== undefined) {
+    const plannedTintOz = resolved.tint.reduce((sum, line) => sum + line.oz, 0);
+    if (resolved.tint.length > 0 && plannedTintOz > 0) {
+      for (const line of resolved.tint) {
+        lines.push({
+          key: line.key,
+          label: line.label,
+          unit: 'oz',
+          amount: actualTintOz * (line.oz / plannedTintOz),
+          target: { kind: 'tint', color: line.color },
+        });
+      }
+    } else if (hasTint && source.tintColor) {
+      // Legacy fallback: the resolver produced no tint lines (e.g. actual
+      // gallons are 0) but tint applies — deduct everything from the job's
+      // tint color, exactly like the legacy derivation.
+      lines.push({
+        key: `tint:${source.tintColor}`,
+        label: `${source.tintColor} Tint`,
+        unit: 'oz',
+        amount: actualTintOz,
+        target: { kind: 'tint', color: source.tintColor },
+      });
+    }
+  }
+
+  const actualCrackRepairOz = numeric(source.actualCrackRepairOz);
+  if (actualCrackRepairOz !== undefined) {
+    lines.push({
+      key: 'misc:crackRepair',
+      label: 'Crack Repair',
+      unit: 'gal',
+      amount: actualCrackRepairOz / 128,
+      target: { kind: 'misc', field: 'crackRepair' },
+    });
+  }
+
+  const actualMoistureMitigationGallons = numeric(source.actualMoistureMitigationGallons);
+  if (actualMoistureMitigationGallons !== undefined) {
+    lines.push({
+      key: 'misc:moistureMitigation',
+      label: 'Moisture Mitigation',
+      unit: 'gal',
+      amount: actualMoistureMitigationGallons,
+      target: { kind: 'misc', field: 'moistureMitigation' },
+    });
+  }
+
+  return { lines, warnings: resolved.warnings };
 }
 
 export function buildInventoryActualsSnapshot(
@@ -105,6 +204,9 @@ export function buildInventoryActualsSnapshot(
   if (source.baseColor) snapshot.baseColor = source.baseColor;
   if (hasTint && source.tintColor) snapshot.tintColor = source.tintColor;
 
+  const { lines } = buildResolvedLines(source);
+  if (lines.length > 0) snapshot.resolvedLines = lines;
+
   return snapshot;
 }
 
@@ -128,6 +230,21 @@ function addSnapshotAmounts(
 ): void {
   if (!snapshot) return;
 
+  // Snapshots that carry resolved lines are authoritative — add them verbatim
+  // instead of re-deriving buckets (allocations may have changed since).
+  if (snapshot.resolvedLines) {
+    for (const line of snapshot.resolvedLines) {
+      addAmount(map, {
+        key: line.key,
+        productName: line.label,
+        unit: line.unit,
+        usedDelta: line.amount * multiplier,
+        target: line.target,
+      });
+    }
+    return;
+  }
+
   if (snapshot.chipBlend && snapshot.actualChipBoxes) {
     addAmount(map, {
       key: `chip:${snapshot.chipBlend}`,
@@ -141,30 +258,27 @@ function addSnapshotAmounts(
   if (snapshot.actualBaseCoatGallons) {
     const baseColor = snapshot.baseColor;
     if (baseColor === 'Grey' || baseColor === 'Tan' || baseColor === 'Clear') {
-      const field = baseColor === 'Grey' ? 'baseBGrey' : baseColor === 'Tan' ? 'baseBTan' : 'baseBClear';
-      const label = baseColor === 'Grey' ? 'Base B - Grey' : baseColor === 'Tan' ? 'Base B - Tan' : 'Base B - Clear';
-
       addAmount(map, {
-        key: 'base:baseA',
-        productName: 'Base A',
+        key: coatingSkuKey('baseA'),
+        productName: coatingSkuLabel({ part: 'baseA' }),
         unit: 'gal',
         usedDelta: (snapshot.actualBaseCoatGallons / 3) * multiplier,
-        target: { kind: 'base', field: 'baseA' },
+        target: { kind: 'coating', part: 'baseA' },
       });
       addAmount(map, {
-        key: `base:${field}`,
-        productName: label,
+        key: coatingSkuKey('baseB', 'Normal', baseColor),
+        productName: coatingSkuLabel({ part: 'baseB', variant: 'Normal', color: baseColor }),
         unit: 'gal',
         usedDelta: ((snapshot.actualBaseCoatGallons * 2) / 3) * multiplier,
-        target: { kind: 'base', field },
+        target: { kind: 'coating', part: 'baseB', variant: 'Normal', color: baseColor },
       });
     } else {
       addAmount(map, {
-        key: 'base:baseA',
-        productName: 'Base A',
+        key: coatingSkuKey('baseA'),
+        productName: coatingSkuLabel({ part: 'baseA' }),
         unit: 'gal',
         usedDelta: snapshot.actualBaseCoatGallons * multiplier,
-        target: { kind: 'base', field: 'baseA' },
+        target: { kind: 'coating', part: 'baseA' },
         warning: 'No matching Base B inventory bucket exists for this base color.',
       });
     }
@@ -172,18 +286,18 @@ function addSnapshotAmounts(
 
   if (snapshot.actualTopCoatGallons) {
     addAmount(map, {
-      key: 'top:topA',
-      productName: 'Top A',
+      key: coatingSkuKey('topA', 'Original'),
+      productName: coatingSkuLabel({ part: 'topA', variant: 'Original' }),
       unit: 'gal',
       usedDelta: (snapshot.actualTopCoatGallons / 2) * multiplier,
-      target: { kind: 'top', field: 'topA' },
+      target: { kind: 'coating', part: 'topA', variant: 'Original' },
     });
     addAmount(map, {
-      key: 'top:topB',
-      productName: 'Top B',
+      key: coatingSkuKey('topB', 'Original'),
+      productName: coatingSkuLabel({ part: 'topB', variant: 'Original' }),
       unit: 'gal',
       usedDelta: (snapshot.actualTopCoatGallons / 2) * multiplier,
-      target: { kind: 'top', field: 'topB' },
+      target: { kind: 'coating', part: 'topB', variant: 'Original' },
     });
   }
 
@@ -237,11 +351,19 @@ export function buildInventoryActualsUpdate(
   appliedAt = source.appliedAt ?? new Date().toISOString()
 ): { snapshot: InventoryActualsApplied; deltas: InventoryActualDeltaRow[] } {
   const snapshot = buildInventoryActualsSnapshot(source, appliedAt);
+  const deltas = buildInventoryActualDeltaRows(snapshot, source.inventoryActualsApplied);
 
-  return {
-    snapshot,
-    deltas: buildInventoryActualDeltaRows(snapshot, source.inventoryActualsApplied),
-  };
+  // Surface resolver warnings (invalid shares, unknown base color, …) on the
+  // review rows. They are job-level, so attach them to the first coating row.
+  const { warnings } = buildResolvedLines(source);
+  if (warnings.length > 0) {
+    const coatingRow = deltas.find((row) => row.target.kind === 'coating');
+    if (coatingRow) {
+      coatingRow.warning = combineWarnings(coatingRow.warning, warnings.join(' '));
+    }
+  }
+
+  return { snapshot, deltas };
 }
 
 export function hasInventoryActualsDelta(
@@ -265,12 +387,10 @@ export function buildInventoryReviewRows(inputs: InventoryReviewInputs): Invento
       const item = inputs.tintInventory.find((inv) => inv.color === target.color);
       currentValue = item?.ounces ?? 0;
       inventoryId = item?.id;
-    } else if (target.kind === 'top') {
-      currentValue = inputs.topCoatInventory?.[target.field] ?? 0;
-      inventoryId = inputs.topCoatInventory?.id;
-    } else if (target.kind === 'base') {
-      currentValue = inputs.baseCoatInventory?.[target.field] ?? 0;
-      inventoryId = inputs.baseCoatInventory?.id;
+    } else if (target.kind === 'coating') {
+      const sku = findCoatingSku(inputs.coatingInventory, target.part, target.variant, target.color);
+      currentValue = sku?.gallons ?? 0;
+      inventoryId = sku?.id;
     } else {
       currentValue = inputs.miscInventory?.[target.field] ?? 0;
       inventoryId = inputs.miscInventory?.id;

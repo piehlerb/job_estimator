@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { Plus, Trash2, Save, ClipboardList } from 'lucide-react';
 import JobSummaryModal from '../components/JobSummaryModal';
 import {
@@ -11,21 +11,28 @@ import {
   getAllTintInventory,
   saveTintInventory,
   deleteTintInventory,
-  getTopCoatInventory,
-  saveTopCoatInventory,
-  getBaseCoatInventory,
+  getAllCoatingInventory,
+  saveCoatingInventory,
+  deleteCoatingInventory,
   getMiscInventory,
   saveMiscInventory,
-  saveBaseCoatInventory,
   getDefaultCosts,
   getCosts,
   getPricing,
   getDefaultPricing,
   ChipBlend,
 } from '../lib/db';
-import { Job, ChipInventory, TintInventory, TopCoatInventory, BaseCoatInventory, MiscInventory, Costs, Pricing } from '../types';
+import { Job, ChipInventory, TintInventory, CoatingInventory, CoatingPart, MiscInventory, Costs, Pricing } from '../types';
 import { calculateJobOutputs } from '../lib/calculations';
 import { normalizeChipBlendName } from '../lib/syncHelpers';
+import {
+  coatingSkuKey,
+  coatingSkuLabel,
+  coatingSkuId,
+  findCoatingSku,
+  DEFAULT_COATING_SKUS,
+} from '../lib/coatingSkus';
+import { resolveJobMaterials } from '../lib/materialAllocation';
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -42,24 +49,20 @@ interface CoatCommitment {
   potential: number;
 }
 
+const COATING_PART_ORDER: Record<CoatingPart, number> = { topA: 0, topB: 1, baseA: 2, baseB: 3 };
+const COATING_GROUP_LABELS: Record<CoatingPart, string> = {
+  topA: 'Top A',
+  topB: 'Top B',
+  baseA: 'Base A',
+  baseB: 'Base B',
+};
+
 export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) => void }) {
   const [loading, setLoading] = useState(true);
   const [chipBlends, setChipBlends] = useState<ChipBlend[]>([]);
   const [chipInventory, setChipInventory] = useState<ChipInventory[]>([]);
-  const [topCoatInventory, setTopCoatInventory] = useState<TopCoatInventory>({
-    id: 'current',
-    topA: 0,
-    topB: 0,
-    updatedAt: new Date().toISOString(),
-  });
-  const [baseCoatInventory, setBaseCoatInventory] = useState<BaseCoatInventory>({
-    id: 'current',
-    baseA: 0,
-    baseBGrey: 0,
-    baseBTan: 0,
-    baseBClear: 0,
-    updatedAt: new Date().toISOString(),
-  });
+  const [coatingInventory, setCoatingInventory] = useState<CoatingInventory[]>([]);
+  const [changedCoatingIds, setChangedCoatingIds] = useState<Set<string>>(new Set());
   const [miscInventory, setMiscInventory] = useState<MiscInventory>({
     id: 'current',
     crackRepair: 0,
@@ -71,12 +74,7 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
 
   // Commitments calculated from jobs
   const [chipCommitments, setChipCommitments] = useState<ChipCommitment[]>([]);
-  const [topACommitment, setTopACommitment] = useState<CoatCommitment>({ committed: 0, potential: 0 });
-  const [topBCommitment, setTopBCommitment] = useState<CoatCommitment>({ committed: 0, potential: 0 });
-  const [baseACommitment, setBaseACommitment] = useState<CoatCommitment>({ committed: 0, potential: 0 });
-  const [baseBGreyCommitment, setBaseBGreyCommitment] = useState<CoatCommitment>({ committed: 0, potential: 0 });
-  const [baseBTanCommitment, setBaseBTanCommitment] = useState<CoatCommitment>({ committed: 0, potential: 0 });
-  const [baseBClearCommitment, setBaseBClearCommitment] = useState<CoatCommitment>({ committed: 0, potential: 0 });
+  const [coatingCommitments, setCoatingCommitments] = useState<Map<string, CoatCommitment>>(new Map());
   const [moistureMitigationCommitment, setMoistureMitigationCommitment] = useState<CoatCommitment>({ committed: 0, potential: 0 });
 
   const [tintInventory, setTintInventory] = useState<TintInventory[]>([]);
@@ -87,6 +85,12 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
   const [newChipBlend, setNewChipBlend] = useState('');
   const [newChipPounds, setNewChipPounds] = useState('');
   const [showBlendDropdown, setShowBlendDropdown] = useState(false);
+
+  // Add-SKU form for coating inventory
+  const [newSkuPart, setNewSkuPart] = useState<CoatingPart>('topA');
+  const [newSkuVariant, setNewSkuVariant] = useState('');
+  const [newSkuColor, setNewSkuColor] = useState('');
+  const [newSkuGallons, setNewSkuGallons] = useState('');
 
   // Data for Job Summary modal
   const [allJobs, setAllJobs] = useState<Job[]>([]);
@@ -101,12 +105,11 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
   const loadData = async () => {
     setLoading(true);
     try {
-      const [blends, chips, tints, topCoat, baseCoat, misc, jobs, currentCosts, currentPricing] = await Promise.all([
+      const [blends, chips, tints, coatings, misc, jobs, currentCosts, currentPricing] = await Promise.all([
         getAllChipBlends(),
         getAllChipInventory(),
         getAllTintInventory().catch(() => [] as TintInventory[]),
-        getTopCoatInventory(),
-        getBaseCoatInventory(),
+        getAllCoatingInventory(),
         getMiscInventory(),
         getAllJobs(),
         getCosts(),
@@ -116,8 +119,8 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
       setChipBlends(blends);
       setChipInventory(chips);
       setTintInventory(tints);
-      if (topCoat) setTopCoatInventory(topCoat);
-      if (baseCoat) setBaseCoatInventory(baseCoat);
+      setCoatingInventory(coatings);
+      setChangedCoatingIds(new Set());
       if (misc) setMiscInventory({ ...misc, moistureMitigation: misc.moistureMitigation ?? 0 });
 
       // Calculate commitments from jobs that are today or in the future
@@ -228,12 +231,12 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
       }))
     );
 
-    // Calculate tint commitments by color
+    // Calculate coating + tint commitments via the shared allocation resolver
+    const coatingMap = new Map<string, CoatCommitment>();
     const tintByColor: Record<string, { committed: number; potential: number }> = {};
 
-    const calculateTintForJobs = (jobList: Job[], type: 'committed' | 'potential') => {
+    const accumulateMaterialsForJobs = (jobList: Job[], type: 'committed' | 'potential') => {
       jobList.forEach((job) => {
-        if (!job.tintColor || (!job.includeBasecoatTint && !job.includeTopcoatTint)) return;
         const mergedCosts = getMergedCosts(job);
         const mergedPricing = getMergedPricing(job);
         const calc = calculateJobOutputs(
@@ -261,14 +264,31 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
           job.laborersSnapshot,
           mergedPricing
         );
-        const color = job.tintColor;
-        if (!tintByColor[color]) tintByColor[color] = { committed: 0, potential: 0 };
-        tintByColor[color][type] += calc.tintNeeded;
+
+        const resolved = resolveJobMaterials({
+          baseGallons: calc.baseGallons,
+          topGallons: calc.topGallons,
+          baseColor: job.baseColor,
+          tintColor: job.tintColor,
+          includeBasecoatTint: job.includeBasecoatTint,
+          includeTopcoatTint: job.includeTopcoatTint,
+          override: job.materialAllocation,
+        });
+
+        resolved.coating.forEach((line) => {
+          const entry = coatingMap.get(line.key) || { committed: 0, potential: 0 };
+          entry[type] += line.gallons;
+          coatingMap.set(line.key, entry);
+        });
+        resolved.tint.forEach((line) => {
+          if (!tintByColor[line.color]) tintByColor[line.color] = { committed: 0, potential: 0 };
+          tintByColor[line.color][type] += line.oz;
+        });
       });
     };
 
-    calculateTintForJobs(wonJobs, 'committed');
-    calculateTintForJobs(wonAndPendingJobs, 'potential');
+    accumulateMaterialsForJobs(wonJobs, 'committed');
+    accumulateMaterialsForJobs(wonAndPendingJobs, 'potential');
 
     // Also include colors from inventory that have no commitments
     if (currentTintInventory) {
@@ -287,126 +307,7 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
       }))
     );
 
-    // Calculate top coat commitments
-    let topCommitted = 0;
-    let topPotential = 0;
-
-    const calculateTopForJobs = (jobList: Job[]) => {
-      return jobList.reduce((sum, job) => {
-        const mergedCosts = getMergedCosts(job);
-        const mergedPricing = getMergedPricing(job);
-        const calc = calculateJobOutputs(
-          {
-            floorFootage: job.floorFootage,
-            verticalFootage: job.verticalFootage,
-            crackFillFactor: job.crackFillFactor,
-            travelDistance: job.travelDistance,
-            installDate: job.installDate,
-            installDays: job.installDays,
-            jobHours: job.jobHours,
-            totalPrice: job.totalPrice,
-            includeBasecoatTint: job.includeBasecoatTint || false,
-            includeTopcoatTint: job.includeTopcoatTint || false,
-            antiSlip: job.antiSlip || false,
-            abrasionResistance: job.abrasionResistance || false,
-            cyclo1Topcoat: job.cyclo1Topcoat || false,
-            cyclo1Coats: job.cyclo1Coats || 0,
-            coatingRemoval: job.coatingRemoval || 'None',
-            moistureMitigation: job.moistureMitigation || false,
-            tags: job.tags,
-          },
-          job.systemSnapshot,
-          mergedCosts,
-          job.laborersSnapshot,
-          mergedPricing
-        );
-        return sum + calc.topGallons;
-      }, 0);
-    };
-
-    topCommitted = calculateTopForJobs(wonJobs);
-    topPotential = calculateTopForJobs(wonAndPendingJobs);
-
-    // Top A and Top B are each 50% of top coat
-    setTopACommitment({ committed: topCommitted * 0.5, potential: topPotential * 0.5 });
-    setTopBCommitment({ committed: topCommitted * 0.5, potential: topPotential * 0.5 });
-
-    // Calculate base coat commitments by color
-    let baseGreyCommitted = 0;
-    let baseGreyPotential = 0;
-    let baseTanCommitted = 0;
-    let baseTanPotential = 0;
-
-    const calculateBaseForJobs = (jobList: Job[], color: 'Grey' | 'Tan' | 'Clear' | undefined) => {
-      return jobList
-        .filter((job) => job.baseColor === color)
-        .reduce((sum, job) => {
-          const mergedCosts = getMergedCosts(job);
-          const mergedPricing = getMergedPricing(job);
-          const calc = calculateJobOutputs(
-            {
-              floorFootage: job.floorFootage,
-              verticalFootage: job.verticalFootage,
-              crackFillFactor: job.crackFillFactor,
-              travelDistance: job.travelDistance,
-              installDate: job.installDate,
-              installDays: job.installDays,
-              jobHours: job.jobHours,
-              totalPrice: job.totalPrice,
-              includeBasecoatTint: job.includeBasecoatTint || false,
-              includeTopcoatTint: job.includeTopcoatTint || false,
-              antiSlip: job.antiSlip || false,
-              abrasionResistance: job.abrasionResistance || false,
-              cyclo1Topcoat: job.cyclo1Topcoat || false,
-              cyclo1Coats: job.cyclo1Coats || 0,
-              coatingRemoval: job.coatingRemoval || 'None',
-              moistureMitigation: job.moistureMitigation || false,
-              tags: job.tags,
-            },
-            job.systemSnapshot,
-            mergedCosts,
-            job.laborersSnapshot,
-            mergedPricing
-          );
-          return sum + calc.baseGallons;
-        }, 0);
-    };
-
-    baseGreyCommitted = calculateBaseForJobs(wonJobs, 'Grey');
-    baseGreyPotential = calculateBaseForJobs(wonAndPendingJobs, 'Grey');
-    baseTanCommitted = calculateBaseForJobs(wonJobs, 'Tan');
-    baseTanPotential = calculateBaseForJobs(wonAndPendingJobs, 'Tan');
-
-    // Also include Clear jobs - they need Base A only (1/3 of base)
-    const clearCommitted = calculateBaseForJobs(wonJobs, 'Clear');
-    const clearPotential = calculateBaseForJobs(wonAndPendingJobs, 'Clear');
-
-    // Base A is 1/3 of base needed for all jobs
-    const totalBaseCommitted = baseGreyCommitted + baseTanCommitted + clearCommitted;
-    const totalBasePotential = baseGreyPotential + baseTanPotential + clearPotential;
-
-    setBaseACommitment({
-      committed: totalBaseCommitted / 3,
-      potential: totalBasePotential / 3,
-    });
-
-    // Base B Grey is 2/3 of grey jobs
-    setBaseBGreyCommitment({
-      committed: (baseGreyCommitted * 2) / 3,
-      potential: (baseGreyPotential * 2) / 3,
-    });
-
-    // Base B Tan is 2/3 of tan jobs
-    setBaseBTanCommitment({
-      committed: (baseTanCommitted * 2) / 3,
-      potential: (baseTanPotential * 2) / 3,
-    });
-
-    // Base B Clear is 2/3 of clear jobs
-    setBaseBClearCommitment({
-      committed: (clearCommitted * 2) / 3,
-      potential: (clearPotential * 2) / 3,
-    });
+    setCoatingCommitments(coatingMap);
 
     const calculateMoistureMitigationForJobs = (jobList: Job[]) => {
       return jobList.reduce((sum, job) => {
@@ -528,16 +429,83 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
     setChipInventory(chipInventory.filter((inv) => inv.id !== id));
   };
 
+  const handleUpdateCoatingInventory = (id: string, gallons: number) => {
+    setCoatingInventory((prev) => prev.map((inv) => (inv.id === id ? { ...inv, gallons } : inv)));
+    setChangedCoatingIds((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+  };
+
+  const handleAddCoatingSku = async () => {
+    if (!newSkuGallons && newSkuGallons !== '0') return;
+    const variant = newSkuVariant.trim() || undefined;
+    const color = newSkuPart === 'baseB' ? newSkuColor || undefined : undefined;
+
+    if (findCoatingSku(coatingInventory, newSkuPart, variant, color)) {
+      alert('That coating SKU already exists.');
+      return;
+    }
+
+    const coords = { part: newSkuPart, variant, color };
+    const defaultSku = DEFAULT_COATING_SKUS.find(
+      (sku) =>
+        sku.part === newSkuPart &&
+        (sku.variant || '') === (variant || '') &&
+        (sku.color || '') === (color || '')
+    );
+    const record: CoatingInventory = {
+      id: coatingSkuId(coords),
+      part: newSkuPart,
+      variant,
+      color,
+      gallons: parseFloat(newSkuGallons) || 0,
+      sortOrder: defaultSku?.sortOrder,
+      updatedAt: new Date().toISOString(),
+    };
+
+    await saveCoatingInventory(record);
+    setCoatingInventory([...coatingInventory.filter((inv) => inv.id !== record.id), record]);
+    setNewSkuVariant('');
+    setNewSkuColor('');
+    setNewSkuGallons('');
+  };
+
+  const handleDeleteCoatingSku = async (id: string) => {
+    await deleteCoatingInventory(id);
+    setCoatingInventory(coatingInventory.filter((inv) => inv.id !== id));
+    setChangedCoatingIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  };
+
   const handleSaveAll = async () => {
+    const now = new Date().toISOString();
+    const changedSkus = coatingInventory.filter((inv) => changedCoatingIds.has(inv.id));
     await Promise.all([
-      saveTopCoatInventory(topCoatInventory),
-      saveBaseCoatInventory(baseCoatInventory),
+      ...changedSkus.map((inv) => saveCoatingInventory({ ...inv, updatedAt: now })),
       saveMiscInventory(miscInventory),
     ]);
+    setChangedCoatingIds(new Set());
   };
 
   const getAvailable = (onHand: number, committed: number) => onHand - committed;
   const getAvailablePotential = (onHand: number, potential: number) => onHand - potential;
+
+  // SKUs sorted for display: grouped by part, then sortOrder, then label
+  const sortedCoatingSkus = coatingInventory
+    .slice()
+    .sort((a, b) => {
+      const partDiff = COATING_PART_ORDER[a.part] - COATING_PART_ORDER[b.part];
+      if (partDiff !== 0) return partDiff;
+      const orderA = a.sortOrder ?? Number.MAX_SAFE_INTEGER;
+      const orderB = b.sortOrder ?? Number.MAX_SAFE_INTEGER;
+      if (orderA !== orderB) return orderA - orderB;
+      return coatingSkuLabel(a).localeCompare(coatingSkuLabel(b));
+    });
 
   if (loading) {
     return <div className="p-6 text-center">Loading...</div>;
@@ -790,9 +758,9 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
         </div>
       </div>
 
-      {/* Top Coat Inventory */}
-      <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6 mb-6">
-        <h2 className="text-xl font-bold text-slate-900 mb-4">Top Coat Inventory</h2>
+      {/* Coating Inventory */}
+      <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
+        <h2 className="text-xl font-bold text-slate-900 mb-4">Coating Inventory</h2>
 
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -804,165 +772,135 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
                 <th className="text-right py-3 px-2 font-semibold">Available</th>
                 <th className="text-right py-3 px-2 font-semibold">Potential</th>
                 <th className="text-right py-3 px-2 font-semibold">Avail (Potential)</th>
+                <th className="py-3 px-2"></th>
               </tr>
             </thead>
             <tbody>
-              <tr className="border-b border-slate-100">
-                <td className="py-3 px-2 font-medium">Top A</td>
-                <td className="py-3 px-2 text-right">
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={topCoatInventory.topA}
-                    onChange={(e) =>
-                      setTopCoatInventory({ ...topCoatInventory, topA: parseFloat(e.target.value) || 0 })
-                    }
-                    className="w-24 px-2 py-1 border border-slate-300 rounded text-right"
-                  />
-                </td>
-                <td className="py-3 px-2 text-right">{topACommitment.committed.toFixed(2)}</td>
-                <td className={`py-3 px-2 text-right font-semibold ${getAvailable(topCoatInventory.topA, topACommitment.committed) < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                  {getAvailable(topCoatInventory.topA, topACommitment.committed).toFixed(2)}
-                </td>
-                <td className="py-3 px-2 text-right text-slate-500">{topACommitment.potential.toFixed(2)}</td>
-                <td className={`py-3 px-2 text-right ${getAvailablePotential(topCoatInventory.topA, topACommitment.potential) < 0 ? 'text-red-400' : 'text-slate-500'}`}>
-                  {getAvailablePotential(topCoatInventory.topA, topACommitment.potential).toFixed(2)}
-                </td>
-              </tr>
-              <tr className="border-b border-slate-100">
-                <td className="py-3 px-2 font-medium">Top B</td>
-                <td className="py-3 px-2 text-right">
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={topCoatInventory.topB}
-                    onChange={(e) =>
-                      setTopCoatInventory({ ...topCoatInventory, topB: parseFloat(e.target.value) || 0 })
-                    }
-                    className="w-24 px-2 py-1 border border-slate-300 rounded text-right"
-                  />
-                </td>
-                <td className="py-3 px-2 text-right">{topBCommitment.committed.toFixed(2)}</td>
-                <td className={`py-3 px-2 text-right font-semibold ${getAvailable(topCoatInventory.topB, topBCommitment.committed) < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                  {getAvailable(topCoatInventory.topB, topBCommitment.committed).toFixed(2)}
-                </td>
-                <td className="py-3 px-2 text-right text-slate-500">{topBCommitment.potential.toFixed(2)}</td>
-                <td className={`py-3 px-2 text-right ${getAvailablePotential(topCoatInventory.topB, topBCommitment.potential) < 0 ? 'text-red-400' : 'text-slate-500'}`}>
-                  {getAvailablePotential(topCoatInventory.topB, topBCommitment.potential).toFixed(2)}
-                </td>
-              </tr>
+              {sortedCoatingSkus.map((inv, idx) => {
+                const commitment =
+                  coatingCommitments.get(coatingSkuKey(inv.part, inv.variant, inv.color)) ||
+                  { committed: 0, potential: 0 };
+                const available = getAvailable(inv.gallons, commitment.committed);
+                const availablePotential = getAvailablePotential(inv.gallons, commitment.potential);
+                const showGroupHeader = idx === 0 || sortedCoatingSkus[idx - 1].part !== inv.part;
+
+                return (
+                  <Fragment key={inv.id}>
+                    {showGroupHeader && (
+                      <tr className="bg-slate-50">
+                        <td colSpan={7} className="py-2 px-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          {COATING_GROUP_LABELS[inv.part]}
+                        </td>
+                      </tr>
+                    )}
+                    <tr className="border-b border-slate-100">
+                      <td className="py-3 px-2 font-medium">{coatingSkuLabel(inv)}</td>
+                      <td className="py-3 px-2 text-right">
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={inv.gallons}
+                          onChange={(e) => handleUpdateCoatingInventory(inv.id, parseFloat(e.target.value) || 0)}
+                          className="w-24 px-2 py-1 border border-slate-300 rounded text-right"
+                        />
+                      </td>
+                      <td className="py-3 px-2 text-right">{commitment.committed.toFixed(2)}</td>
+                      <td className={`py-3 px-2 text-right font-semibold ${available < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                        {available.toFixed(2)}
+                      </td>
+                      <td className="py-3 px-2 text-right text-slate-500">{commitment.potential.toFixed(2)}</td>
+                      <td className={`py-3 px-2 text-right ${availablePotential < 0 ? 'text-red-400' : 'text-slate-500'}`}>
+                        {availablePotential.toFixed(2)}
+                      </td>
+                      <td className="py-3 px-2 text-right">
+                        <button
+                          onClick={() => handleDeleteCoatingSku(inv.id)}
+                          className="text-red-500 hover:text-red-700"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </td>
+                    </tr>
+                  </Fragment>
+                );
+              })}
+              {sortedCoatingSkus.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="py-4 text-center text-slate-400 text-sm">No coating SKUs added yet</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
-      </div>
 
-      {/* Base Coat Inventory */}
-      <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
-        <h2 className="text-xl font-bold text-slate-900 mb-4">Base Coat Inventory</h2>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-200">
-                <th className="text-left py-3 px-2 font-semibold">Product</th>
-                <th className="text-right py-3 px-2 font-semibold">On Hand (gal)</th>
-                <th className="text-right py-3 px-2 font-semibold">Committed</th>
-                <th className="text-right py-3 px-2 font-semibold">Available</th>
-                <th className="text-right py-3 px-2 font-semibold">Potential</th>
-                <th className="text-right py-3 px-2 font-semibold">Avail (Potential)</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="border-b border-slate-100">
-                <td className="py-3 px-2 font-medium">Base A</td>
-                <td className="py-3 px-2 text-right">
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={baseCoatInventory.baseA}
-                    onChange={(e) =>
-                      setBaseCoatInventory({ ...baseCoatInventory, baseA: parseFloat(e.target.value) || 0 })
-                    }
-                    className="w-24 px-2 py-1 border border-slate-300 rounded text-right"
-                  />
-                </td>
-                <td className="py-3 px-2 text-right">{baseACommitment.committed.toFixed(2)}</td>
-                <td className={`py-3 px-2 text-right font-semibold ${getAvailable(baseCoatInventory.baseA, baseACommitment.committed) < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                  {getAvailable(baseCoatInventory.baseA, baseACommitment.committed).toFixed(2)}
-                </td>
-                <td className="py-3 px-2 text-right text-slate-500">{baseACommitment.potential.toFixed(2)}</td>
-                <td className={`py-3 px-2 text-right ${getAvailablePotential(baseCoatInventory.baseA, baseACommitment.potential) < 0 ? 'text-red-400' : 'text-slate-500'}`}>
-                  {getAvailablePotential(baseCoatInventory.baseA, baseACommitment.potential).toFixed(2)}
-                </td>
-              </tr>
-              <tr className="border-b border-slate-100">
-                <td className="py-3 px-2 font-medium">Base B - Grey</td>
-                <td className="py-3 px-2 text-right">
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={baseCoatInventory.baseBGrey}
-                    onChange={(e) =>
-                      setBaseCoatInventory({ ...baseCoatInventory, baseBGrey: parseFloat(e.target.value) || 0 })
-                    }
-                    className="w-24 px-2 py-1 border border-slate-300 rounded text-right"
-                  />
-                </td>
-                <td className="py-3 px-2 text-right">{baseBGreyCommitment.committed.toFixed(2)}</td>
-                <td className={`py-3 px-2 text-right font-semibold ${getAvailable(baseCoatInventory.baseBGrey, baseBGreyCommitment.committed) < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                  {getAvailable(baseCoatInventory.baseBGrey, baseBGreyCommitment.committed).toFixed(2)}
-                </td>
-                <td className="py-3 px-2 text-right text-slate-500">{baseBGreyCommitment.potential.toFixed(2)}</td>
-                <td className={`py-3 px-2 text-right ${getAvailablePotential(baseCoatInventory.baseBGrey, baseBGreyCommitment.potential) < 0 ? 'text-red-400' : 'text-slate-500'}`}>
-                  {getAvailablePotential(baseCoatInventory.baseBGrey, baseBGreyCommitment.potential).toFixed(2)}
-                </td>
-              </tr>
-              <tr className="border-b border-slate-100">
-                <td className="py-3 px-2 font-medium">Base B - Tan</td>
-                <td className="py-3 px-2 text-right">
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={baseCoatInventory.baseBTan}
-                    onChange={(e) =>
-                      setBaseCoatInventory({ ...baseCoatInventory, baseBTan: parseFloat(e.target.value) || 0 })
-                    }
-                    className="w-24 px-2 py-1 border border-slate-300 rounded text-right"
-                  />
-                </td>
-                <td className="py-3 px-2 text-right">{baseBTanCommitment.committed.toFixed(2)}</td>
-                <td className={`py-3 px-2 text-right font-semibold ${getAvailable(baseCoatInventory.baseBTan, baseBTanCommitment.committed) < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                  {getAvailable(baseCoatInventory.baseBTan, baseBTanCommitment.committed).toFixed(2)}
-                </td>
-                <td className="py-3 px-2 text-right text-slate-500">{baseBTanCommitment.potential.toFixed(2)}</td>
-                <td className={`py-3 px-2 text-right ${getAvailablePotential(baseCoatInventory.baseBTan, baseBTanCommitment.potential) < 0 ? 'text-red-400' : 'text-slate-500'}`}>
-                  {getAvailablePotential(baseCoatInventory.baseBTan, baseBTanCommitment.potential).toFixed(2)}
-                </td>
-              </tr>
-              <tr className="border-b border-slate-100">
-                <td className="py-3 px-2 font-medium">Base B - Clear</td>
-                <td className="py-3 px-2 text-right">
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={baseCoatInventory.baseBClear}
-                    onChange={(e) =>
-                      setBaseCoatInventory({ ...baseCoatInventory, baseBClear: parseFloat(e.target.value) || 0 })
-                    }
-                    className="w-24 px-2 py-1 border border-slate-300 rounded text-right"
-                  />
-                </td>
-                <td className="py-3 px-2 text-right">{baseBClearCommitment.committed.toFixed(2)}</td>
-                <td className={`py-3 px-2 text-right font-semibold ${getAvailable(baseCoatInventory.baseBClear, baseBClearCommitment.committed) < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                  {getAvailable(baseCoatInventory.baseBClear, baseBClearCommitment.committed).toFixed(2)}
-                </td>
-                <td className="py-3 px-2 text-right text-slate-500">{baseBClearCommitment.potential.toFixed(2)}</td>
-                <td className={`py-3 px-2 text-right ${getAvailablePotential(baseCoatInventory.baseBClear, baseBClearCommitment.potential) < 0 ? 'text-red-400' : 'text-slate-500'}`}>
-                  {getAvailablePotential(baseCoatInventory.baseBClear, baseBClearCommitment.potential).toFixed(2)}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+        <div className="mt-4 flex flex-wrap gap-2 items-end">
+          <div>
+            <label className="block text-xs text-slate-600 mb-1">Part</label>
+            <select
+              value={newSkuPart}
+              onChange={(e) => {
+                const part = e.target.value as CoatingPart;
+                setNewSkuPart(part);
+                if (part !== 'baseB') setNewSkuColor('');
+              }}
+              className="w-32 px-3 py-2 border border-slate-300 rounded-lg text-sm"
+            >
+              <option value="topA">Top A</option>
+              <option value="topB">Top B</option>
+              <option value="baseA">Base A</option>
+              <option value="baseB">Base B</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-slate-600 mb-1">Variant</label>
+            <input
+              type="text"
+              list="coating-variant-suggestions"
+              value={newSkuVariant}
+              onChange={(e) => setNewSkuVariant(e.target.value)}
+              placeholder="e.g. Original"
+              className="w-36 px-3 py-2 border border-slate-300 rounded-lg text-sm"
+            />
+            <datalist id="coating-variant-suggestions">
+              <option value="Original" />
+              <option value="Slow Cure" />
+              <option value="Normal" />
+              <option value="Extended" />
+            </datalist>
+          </div>
+          <div>
+            <label className="block text-xs text-slate-600 mb-1">Color</label>
+            <select
+              value={newSkuColor}
+              onChange={(e) => setNewSkuColor(e.target.value)}
+              disabled={newSkuPart !== 'baseB'}
+              className="w-28 px-3 py-2 border border-slate-300 rounded-lg text-sm disabled:bg-slate-100 disabled:text-slate-400"
+            >
+              <option value="">None</option>
+              <option value="Grey">Grey</option>
+              <option value="Tan">Tan</option>
+              <option value="Clear">Clear</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-slate-600 mb-1">Gallons</label>
+            <input
+              type="number"
+              step="0.1"
+              value={newSkuGallons}
+              onChange={(e) => setNewSkuGallons(e.target.value)}
+              placeholder="0"
+              className="w-24 px-3 py-2 border border-slate-300 rounded-lg text-sm"
+            />
+          </div>
+          <button
+            onClick={handleAddCoatingSku}
+            disabled={!newSkuGallons}
+            className="flex items-center gap-1 px-3 py-2 bg-gf-lime text-white rounded-lg text-sm font-medium hover:bg-gf-dark-green disabled:bg-slate-300"
+          >
+            <Plus size={16} />
+            Add SKU
+          </button>
         </div>
       </div>
 
@@ -1072,8 +1010,7 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
         isOpen={showJobSummary}
         onClose={() => setShowJobSummary(false)}
         jobs={allJobs}
-        baseCoatInventory={baseCoatInventory}
-        topCoatInventory={topCoatInventory}
+        coatingInventory={coatingInventory}
         miscInventory={miscInventory}
         chipInventory={chipInventory}
         tintInventory={tintInventory}

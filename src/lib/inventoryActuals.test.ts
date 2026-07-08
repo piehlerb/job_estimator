@@ -5,9 +5,24 @@ import {
   buildInventoryActualsSnapshot,
   buildInventoryActualsUpdate,
   buildInventoryReviewRows,
+  buildResolvedLines,
   hasInventoryActualsDelta,
   type InventoryActualsSource,
 } from './inventoryActuals.js';
+
+/** Simulate a pre-Phase-4 snapshot that was stored without resolved lines. */
+function asLegacySnapshot(source: InventoryActualsSource, appliedAt: string) {
+  const snapshot = buildInventoryActualsSnapshot(source, appliedAt);
+  delete snapshot.resolvedLines;
+  return snapshot;
+}
+
+function approxEqual(actual: number | undefined, expected: number, message?: string) {
+  assert.ok(
+    actual !== undefined && Math.abs(actual - expected) < 1e-9,
+    message ?? `expected ${actual} to be ~${expected}`
+  );
+}
 
 const baseSource: InventoryActualsSource = {
   actualBaseCoatGallons: 18,
@@ -75,10 +90,10 @@ describe('inventory actual delta rows', () => {
 
     assert.equal(hasInventoryActualsDelta(current, undefined), true);
     assert.equal(byKey['chip:Shoreline'], 280);
-    assert.equal(byKey['base:baseA'], 6);
-    assert.equal(byKey['base:baseBGrey'], 12);
-    assert.equal(byKey['top:topA'], 6);
-    assert.equal(byKey['top:topB'], 6);
+    assert.equal(byKey['coating:baseA::'], 6);
+    assert.equal(byKey['coating:baseB:Normal:Grey'], 12);
+    assert.equal(byKey['coating:topA:Original:'], 6);
+    assert.equal(byKey['coating:topB:Original:'], 6);
     assert.equal(byKey['tint:Slate Gray'], 24);
     assert.equal(byKey['misc:crackRepair'], 0.5);
     assert.equal(byKey['misc:moistureMitigation'], 5);
@@ -112,11 +127,11 @@ describe('inventory actual delta rows', () => {
 
     assert.deepEqual(
       buildInventoryActualDeltaRows(current, baseline)
-        .filter((row) => row.key.startsWith('top:'))
+        .filter((row) => row.key.startsWith('coating:top'))
         .map((row) => [row.key, row.usedDelta]),
       [
-        ['top:topA', 2],
-        ['top:topB', 2],
+        ['coating:topA:Original:', 2],
+        ['coating:topB:Original:', 2],
       ]
     );
   });
@@ -144,21 +159,21 @@ describe('inventory actual delta rows', () => {
     const byKey = Object.fromEntries(buildInventoryActualDeltaRows(current, baseline).map((row) => [row.key, row.usedDelta]));
     assert.equal(byKey['chip:Creek Bed'], 280);
     assert.equal(byKey['chip:Shoreline'], -280);
-    assert.equal(byKey['base:baseBGrey'], -12);
-    assert.equal(byKey['base:baseBTan'], 12);
+    assert.equal(byKey['coating:baseB:Normal:Grey'], -12);
+    assert.equal(byKey['coating:baseB:Normal:Tan'], 12);
     assert.equal(byKey['tint:Slate Gray'], -24);
     assert.equal(byKey['tint:Warm Umber'], 24);
-    assert.equal(byKey['base:baseA'], undefined);
+    assert.equal(byKey['coating:baseA::'], undefined);
   });
 
-  test('merged rows preserve base color warning', () => {
-    const baseline = buildInventoryActualsSnapshot({ ...baseSource, actualBaseCoatGallons: 18 }, '2026-06-12T09:00:00.000Z');
-    const current = buildInventoryActualsSnapshot(
+  test('merged legacy rows preserve base color warning', () => {
+    const baseline = asLegacySnapshot({ ...baseSource, actualBaseCoatGallons: 18 }, '2026-06-12T09:00:00.000Z');
+    const current = asLegacySnapshot(
       { ...baseSource, actualBaseCoatGallons: 18, baseColor: 'Custom Blue' },
       '2026-06-12T11:00:00.000Z'
     );
 
-    const baseRow = buildInventoryActualDeltaRows(current, baseline).find((row) => row.key === 'base:baseA');
+    const baseRow = buildInventoryActualDeltaRows(current, baseline).find((row) => row.key === 'coating:baseA::');
 
     assert.equal(baseRow?.usedDelta, 12);
     assert.equal(baseRow?.warning, 'No matching Base B inventory bucket exists for this base color.');
@@ -189,8 +204,7 @@ describe('inventory actual delta rows', () => {
       deltas: buildInventoryActualDeltaRows(current, undefined),
       chipInventory: [],
       tintInventory: [],
-      topCoatInventory: null,
-      baseCoatInventory: null,
+      coatingInventory: [],
       miscInventory: null,
     });
 
@@ -202,7 +216,7 @@ describe('inventory actual delta rows', () => {
   });
 
   test('review rows combine missing inventory warning with existing delta warning', () => {
-    const current = buildInventoryActualsSnapshot(
+    const current = asLegacySnapshot(
       { ...baseSource, baseColor: 'Custom Blue' },
       '2026-06-12T10:00:00.000Z'
     );
@@ -210,15 +224,137 @@ describe('inventory actual delta rows', () => {
       deltas: buildInventoryActualDeltaRows(current, undefined),
       chipInventory: [],
       tintInventory: [],
-      topCoatInventory: null,
-      baseCoatInventory: null,
+      coatingInventory: [],
       miscInventory: null,
     });
 
-    const baseRow = rows.find((row) => row.key === 'base:baseA');
+    const baseRow = rows.find((row) => row.key === 'coating:baseA::');
     assert.equal(
       baseRow?.warning,
       'No matching Base B inventory bucket exists for this base color. Missing inventory record; current value is assumed to be 0.'
     );
+  });
+});
+
+describe('allocation-aware resolved lines', () => {
+  test('legacy snapshots without resolvedLines still reverse via derivation', () => {
+    const baseline = asLegacySnapshot(baseSource, '2026-06-12T09:00:00.000Z');
+    const current = buildInventoryActualsSnapshot(baseSource, '2026-06-12T11:00:00.000Z');
+
+    assert.equal(Object.prototype.hasOwnProperty.call(baseline, 'resolvedLines'), false);
+    assert.ok((current.resolvedLines?.length ?? 0) > 0);
+    // Default allocation resolves to the same buckets the legacy derivation
+    // produced, so reversing the legacy baseline nets out to no delta.
+    assert.deepEqual(buildInventoryActualDeltaRows(current, baseline), []);
+  });
+
+  test('60/40 Original/Slow Cure top override resolves four top lines and targets Slow Cure SKUs', () => {
+    const source: InventoryActualsSource = {
+      actualTopCoatGallons: 12,
+      materialAllocation: {
+        top: [
+          { variant: 'Original', share: 0.6 },
+          { variant: 'Slow Cure', share: 0.4 },
+        ],
+      },
+    };
+
+    const snapshot = buildInventoryActualsSnapshot(source, '2026-06-12T10:00:00.000Z');
+    const topLines = (snapshot.resolvedLines ?? []).filter((line) => line.key.startsWith('coating:top'));
+    const byKey = Object.fromEntries(topLines.map((line) => [line.key, line.amount]));
+
+    assert.equal(topLines.length, 4);
+    approxEqual(byKey['coating:topA:Original:'], 3.6);
+    approxEqual(byKey['coating:topB:Original:'], 3.6);
+    approxEqual(byKey['coating:topA:Slow Cure:'], 2.4);
+    approxEqual(byKey['coating:topB:Slow Cure:'], 2.4);
+
+    const deltas = buildInventoryActualDeltaRows(snapshot, undefined);
+    const slowCureA = deltas.find((row) => row.key === 'coating:topA:Slow Cure:');
+    assert.deepEqual(slowCureA?.target, { kind: 'coating', part: 'topA', variant: 'Slow Cure', color: undefined });
+    approxEqual(slowCureA?.usedDelta, 2.4);
+  });
+
+  test('all-Clear Mocha override splits combined actual tint oz proportionally', () => {
+    const source: InventoryActualsSource = {
+      actualBaseCoatGallons: 10,
+      actualTintOz: 100,
+      baseColor: 'Mocha',
+      includeBasecoatTint: true,
+      materialAllocation: {
+        base: [
+          { variant: 'Normal', color: 'Clear', share: 0.5, tintColor: 'Grey' },
+          { variant: 'Normal', color: 'Clear', share: 0.5, tintColor: 'Tan' },
+        ],
+      },
+    };
+
+    const { lines } = buildResolvedLines(source);
+    const tintLines = lines.filter((line) => line.key.startsWith('tint:'));
+    const byKey = Object.fromEntries(tintLines.map((line) => [line.key, line.amount]));
+
+    assert.equal(tintLines.length, 2);
+    approxEqual(byKey['tint:Grey'], 50);
+    approxEqual(byKey['tint:Tan'], 50);
+
+    const deltas = buildInventoryActualDeltaRows(
+      buildInventoryActualsSnapshot(source, '2026-06-12T10:00:00.000Z'),
+      undefined
+    );
+    approxEqual(deltas.find((row) => row.key === 'tint:Grey')?.usedDelta, 50);
+    approxEqual(deltas.find((row) => row.key === 'tint:Tan')?.usedDelta, 50);
+  });
+
+  test('reversal uses stored resolved lines when the allocation changed between applications', () => {
+    const baseline = buildInventoryActualsSnapshot(
+      { actualTopCoatGallons: 12, materialAllocation: { top: [{ variant: 'Slow Cure', share: 1 }] } },
+      '2026-06-12T09:00:00.000Z'
+    );
+    const current = buildInventoryActualsSnapshot(
+      { actualTopCoatGallons: 12 },
+      '2026-06-12T11:00:00.000Z'
+    );
+
+    const byKey = Object.fromEntries(
+      buildInventoryActualDeltaRows(current, baseline).map((row) => [row.key, row.usedDelta])
+    );
+
+    approxEqual(byKey['coating:topA:Slow Cure:'], -6);
+    approxEqual(byKey['coating:topB:Slow Cure:'], -6);
+    approxEqual(byKey['coating:topA:Original:'], 6);
+    approxEqual(byKey['coating:topB:Original:'], 6);
+  });
+
+  test('legacy baseline reverses via derivation while new current applies stored lines', () => {
+    const baseline = asLegacySnapshot(baseSource, '2026-06-12T09:00:00.000Z');
+    const current = buildInventoryActualsSnapshot(
+      { ...baseSource, materialAllocation: { top: [{ variant: 'Slow Cure', share: 1 }] } },
+      '2026-06-12T11:00:00.000Z'
+    );
+
+    const byKey = Object.fromEntries(
+      buildInventoryActualDeltaRows(current, baseline).map((row) => [row.key, row.usedDelta])
+    );
+
+    approxEqual(byKey['coating:topA:Original:'], -6);
+    approxEqual(byKey['coating:topB:Original:'], -6);
+    approxEqual(byKey['coating:topA:Slow Cure:'], 6);
+    approxEqual(byKey['coating:topB:Slow Cure:'], 6);
+    // Shared buckets net out to zero and drop from the delta list.
+    assert.equal(byKey['coating:baseA::'], undefined);
+    assert.equal(byKey['chip:Shoreline'], undefined);
+  });
+
+  test('resolver warnings surface on the first coating delta row via the update wrapper', () => {
+    const { deltas } = buildInventoryActualsUpdate(
+      {
+        actualTopCoatGallons: 12,
+        materialAllocation: { top: [{ variant: 'Original', share: 0.5 }, { variant: 'Slow Cure', share: 0.2 }] },
+      },
+      '2026-06-12T10:00:00.000Z'
+    );
+
+    const firstCoating = deltas.find((row) => row.target.kind === 'coating');
+    assert.equal(firstCoating?.warning, 'Topcoat allocation shares do not sum to 100%.');
   });
 });

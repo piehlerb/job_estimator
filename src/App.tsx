@@ -26,7 +26,7 @@ import { useAuth } from './contexts/AuthContext';
 import { useAutoSync } from './hooks/useAutoSync';
 import { migrateCustomersFromJobs, cleanupMigratedCustomerDuplicates, migrateJobsDisableGasHeater } from './lib/jobMigration';
 import { seedOfflineData } from './lib/seedData';
-import { getAllJobs, updateJob } from './lib/db';
+import { getAllJobs, updateJob, ensureCoatingInventorySeeded } from './lib/db';
 
 import { isPageAllowed, pickLandingPage, type AppPage } from './lib/permissions';
 
@@ -180,6 +180,15 @@ function App() {
       }
     }).catch((err) => {
       console.warn('[Migration] disableGasHeater backfill failed:', err);
+    });
+
+    // One-time conversion: seed SKU-level coating inventory from legacy top/base coat singletons
+    ensureCoatingInventorySeeded().then((count) => {
+      if (count > 0) {
+        console.log(`[Migration] Seeded ${count} coating inventory SKU(s) from legacy inventory`);
+      }
+    }).catch((err) => {
+      console.warn('[Migration] Coating inventory seed failed:', err);
     });
   }, [user, offlineMode]);
 

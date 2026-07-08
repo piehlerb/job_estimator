@@ -315,6 +315,22 @@ export interface ActualCosts {
   actualMarginPct: number;
 }
 
+// Inventory bucket a resolved actuals line deducts from.
+export type InventoryTarget =
+  | { kind: 'chip'; blend: string }
+  | { kind: 'coating'; part: CoatingPart; variant?: string; color?: string }
+  | { kind: 'tint'; color: string }
+  | { kind: 'misc'; field: keyof Pick<MiscInventory, 'crackRepair' | 'moistureMitigation'> };
+
+// One fully-resolved inventory deduction line captured at apply time.
+export interface InventoryActualResolvedLine {
+  key: string;
+  label: string;
+  unit: 'lbs' | 'gal' | 'oz';
+  amount: number;
+  target: InventoryTarget;
+}
+
 export interface InventoryActualsApplied {
   actualBaseCoatGallons?: number;
   actualTopCoatGallons?: number;
@@ -327,6 +343,7 @@ export interface InventoryActualsApplied {
   baseColor?: string;
   tintColor?: string;
   appliedAt: string;
+  resolvedLines?: InventoryActualResolvedLine[]; // complete resolved deduction lines; authoritative for reversal
 }
 
 export interface Job {
@@ -359,6 +376,7 @@ export interface Job {
   includeBasecoatTint?: boolean;
   includeTopcoatTint?: boolean;
   tintColor?: string; // Selected tint color (shown when basecoat or topcoat tint is enabled)
+  materialAllocation?: JobMaterialAllocation; // Per-job coating allocation override (absent = defaults)
   // Additive options
   antiSlip?: boolean;
   abrasionResistance?: boolean;
@@ -421,6 +439,38 @@ export interface TintInventory {
   ounces: number; // oz on hand
   updatedAt: string;
   deleted?: boolean;
+}
+
+// Coating inventory tracked at the SKU level (part + variant + color)
+export type CoatingPart = 'topA' | 'topB' | 'baseA' | 'baseB';
+
+export interface CoatingInventory {
+  id: string;
+  part: CoatingPart;
+  variant?: string; // 'Original' | 'Slow Cure' for top parts, 'Normal' | 'Extended' for baseB; undefined for baseA
+  color?: string;   // Base B only: 'Grey' | 'Tan' | 'Clear'
+  gallons: number;
+  sortOrder?: number;
+  updatedAt: string;
+  deleted?: boolean;
+}
+
+// Per-job material allocation override (absent = derive defaults from baseColor/tint fields)
+export interface TopcoatAllocation {
+  variant: string; // 'Original' | 'Slow Cure' | ... — always draws the matching Top A + Top B pair
+  share: number;   // fraction of total topcoat, shares sum to 1
+}
+
+export interface BaseCoatAllocation {
+  variant: string;    // 'Normal' | 'Extended' | ...
+  color: string;      // 'Grey' | 'Tan' | 'Clear'
+  share: number;      // fraction of the Base B portion, shares sum to 1
+  tintColor?: string; // when color === 'Clear': tint added to this component
+}
+
+export interface JobMaterialAllocation {
+  top?: TopcoatAllocation[];
+  base?: BaseCoatAllocation[];
 }
 
 // Inventory tracking
@@ -563,6 +613,7 @@ export interface ExportData {
   chipBlends: ChipBlend[];
   chipInventory: ChipInventory[];
   tintInventory: TintInventory[];
+  coatingInventory?: CoatingInventory[]; // Optional: older backups predate SKU-level coating inventory
   topCoatInventory: TopCoatInventory | null;
   baseCoatInventory: BaseCoatInventory | null;
   miscInventory: MiscInventory | null;
