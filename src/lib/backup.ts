@@ -5,6 +5,7 @@ import {
   MergeLogEntry,
   EXPORT_VERSION,
 } from '../types';
+import { coatingSkuLabel } from './coatingSkus';
 import {
   getAllSystems,
   getCosts,
@@ -16,6 +17,10 @@ import {
   getAllTintInventory,
   saveTintInventory,
   deleteTintInventory,
+  getAllCoatingInventory,
+  saveCoatingInventory,
+  deleteCoatingInventory,
+  applyLegacyCoatingToSkus,
   getTopCoatInventory,
   getBaseCoatInventory,
   getMiscInventory,
@@ -62,6 +67,7 @@ export async function exportAllData(): Promise<ExportData> {
     chipBlends,
     chipInventory,
     tintInventory,
+    coatingInventory,
     topCoatInventory,
     baseCoatInventory,
     miscInventory,
@@ -77,6 +83,7 @@ export async function exportAllData(): Promise<ExportData> {
     getAllChipBlends(),
     getAllChipInventory(),
     getAllTintInventory(),
+    getAllCoatingInventory(),
     getTopCoatInventory(),
     getBaseCoatInventory(),
     getMiscInventory(),
@@ -101,6 +108,7 @@ export async function exportAllData(): Promise<ExportData> {
     chipBlends,
     chipInventory,
     tintInventory,
+    coatingInventory,
     topCoatInventory,
     baseCoatInventory,
     miscInventory,
@@ -281,6 +289,21 @@ function validateTintInventory(inventory: unknown): string[] {
   return errors;
 }
 
+function validateCoatingInventory(inventory: unknown): string[] {
+  const errors: string[] = [];
+  if (!inventory || typeof inventory !== 'object') {
+    return ['Invalid coating inventory object'];
+  }
+  const i = inventory as Record<string, unknown>;
+
+  if (!isValidString(i.id)) errors.push('CoatingInventory missing valid id');
+  if (!isValidString(i.part)) errors.push('CoatingInventory missing valid part');
+  if (!isValidNumber(i.gallons)) errors.push('CoatingInventory missing valid gallons');
+  if (!isValidISODate(i.updatedAt)) errors.push('CoatingInventory missing valid updatedAt');
+
+  return errors;
+}
+
 function validateTopCoatInventory(inventory: unknown): string[] {
   const errors: string[] = [];
   if (!inventory || typeof inventory !== 'object') {
@@ -406,6 +429,13 @@ export function validateImportData(data: unknown): { valid: boolean; errors: str
     });
   }
 
+  if (Array.isArray(d.coatingInventory)) {
+    d.coatingInventory.forEach((inv, i) => {
+      const errs = validateCoatingInventory(inv);
+      errs.forEach(e => errors.push(`CoatingInventory[${i}]: ${e}`));
+    });
+  }
+
   if (d.topCoatInventory !== null) {
     const errs = validateTopCoatInventory(d.topCoatInventory);
     errs.forEach(e => errors.push(`TopCoatInventory: ${e}`));
@@ -450,6 +480,7 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
     localChipBlends,
     localChipInventory,
     localTintInventory,
+    localCoatingInventory,
     localTopCoatInventory,
     localBaseCoatInventory,
     localMiscInventory,
@@ -464,6 +495,7 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
     getAllChipBlends(),
     getAllChipInventory(),
     getAllTintInventory(),
+    getAllCoatingInventory(),
     getTopCoatInventory(),
     getBaseCoatInventory(),
     getMiscInventory(),
@@ -479,6 +511,7 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
   const localChipBlendsMap = new Map(localChipBlends.map(b => [b.id, b]));
   const localChipInventoryMap = new Map(localChipInventory.map(i => [i.id, i]));
   const localTintInventoryMap = new Map(localTintInventory.map(i => [i.id, i]));
+  const localCoatingInventoryMap = new Map(localCoatingInventory.map(i => [i.id, i]));
   const localCommTemplatesMap = new Map(localCommTemplates.map(t => [t.id, t]));
 
   // Track which IDs are in import for delete detection
@@ -490,6 +523,7 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
   const importChipBlendIds = new Set(importData.chipBlends.map(b => b.id));
   const importChipInventoryIds = new Set(importData.chipInventory.map(i => i.id));
   const importTintInventoryIds = new Set((importData.tintInventory || []).map(i => i.id));
+  const importCoatingInventoryIds = new Set((importData.coatingInventory || []).map(i => i.id));
   const importCommTemplateIds = new Set((importData.commTemplates || []).map(t => t.id));
 
   // Compare systems
@@ -673,6 +707,27 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
     }
   }
 
+  // Compare coating inventory (SKU-level)
+  for (const importInv of (importData.coatingInventory || [])) {
+    const local = localCoatingInventoryMap.get(importInv.id);
+    if (!local) {
+      preview.toAdd.push({ entityType: 'CoatingInventory', entityName: coatingSkuLabel(importInv) });
+    } else if (isNewer(importInv.updatedAt, local.updatedAt)) {
+      preview.toUpdate.push({
+        entityType: 'CoatingInventory',
+        entityName: coatingSkuLabel(importInv),
+        localUpdatedAt: local.updatedAt,
+        importUpdatedAt: importInv.updatedAt,
+      });
+    } else {
+      preview.toSkip.push({
+        entityType: 'CoatingInventory',
+        entityName: coatingSkuLabel(importInv),
+        reason: 'Local version is same or newer',
+      });
+    }
+  }
+
   // Compare top coat inventory (singleton)
   if (importData.topCoatInventory) {
     if (!localTopCoatInventory) {
@@ -796,6 +851,15 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
         preview.toDelete.push({ entityType: 'TintInventory', entityName: local.color });
       }
     }
+    // Only treat local coating SKUs as orphans if the backup actually has SKU-level
+    // coating inventory (old backups predate it and must not wipe the store)
+    if (importData.coatingInventory) {
+      for (const local of localCoatingInventory) {
+        if (!importCoatingInventoryIds.has(local.id)) {
+          preview.toDelete.push({ entityType: 'CoatingInventory', entityName: coatingSkuLabel(local) });
+        }
+      }
+    }
     for (const local of localCommTemplates) {
       if (!importCommTemplateIds.has(local.id)) {
         preview.toDelete.push({ entityType: 'CommTemplate', entityName: local.name });
@@ -821,6 +885,7 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
     localChipBlends,
     localChipInventory,
     localTintInventory,
+    localCoatingInventory,
     localTopCoatInventory,
     localBaseCoatInventory,
     localMiscInventory,
@@ -835,6 +900,7 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
     getAllChipBlends(),
     getAllChipInventory(),
     getAllTintInventory(),
+    getAllCoatingInventory(),
     getTopCoatInventory(),
     getBaseCoatInventory(),
     getMiscInventory(),
@@ -850,6 +916,7 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
   const localChipBlendsMap = new Map(localChipBlends.map(b => [b.id, b]));
   const localChipInventoryMap = new Map(localChipInventory.map(i => [i.id, i]));
   const localTintInventoryMap = new Map(localTintInventory.map(i => [i.id, i]));
+  const localCoatingInventoryMap = new Map(localCoatingInventory.map(i => [i.id, i]));
   const localCommTemplatesMap = new Map(localCommTemplates.map(t => [t.id, t]));
 
   // Track import IDs for deletion
@@ -860,6 +927,7 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
   const importJobIds = new Set(importData.jobs.map(j => j.id));
   const importChipInventoryIds = new Set(importData.chipInventory.map(i => i.id));
   const importTintInventoryIds = new Set((importData.tintInventory || []).map(i => i.id));
+  const importCoatingInventoryIds = new Set((importData.coatingInventory || []).map(i => i.id));
   const importCommTemplateIds = new Set((importData.commTemplates || []).map(t => t.id));
 
   // Import systems
@@ -984,13 +1052,30 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
     }
   }
 
+  // Import coating inventory (SKU-level)
+  for (const importInv of (importData.coatingInventory || [])) {
+    const local = localCoatingInventoryMap.get(importInv.id);
+    if (!local) {
+      await saveCoatingInventory(importInv);
+      log.push({ entityType: 'CoatingInventory', entityName: coatingSkuLabel(importInv), action: 'add', reason: 'New record' });
+    } else if (isNewer(importInv.updatedAt, local.updatedAt)) {
+      await saveCoatingInventory(importInv);
+      log.push({ entityType: 'CoatingInventory', entityName: coatingSkuLabel(importInv), action: 'update', reason: 'Import is newer' });
+    } else {
+      log.push({ entityType: 'CoatingInventory', entityName: coatingSkuLabel(importInv), action: 'skip', reason: 'Local is same or newer' });
+    }
+  }
+
   // Import top coat inventory
+  let topCoatApplied = false;
   if (importData.topCoatInventory) {
     if (!localTopCoatInventory) {
       await saveTopCoatInventory(importData.topCoatInventory);
+      topCoatApplied = true;
       log.push({ entityType: 'TopCoatInventory', entityName: 'Top Coat Inventory', action: 'add', reason: 'New record' });
     } else if (isNewer(importData.topCoatInventory.updatedAt, localTopCoatInventory.updatedAt)) {
       await saveTopCoatInventory(importData.topCoatInventory);
+      topCoatApplied = true;
       log.push({ entityType: 'TopCoatInventory', entityName: 'Top Coat Inventory', action: 'update', reason: 'Import is newer' });
     } else {
       log.push({ entityType: 'TopCoatInventory', entityName: 'Top Coat Inventory', action: 'skip', reason: 'Local is same or newer' });
@@ -998,15 +1083,36 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
   }
 
   // Import base coat inventory
+  let baseCoatApplied = false;
   if (importData.baseCoatInventory) {
     if (!localBaseCoatInventory) {
       await saveBaseCoatInventory(importData.baseCoatInventory);
+      baseCoatApplied = true;
       log.push({ entityType: 'BaseCoatInventory', entityName: 'Base Coat Inventory', action: 'add', reason: 'New record' });
     } else if (isNewer(importData.baseCoatInventory.updatedAt, localBaseCoatInventory.updatedAt)) {
       await saveBaseCoatInventory(importData.baseCoatInventory);
+      baseCoatApplied = true;
       log.push({ entityType: 'BaseCoatInventory', entityName: 'Base Coat Inventory', action: 'update', reason: 'Import is newer' });
     } else {
       log.push({ entityType: 'BaseCoatInventory', entityName: 'Base Coat Inventory', action: 'skip', reason: 'Local is same or newer' });
+    }
+  }
+
+  // Legacy backup conversion: the backup predates SKU-level coating inventory but
+  // its top/base coat singleton values were just applied — mirror them into the
+  // corresponding coating SKUs so the SKU store reflects the imported values.
+  if ((!importData.coatingInventory || importData.coatingInventory.length === 0) && (topCoatApplied || baseCoatApplied)) {
+    const written = await applyLegacyCoatingToSkus(
+      topCoatApplied ? importData.topCoatInventory : null,
+      baseCoatApplied ? importData.baseCoatInventory : null
+    );
+    if (written > 0) {
+      log.push({
+        entityType: 'CoatingInventory',
+        entityName: 'Coating SKUs',
+        action: 'update',
+        reason: 'Derived from legacy top/base coat inventory in backup',
+      });
     }
   }
 
@@ -1080,6 +1186,16 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
       if (!importTintInventoryIds.has(local.id)) {
         await deleteTintInventory(local.id);
         log.push({ entityType: 'TintInventory', entityName: local.color, action: 'delete', reason: 'Not in import file' });
+      }
+    }
+    // Only delete coating SKU orphans if the backup actually has SKU-level
+    // coating inventory (old backups predate it and must not wipe the store)
+    if (importData.coatingInventory) {
+      for (const local of localCoatingInventory) {
+        if (!importCoatingInventoryIds.has(local.id)) {
+          await deleteCoatingInventory(local.id);
+          log.push({ entityType: 'CoatingInventory', entityName: coatingSkuLabel(local), action: 'delete', reason: 'Not in import file' });
+        }
       }
     }
     for (const local of localCommTemplates) {

@@ -23,16 +23,16 @@ import {
   getAllCommTemplates,
   getLead,
   updateLead,
-  getTopCoatInventory,
-  saveTopCoatInventory,
-  getBaseCoatInventory,
-  saveBaseCoatInventory,
+  getAllCoatingInventory,
+  saveCoatingInventory,
   getMiscInventory,
   saveMiscInventory,
   saveChipInventory,
   saveTintInventory,
 } from '../lib/db';
-import { BaseCoatInventory, BaseColor, ChipSystem, Costs, Pricing, Job, JobCalculation, JobStatus, Laborer, InstallDaySchedule, ActualDaySchedule, ActualCosts, ChipInventory, CoatingRemovalType, Product, JobProduct, BaseCoatColor, JobReminder, JobFollowUp, TintInventory, CommunicationTemplate, JobEvaluation, InventoryActualsApplied, MiscInventory, TopCoatInventory, Lead } from '../types';
+import { BaseColor, ChipSystem, Costs, Pricing, Job, JobCalculation, JobStatus, Laborer, InstallDaySchedule, ActualDaySchedule, ActualCosts, ChipInventory, CoatingRemovalType, Product, JobProduct, BaseCoatColor, JobReminder, JobFollowUp, TintInventory, CommunicationTemplate, JobEvaluation, InventoryActualsApplied, MiscInventory, Lead, JobMaterialAllocation } from '../types';
+import { coatingSkuId, findCoatingSku, DEFAULT_COATING_SKUS } from '../lib/coatingSkus';
+import { resolveJobMaterials, defaultBaseComponents, sharesValid } from '../lib/materialAllocation';
 import { calculateJobOutputs, calculateActualCosts } from '../lib/calculations';
 import InstallDayScheduleComponent from '../components/InstallDaySchedule';
 import { convertLegacyJobToSchedule } from '../lib/jobMigration';
@@ -79,26 +79,6 @@ interface CustomerOption {
 
 type EditableInventoryReviewRow = InventoryReviewRow & { newValueEdited?: boolean };
 
-function createDefaultTopCoatInventory(): TopCoatInventory {
-  return {
-    id: 'current',
-    topA: 0,
-    topB: 0,
-    updatedAt: new Date().toISOString(),
-  };
-}
-
-function createDefaultBaseCoatInventory(): BaseCoatInventory {
-  return {
-    id: 'current',
-    baseA: 0,
-    baseBGrey: 0,
-    baseBTan: 0,
-    baseBClear: 0,
-    updatedAt: new Date().toISOString(),
-  };
-}
-
 function createDefaultMiscInventory(): MiscInventory {
   return {
     id: 'current',
@@ -141,6 +121,13 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
   const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [showProductsSection, setShowProductsSection] = useState(false);
   const [selectedProductId, setSelectedProductId] = useState('');
+
+  // Material allocation state (per-job override of default coating allocation)
+  const [showAllocationSection, setShowAllocationSection] = useState(false);
+  const [allocationOverrideEnabled, setAllocationOverrideEnabled] = useState(false);
+  const [topAllocation, setTopAllocation] = useState<Array<{ variant: string; sharePct: number }>>([]);
+  const [baseAllocation, setBaseAllocation] = useState<Array<{ variant: string; color: string; sharePct: number; tintColor: string }>>([]);
+  const [allocationError, setAllocationError] = useState('');
   const [activeTab, setActiveTab] = useState<'details' | 'reminders' | 'actuals'>('details');
   const [currentStep, setCurrentStep] = useState(0);
   const STEP_LABELS = ['Customer', 'Measure', 'System', 'Price'] as const;
@@ -319,6 +306,125 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
     () => jobProducts.reduce((sum, p) => sum + p.quantity * p.unitCost, 0),
     [jobProducts]
   );
+
+  // ── Material allocation helpers ──────────────────────────────────────────
+  const buildAllocationOverride = (): JobMaterialAllocation | undefined => {
+    if (!allocationOverrideEnabled) return undefined;
+    const top = topAllocation
+      .filter((t) => t.variant.trim())
+      .map((t) => ({ variant: t.variant.trim(), share: t.sharePct / 100 }));
+    const base = baseAllocation
+      .filter((b) => b.variant.trim() && b.color)
+      .map((b) => ({
+        variant: b.variant.trim(),
+        color: b.color,
+        share: b.sharePct / 100,
+        tintColor: b.color === 'Clear' && b.tintColor ? b.tintColor : undefined,
+      }));
+    const override: JobMaterialAllocation = {};
+    if (top.length > 0) override.top = top;
+    if (base.length > 0) override.base = base;
+    return override.top || override.base ? override : undefined;
+  };
+
+  const validateAllocationOverride = (): string => {
+    if (!allocationOverrideEnabled) return '';
+    if (topAllocation.length > 0) {
+      if (topAllocation.some((t) => !t.variant.trim())) {
+        return 'Each topcoat flavor needs a variant name.';
+      }
+      if (!sharesValid(topAllocation.map((t) => ({ share: t.sharePct / 100 })))) {
+        return 'Topcoat flavor shares must sum to 100%.';
+      }
+    }
+    if (baseAllocation.length > 0) {
+      if (baseAllocation.some((b) => !b.variant.trim() || !b.color)) {
+        return 'Each Base B component needs a variant and color.';
+      }
+      if (!sharesValid(baseAllocation.map((b) => ({ share: b.sharePct / 100 })))) {
+        return 'Base B component shares must sum to 100%.';
+      }
+    }
+    return '';
+  };
+
+  const defaultBaseAllocationRows = () => {
+    const defaults = defaultBaseComponents(formData.baseColor || undefined);
+    if (!defaults) return [{ variant: 'Normal', color: '', sharePct: 100, tintColor: '' }];
+    return defaults.map((d) => ({
+      variant: d.variant,
+      color: d.color,
+      sharePct: Math.round(d.share * 1000) / 10,
+      tintColor: d.tintColor || '',
+    }));
+  };
+
+  const enableAllocationOverride = () => {
+    setAllocationOverrideEnabled(true);
+    if (topAllocation.length === 0) {
+      setTopAllocation([{ variant: 'Original', sharePct: 100 }]);
+    }
+    if (baseAllocation.length === 0) {
+      setBaseAllocation(defaultBaseAllocationRows());
+    }
+  };
+
+  const resetAllocationToDefaults = () => {
+    setTopAllocation([{ variant: 'Original', sharePct: 100 }]);
+    setBaseAllocation(defaultBaseAllocationRows());
+    setAllocationError('');
+  };
+
+  const applyMochaPreset = (rows: Array<{ variant: string; color: string; sharePct: number; tintColor: string }>) => {
+    if (!allocationOverrideEnabled) {
+      setAllocationOverrideEnabled(true);
+      if (topAllocation.length === 0) {
+        setTopAllocation([{ variant: 'Original', sharePct: 100 }]);
+      }
+    }
+    setBaseAllocation(rows);
+    setAllocationError('');
+  };
+
+  const allocationTintColorOptions = (current: string): string[] => {
+    const options = tintInventory.map((t) => t.color);
+    if (current && !options.some((c) => c.toLowerCase() === current.toLowerCase())) {
+      options.push(current);
+    }
+    return options;
+  };
+
+  // Known variant choices for the allocation dropdowns; keeps any custom value
+  // already stored on the row selectable so old data never disappears
+  const allocationVariantOptions = (known: string[], current: string): string[] =>
+    current && !known.includes(current) ? [...known, current] : known;
+
+  const resolvedMaterials = useMemo(() => {
+    if (!calculation) return null;
+    if (!(calculation.baseGallons > 0) && !(calculation.topGallons > 0)) return null;
+    return resolveJobMaterials({
+      baseGallons: calculation.baseGallons,
+      topGallons: calculation.topGallons,
+      baseColor: formData.baseColor || undefined,
+      tintColor: formData.tintColor || undefined,
+      includeBasecoatTint: formData.includeBasecoatTint,
+      includeTopcoatTint: formData.includeTopcoatTint,
+      override: buildAllocationOverride(),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    calculation,
+    formData.baseColor,
+    formData.tintColor,
+    formData.includeBasecoatTint,
+    formData.includeTopcoatTint,
+    allocationOverrideEnabled,
+    topAllocation,
+    baseAllocation,
+  ]);
+
+  const topAllocationTotalPct = topAllocation.reduce((sum, t) => sum + (t.sharePct || 0), 0);
+  const baseAllocationTotalPct = baseAllocation.reduce((sum, b) => sum + (b.sharePct || 0), 0);
 
   const tagSuggestions = useMemo(() => {
     const segments = formData.tags.split(',');
@@ -613,6 +719,25 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
           if (job.products && job.products.length > 0) {
             setJobProducts(job.products);
             setShowProductsSection(true);
+          }
+          // Load material allocation override from existing job
+          if (job.materialAllocation && (job.materialAllocation.top?.length || job.materialAllocation.base?.length)) {
+            setAllocationOverrideEnabled(true);
+            setShowAllocationSection(true);
+            setTopAllocation(
+              (job.materialAllocation.top || []).map((t) => ({
+                variant: t.variant,
+                sharePct: Math.round(t.share * 1000) / 10,
+              }))
+            );
+            setBaseAllocation(
+              (job.materialAllocation.base || []).map((b) => ({
+                variant: b.variant,
+                color: b.color,
+                sharePct: Math.round(b.share * 1000) / 10,
+                tintColor: b.tintColor || '',
+              }))
+            );
           }
           if (job.reminders && job.reminders.length > 0) {
             setReminders(job.reminders);
@@ -1489,15 +1614,15 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
     tintColor: job.tintColor,
     includeBasecoatTint: job.includeBasecoatTint,
     includeTopcoatTint: job.includeTopcoatTint,
+    materialAllocation: job.materialAllocation,
     inventoryActualsApplied: job.inventoryActualsApplied,
   });
 
   const prepareInventoryReview = async (deltas: Parameters<typeof buildInventoryReviewRows>[0]['deltas']) => {
-    const [chipInventoryRows, tintInventoryRows, topCoatInventory, baseCoatInventory, miscInventory] = await Promise.all([
+    const [chipInventoryRows, tintInventoryRows, coatingInventoryRows, miscInventory] = await Promise.all([
       getAllChipInventory(),
       getAllTintInventory(),
-      getTopCoatInventory(),
-      getBaseCoatInventory(),
+      getAllCoatingInventory(),
       getMiscInventory(),
     ]);
 
@@ -1505,8 +1630,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
       deltas,
       chipInventory: chipInventoryRows,
       tintInventory: tintInventoryRows,
-      topCoatInventory,
-      baseCoatInventory,
+      coatingInventory: coatingInventoryRows,
       miscInventory,
     });
   };
@@ -1546,20 +1670,15 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
     setInventoryUpdateError('');
 
     try {
-      const [chipInventoryRows, tintInventoryRows, topInventoryRecord, baseInventoryRecord, miscInventoryRecord] = await Promise.all([
+      const [chipInventoryRows, tintInventoryRows, coatingInventoryRows, miscInventoryRecord] = await Promise.all([
         getAllChipInventory(),
         getAllTintInventory(),
-        getTopCoatInventory(),
-        getBaseCoatInventory(),
+        getAllCoatingInventory(),
         getMiscInventory(),
       ]);
 
       const now = new Date().toISOString();
-      let topInventory = topInventoryRecord ?? createDefaultTopCoatInventory();
-      let baseInventory = baseInventoryRecord ?? createDefaultBaseCoatInventory();
       let miscInventory = { ...createDefaultMiscInventory(), ...miscInventoryRecord };
-      let hasTopChanges = false;
-      let hasBaseChanges = false;
       let hasMiscChanges = false;
       const getFreshCurrentValue = (row: EditableInventoryReviewRow) => {
         if (row.target.kind === 'chip') {
@@ -1576,12 +1695,10 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
           return existing?.ounces ?? 0;
         }
 
-        if (row.target.kind === 'top') {
-          return topInventory[row.target.field] ?? 0;
-        }
-
-        if (row.target.kind === 'base') {
-          return baseInventory[row.target.field] ?? 0;
+        if (row.target.kind === 'coating') {
+          const target = row.target;
+          const existing = findCoatingSku(coatingInventoryRows, target.part, target.variant, target.color);
+          return existing?.gallons ?? 0;
         }
 
         return miscInventory[row.target.field] ?? 0;
@@ -1630,23 +1747,33 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
           continue;
         }
 
-        if (row.target.kind === 'top') {
-          topInventory = {
-            ...topInventory,
-            [row.target.field]: row.newValue,
-            updatedAt: now,
-          };
-          hasTopChanges = true;
-          continue;
-        }
+        if (row.target.kind === 'coating') {
+          const target = row.target;
+          const existing = findCoatingSku(coatingInventoryRows, target.part, target.variant, target.color);
 
-        if (row.target.kind === 'base') {
-          baseInventory = {
-            ...baseInventory,
-            [row.target.field]: row.newValue,
-            updatedAt: now,
-          };
-          hasBaseChanges = true;
+          if (existing) {
+            await saveCoatingInventory({
+              ...existing,
+              gallons: row.newValue,
+              updatedAt: now,
+            });
+          } else {
+            const defaultSku = DEFAULT_COATING_SKUS.find(
+              (sku) =>
+                sku.part === target.part &&
+                (sku.variant || '') === (target.variant || '') &&
+                (sku.color || '') === (target.color || '')
+            );
+            await saveCoatingInventory({
+              id: coatingSkuId(target),
+              part: target.part,
+              variant: target.variant,
+              color: target.color,
+              gallons: row.newValue,
+              sortOrder: defaultSku?.sortOrder,
+              updatedAt: now,
+            });
+          }
           continue;
         }
 
@@ -1658,12 +1785,6 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
         hasMiscChanges = true;
       }
 
-      if (hasTopChanges) {
-        await saveTopCoatInventory(topInventory);
-      }
-      if (hasBaseChanges) {
-        await saveBaseCoatInventory(baseInventory);
-      }
       if (hasMiscChanges) {
         await saveMiscInventory(miscInventory);
       }
@@ -1733,6 +1854,17 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
         }
       }
 
+      // Validate material allocation override before saving
+      const allocationValidationError = validateAllocationOverride();
+      if (allocationValidationError) {
+        setAllocationError(allocationValidationError);
+        setShowAllocationSection(true);
+        alert(`Material Allocation: ${allocationValidationError}`);
+        setSaving(false);
+        return;
+      }
+      setAllocationError('');
+
       // Calculate total hours from schedule
       const totalHours = installSchedule.reduce((sum, day) => sum + day.hours, 0);
 
@@ -1770,6 +1902,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
         chipBlend: normalizedChipBlend || undefined,
         tags: normalizedTags.length > 0 ? normalizedTags : undefined,
         baseColor: formData.baseColor || undefined,
+        materialAllocation: buildAllocationOverride(),
         status: formData.status,
         estimateDate: formData.estimateDate || undefined,
         decisionDate: formData.decisionDate || undefined,
@@ -2612,6 +2745,263 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
               </div>
             )}
           </div>
+
+          {/* Material Allocation (collapsible) */}
+          {resolvedMaterials && (
+            <div className="rounded-lg border border-slate-200 mt-4">
+              <button
+                type="button"
+                onClick={() => setShowAllocationSection(!showAllocationSection)}
+                className={`w-full flex items-center justify-between px-3 sm:px-4 py-3 text-left bg-gf-lime/15 hover:bg-gf-lime/25 transition-colors ${showAllocationSection ? 'rounded-t-lg' : 'rounded-lg'}`}
+              >
+                <div className="flex items-center gap-2">
+                  <h4 className="text-xs sm:text-sm font-semibold text-gf-dark-green uppercase tracking-wide">Material Allocation</h4>
+                  {allocationOverrideEnabled && (
+                    <span className="px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-700 rounded-full">
+                      Override
+                    </span>
+                  )}
+                </div>
+                {showAllocationSection ? <ChevronUp size={16} className="text-slate-400" /> : <ChevronDown size={16} className="text-slate-400" />}
+              </button>
+
+              {showAllocationSection && (
+                <div className="px-3 sm:px-4 pb-3 sm:pb-4 border-t border-slate-200">
+                  <label className="flex items-center gap-2 cursor-pointer mt-3 mb-3">
+                    <input
+                      type="checkbox"
+                      checked={allocationOverrideEnabled}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          enableAllocationOverride();
+                        } else {
+                          setAllocationOverrideEnabled(false);
+                          setAllocationError('');
+                        }
+                      }}
+                      className="w-4 h-4 text-gf-dark-green border-slate-300 rounded focus:ring-gf-lime"
+                    />
+                    <span className="text-xs sm:text-sm font-semibold text-slate-900">Override default allocation</span>
+                  </label>
+
+                  {allocationOverrideEnabled && (
+                    <div className="space-y-4 mb-4">
+                      {/* Topcoat flavors editor */}
+                      {calculation && calculation.topGallons > 0 && (
+                        <div>
+                          <div className="flex items-center gap-2 mb-2">
+                            <p className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Topcoat Flavors</p>
+                            <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${Math.abs(topAllocationTotalPct - 100) <= 0.1 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                              {topAllocationTotalPct.toFixed(1).replace(/\.0$/, '')}%
+                            </span>
+                          </div>
+                          {topAllocation.map((row, idx) => (
+                            <div key={idx} className="flex items-center gap-2 mb-2">
+                              <select
+                                value={row.variant}
+                                onChange={(e) => setTopAllocation(topAllocation.map((r, i) => (i === idx ? { ...r, variant: e.target.value } : r)))}
+                                className="flex-1 px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
+                              >
+                                <option value="">Variant...</option>
+                                {allocationVariantOptions(['Original', 'Slow Cure'], row.variant).map((v) => (
+                                  <option key={v} value={v}>{v}</option>
+                                ))}
+                              </select>
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  step="0.1"
+                                  value={row.sharePct}
+                                  onChange={(e) => setTopAllocation(topAllocation.map((r, i) => (i === idx ? { ...r, sharePct: parseFloat(e.target.value) || 0 } : r)))}
+                                  className="w-20 px-2 py-2 text-sm text-right border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
+                                />
+                                <span className="text-xs text-slate-500">%</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setTopAllocation(topAllocation.filter((_, i) => i !== idx))}
+                                className="p-1 rounded text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => setTopAllocation([...topAllocation, { variant: '', sharePct: 0 }])}
+                            className="flex items-center gap-1 px-2 py-1 text-xs text-gf-dark-green hover:bg-slate-50 rounded transition-colors"
+                          >
+                            <Plus size={12} />
+                            Add flavor
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Base B components editor */}
+                      {calculation && calculation.baseGallons > 0 && (
+                        <div>
+                          <div className="flex items-center gap-2 mb-2">
+                            <p className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Base B Components</p>
+                            <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${Math.abs(baseAllocationTotalPct - 100) <= 0.1 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                              {baseAllocationTotalPct.toFixed(1).replace(/\.0$/, '')}%
+                            </span>
+                          </div>
+
+                          {formData.baseColor === 'Mocha' && (
+                            <div className="flex flex-wrap gap-2 mb-2">
+                              <button
+                                type="button"
+                                onClick={() => applyMochaPreset([
+                                  { variant: 'Normal', color: 'Grey', sharePct: 50, tintColor: '' },
+                                  { variant: 'Normal', color: 'Tan', sharePct: 50, tintColor: '' },
+                                ])}
+                                className="px-2 py-1 text-xs border border-slate-300 rounded hover:bg-slate-50 text-slate-700 transition-colors"
+                              >
+                                Grey B + Tan B
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => applyMochaPreset([
+                                  { variant: 'Normal', color: 'Grey', sharePct: 50, tintColor: '' },
+                                  { variant: 'Normal', color: 'Clear', sharePct: 50, tintColor: 'Tan' },
+                                ])}
+                                className="px-2 py-1 text-xs border border-slate-300 rounded hover:bg-slate-50 text-slate-700 transition-colors"
+                              >
+                                Grey B + Clear B (Tan tint)
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => applyMochaPreset([
+                                  { variant: 'Normal', color: 'Tan', sharePct: 50, tintColor: '' },
+                                  { variant: 'Normal', color: 'Clear', sharePct: 50, tintColor: 'Grey' },
+                                ])}
+                                className="px-2 py-1 text-xs border border-slate-300 rounded hover:bg-slate-50 text-slate-700 transition-colors"
+                              >
+                                Tan B + Clear B (Grey tint)
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => applyMochaPreset([
+                                  { variant: 'Normal', color: 'Clear', sharePct: 50, tintColor: 'Grey' },
+                                  { variant: 'Normal', color: 'Clear', sharePct: 50, tintColor: 'Tan' },
+                                ])}
+                                className="px-2 py-1 text-xs border border-slate-300 rounded hover:bg-slate-50 text-slate-700 transition-colors"
+                              >
+                                All Clear (Grey + Tan tint)
+                              </button>
+                            </div>
+                          )}
+
+                          {baseAllocation.map((row, idx) => (
+                            <div key={idx} className="flex items-center gap-2 mb-2">
+                              <select
+                                value={row.variant}
+                                onChange={(e) => setBaseAllocation(baseAllocation.map((r, i) => (i === idx ? { ...r, variant: e.target.value } : r)))}
+                                className="flex-1 px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
+                              >
+                                <option value="">Variant...</option>
+                                {allocationVariantOptions(['Normal', 'Extended'], row.variant).map((v) => (
+                                  <option key={v} value={v}>{v}</option>
+                                ))}
+                              </select>
+                              <select
+                                value={row.color}
+                                onChange={(e) => setBaseAllocation(baseAllocation.map((r, i) => (i === idx ? { ...r, color: e.target.value, tintColor: e.target.value === 'Clear' ? r.tintColor : '' } : r)))}
+                                className="w-24 px-2 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
+                              >
+                                <option value="">Color...</option>
+                                <option value="Grey">Grey</option>
+                                <option value="Tan">Tan</option>
+                                <option value="Clear">Clear</option>
+                              </select>
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  step="0.1"
+                                  value={row.sharePct}
+                                  onChange={(e) => setBaseAllocation(baseAllocation.map((r, i) => (i === idx ? { ...r, sharePct: parseFloat(e.target.value) || 0 } : r)))}
+                                  className="w-20 px-2 py-2 text-sm text-right border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
+                                />
+                                <span className="text-xs text-slate-500">%</span>
+                              </div>
+                              <select
+                                value={row.tintColor}
+                                disabled={row.color !== 'Clear'}
+                                onChange={(e) => setBaseAllocation(baseAllocation.map((r, i) => (i === idx ? { ...r, tintColor: e.target.value } : r)))}
+                                className="w-28 px-2 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent disabled:bg-slate-100 disabled:text-slate-400"
+                              >
+                                <option value="">No tint</option>
+                                {allocationTintColorOptions(row.tintColor).map((c) => (
+                                  <option key={c} value={c}>
+                                    {c}
+                                  </option>
+                                ))}
+                              </select>
+                              <button
+                                type="button"
+                                onClick={() => setBaseAllocation(baseAllocation.filter((_, i) => i !== idx))}
+                                className="p-1 rounded text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => setBaseAllocation([...baseAllocation, { variant: 'Normal', color: '', sharePct: 0, tintColor: '' }])}
+                            className="flex items-center gap-1 px-2 py-1 text-xs text-gf-dark-green hover:bg-slate-50 rounded transition-colors"
+                          >
+                            <Plus size={12} />
+                            Add component
+                          </button>
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={resetAllocationToDefaults}
+                        className="px-2 py-1 text-xs border border-slate-300 rounded hover:bg-slate-50 text-slate-600 transition-colors"
+                      >
+                        Reset to defaults
+                      </button>
+                    </div>
+                  )}
+
+                  {allocationError && (
+                    <p className="text-xs text-red-600 mb-2">{allocationError}</p>
+                  )}
+
+                  {/* Resolved allocation (read-only) */}
+                  <div>
+                    <p className="text-xs font-semibold text-slate-700 uppercase tracking-wide mb-2">Resolved Materials</p>
+                    <table className="w-full text-sm">
+                      <tbody>
+                        {resolvedMaterials.coating.map((line) => (
+                          <tr key={line.key} className="border-b border-slate-100">
+                            <td className="py-1.5 text-slate-900">{line.label}</td>
+                            <td className="py-1.5 text-right text-slate-900 font-medium">{line.gallons.toFixed(2)} gal</td>
+                          </tr>
+                        ))}
+                        {resolvedMaterials.tint.map((line) => (
+                          <tr key={line.key} className="border-b border-slate-100">
+                            <td className="py-1.5 text-slate-900">{line.label}</td>
+                            <td className="py-1.5 text-right text-slate-900 font-medium">{line.oz.toFixed(1)} oz</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {resolvedMaterials.warnings.map((warning, idx) => (
+                      <p key={idx} className="text-xs text-amber-600 mt-1">{warning}</p>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           <h3 className="text-sm sm:text-base font-semibold text-slate-900 mt-4 mb-3 border-b border-slate-200 pb-1">Add-ons</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">

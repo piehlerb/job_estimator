@@ -3,12 +3,14 @@ import { X } from 'lucide-react';
 import { getDefaultCosts, getDefaultPricing } from '../lib/db';
 import { calculateJobOutputs } from '../lib/calculations';
 import { normalizeChipBlendName } from '../lib/syncHelpers';
+import { findCoatingSku } from '../lib/coatingSkus';
+import { resolveJobMaterials, ResolvedMaterials, ResolvedCoatingLine } from '../lib/materialAllocation';
 import {
   Job,
   Costs,
   Pricing,
-  BaseCoatInventory,
-  TopCoatInventory,
+  CoatingInventory,
+  CoatingPart,
   MiscInventory,
   ChipInventory,
   TintInventory,
@@ -18,8 +20,7 @@ interface JobSummaryModalProps {
   isOpen: boolean;
   onClose: () => void;
   jobs: Job[];
-  baseCoatInventory: BaseCoatInventory;
-  topCoatInventory: TopCoatInventory;
+  coatingInventory: CoatingInventory[];
   miscInventory: MiscInventory;
   chipInventory: ChipInventory[];
   tintInventory: TintInventory[];
@@ -30,18 +31,13 @@ interface JobSummaryModalProps {
 
 interface JobMaterialRow {
   job: Job;
-  baseA: number;
-  baseBGrey: number;
-  baseBTan: number;
-  baseBClear: number;
-  topA: number;
-  topB: number;
+  materials: ResolvedMaterials;
   chipBlend: string | null;
   chipLbs: number;
-  tintColor: string | null;
-  tintOz: number;
   moistureMitigationGallons: number;
 }
+
+const TOTALS_PART_ORDER: Record<CoatingPart, number> = { topA: 0, topB: 1, baseA: 2, baseB: 3 };
 
 function parseLocalDate(dateStr: string): Date {
   // Parse YYYY-MM-DD without UTC offset issues
@@ -86,8 +82,7 @@ export default function JobSummaryModal({
   isOpen,
   onClose,
   jobs,
-  baseCoatInventory,
-  topCoatInventory,
+  coatingInventory,
   miscInventory,
   chipInventory,
   tintInventory,
@@ -97,6 +92,10 @@ export default function JobSummaryModal({
 }: JobSummaryModalProps) {
   const [dayWindow, setDayWindow] = useState(30);
   const [ignoredJobIds, setIgnoredIds] = useState<Set<string>>(new Set());
+
+  // On-hand gallons for a coating SKU (legacy coordinates)
+  const coatingOnHand = (part: CoatingPart, variant?: string, color?: string) =>
+    findCoatingSku(coatingInventory, part, variant, color)?.gallons ?? 0;
 
   // Reset ignored state when modal opens
   useEffect(() => {
@@ -169,47 +168,54 @@ export default function JobSummaryModal({
         mergedPricing
       );
 
-      // Basecoat split by color
-      const bg = calc.baseGallons;
-      let baseA = 0, baseBGrey = 0, baseBTan = 0, baseBClear = 0;
-      if (job.baseColor === 'Grey') {
-        baseA = bg / 3;
-        baseBGrey = (bg * 2) / 3;
-      } else if (job.baseColor === 'Tan') {
-        baseA = bg / 3;
-        baseBTan = (bg * 2) / 3;
-      } else if (job.baseColor === 'Clear') {
-        baseA = bg / 3;
-        baseBClear = (bg * 2) / 3;
-      } else {
-        // No color set — Base A only (consistent with Inventory.tsx commitment logic)
-        baseA = bg / 3;
-      }
-
-      const topA = calc.topGallons * 0.5;
-      const topB = calc.topGallons * 0.5;
+      // Coating + tint split via the shared allocation resolver
+      const materials = resolveJobMaterials({
+        baseGallons: calc.baseGallons,
+        topGallons: calc.topGallons,
+        baseColor: job.baseColor,
+        tintColor: job.tintColor,
+        includeBasecoatTint: job.includeBasecoatTint,
+        includeTopcoatTint: job.includeTopcoatTint,
+        override: job.materialAllocation,
+      });
 
       const chipBlend = job.chipBlend ? normalizeChipBlendName(job.chipBlend) : null;
       const chipLbs = calc.chipNeeded * 40;
-
-      const hasTint = job.includeBasecoatTint || job.includeTopcoatTint;
-      const tintColor = hasTint && job.tintColor ? job.tintColor : null;
-      const tintOz = calc.tintNeeded;
       const moistureMitigationGallons = calc.moistureMitigationGallons;
 
-      return { job, baseA, baseBGrey, baseBTan, baseBClear, topA, topB, chipBlend, chipLbs, tintColor, tintOz, moistureMitigationGallons };
+      return { job, materials, chipBlend, chipLbs, moistureMitigationGallons };
     });
   }, [filteredJobs, currentCosts, currentPricing]);
 
   // Aggregate totals for non-ignored jobs
   const totals = useMemo(() => {
     const activeRows = jobMaterials.filter((r) => !ignoredJobIds.has(r.job.id));
-    const baseA = activeRows.reduce((s, r) => s + r.baseA, 0);
-    const baseBGrey = activeRows.reduce((s, r) => s + r.baseBGrey, 0);
-    const baseBTan = activeRows.reduce((s, r) => s + r.baseBTan, 0);
-    const baseBClear = activeRows.reduce((s, r) => s + r.baseBClear, 0);
-    const topA = activeRows.reduce((s, r) => s + r.topA, 0);
-    const topB = activeRows.reduce((s, r) => s + r.topB, 0);
+
+    // Aggregate resolved coating lines across active jobs, keyed by SKU key
+    const coatingByKey = new Map<string, { key: string; part: CoatingPart; variant?: string; color?: string; label: string; gallons: number }>();
+    for (const r of activeRows) {
+      for (const line of r.materials.coating) {
+        const existing = coatingByKey.get(line.key);
+        if (existing) {
+          existing.gallons += line.gallons;
+        } else {
+          coatingByKey.set(line.key, {
+            key: line.key,
+            part: line.part,
+            variant: line.variant,
+            color: line.color,
+            label: line.label,
+            gallons: line.gallons,
+          });
+        }
+      }
+    }
+    const coatingTotals = [...coatingByKey.values()].sort((a, b) => {
+      const partDiff = TOTALS_PART_ORDER[a.part] - TOTALS_PART_ORDER[b.part];
+      if (partDiff !== 0) return partDiff;
+      return a.label.localeCompare(b.label);
+    });
+
     const moistureMitigation = activeRows.reduce((s, r) => s + r.moistureMitigationGallons, 0);
 
     // Sequential chip reclaim simulation: reclaim from Job N feeds into Job N+1
@@ -238,10 +244,11 @@ export default function JobSummaryModal({
       chipByBlend[blend] = requiredFromInventory;
     }
 
+    // Aggregate resolved tint lines by color
     const tintByColor: Record<string, number> = {};
     for (const r of activeRows) {
-      if (r.tintColor && r.tintOz > 0) {
-        tintByColor[r.tintColor] = (tintByColor[r.tintColor] || 0) + r.tintOz;
+      for (const line of r.materials.tint) {
+        tintByColor[line.color] = (tintByColor[line.color] || 0) + line.oz;
       }
     }
 
@@ -261,7 +268,7 @@ export default function JobSummaryModal({
     ]);
     const allTintColors = [...allTintColorsSet].sort();
 
-    return { baseA, baseBGrey, baseBTan, baseBClear, topA, topB, moistureMitigation, chipByBlend, tintByColor, allChipBlends, allTintColors, reclaimRate };
+    return { coatingTotals, moistureMitigation, chipByBlend, tintByColor, allChipBlends, allTintColors, reclaimRate };
   }, [jobMaterials, ignoredJobIds, chipInventory, tintInventory, currentPricing]);
 
   const toggleIgnored = (jobId: string) => {
@@ -351,6 +358,20 @@ export default function JobSummaryModal({
                 ) : (
                   jobMaterials.map((row) => {
                     const ignored = ignoredJobIds.has(row.job.id);
+                    const baseAGallons = row.materials.coating
+                      .filter((l) => l.part === 'baseA')
+                      .reduce((s, l) => s + l.gallons, 0);
+                    const baseBLines = row.materials.coating.filter((l) => l.part === 'baseB');
+                    const topALines = row.materials.coating.filter((l) => l.part === 'topA');
+                    const topBLines = row.materials.coating.filter((l) => l.part === 'topB');
+                    // Terse when all defaults (single Original line); spell out flavors otherwise
+                    const formatTopCell = (lines: ResolvedCoatingLine[]) => {
+                      if (lines.length === 0) return '0.00';
+                      if (lines.length === 1 && lines[0].variant === 'Original') return lines[0].gallons.toFixed(2);
+                      return lines.map((l) => `${l.variant} ${l.gallons.toFixed(2)}`).join(' / ');
+                    };
+                    const formatBaseBLine = (l: ResolvedCoatingLine) =>
+                      `${l.variant && l.variant !== 'Normal' ? `${l.variant} ` : ''}${l.color} ${l.gallons.toFixed(2)}`;
                     return (
                       <tr
                         key={row.job.id}
@@ -382,15 +403,21 @@ export default function JobSummaryModal({
                         <td className="py-3 px-3">
                           <span className={statusBadgeClass(row.job.status)}>{row.job.status}</span>
                         </td>
-                        <td className="py-3 px-3 text-right tabular-nums">{row.baseA.toFixed(2)}</td>
+                        <td className="py-3 px-3 text-right tabular-nums">{baseAGallons.toFixed(2)}</td>
                         <td className="py-3 px-3 text-slate-600 whitespace-nowrap">
-                          {row.baseBGrey > 0 && <span>Grey {row.baseBGrey.toFixed(2)}</span>}
-                          {row.baseBTan > 0 && <span>Tan {row.baseBTan.toFixed(2)}</span>}
-                          {row.baseBClear > 0 && <span>Clear {row.baseBClear.toFixed(2)}</span>}
-                          {!row.baseBGrey && !row.baseBTan && !row.baseBClear && <span className="text-slate-400">–</span>}
+                          {baseBLines.length > 0 ? (
+                            <span>{baseBLines.map(formatBaseBLine).join(', ')}</span>
+                          ) : (
+                            <span className="text-slate-400">–</span>
+                          )}
+                          {row.materials.warnings.length > 0 && (
+                            <div className="text-xs text-amber-600" title={row.materials.warnings.join(' ')}>
+                              {row.materials.warnings.join(' ')}
+                            </div>
+                          )}
                         </td>
-                        <td className="py-3 px-3 text-right tabular-nums">{row.topA.toFixed(2)}</td>
-                        <td className="py-3 px-3 text-right tabular-nums">{row.topB.toFixed(2)}</td>
+                        <td className="py-3 px-3 text-right tabular-nums whitespace-nowrap">{formatTopCell(topALines)}</td>
+                        <td className="py-3 px-3 text-right tabular-nums whitespace-nowrap">{formatTopCell(topBLines)}</td>
                         <td className="py-3 px-3 text-right tabular-nums">
                           {row.moistureMitigationGallons > 0 ? row.moistureMitigationGallons.toFixed(2) : <span className="text-slate-400">-</span>}
                         </td>
@@ -404,10 +431,15 @@ export default function JobSummaryModal({
                           )}
                         </td>
                         <td className="py-3 px-3 text-slate-600 whitespace-nowrap">
-                          {row.tintColor && row.tintOz > 0
-                            ? <span>{row.tintColor} <span className="tabular-nums">{row.tintOz.toFixed(1)} oz</span></span>
-                            : <span className="text-slate-400">–</span>
-                          }
+                          {row.materials.tint.length > 0 ? (
+                            row.materials.tint.map((line) => (
+                              <div key={line.key}>
+                                {line.color} <span className="tabular-nums">{line.oz.toFixed(1)} oz</span>
+                              </div>
+                            ))
+                          ) : (
+                            <span className="text-slate-400">–</span>
+                          )}
                         </td>
                       </tr>
                     );
@@ -444,15 +476,18 @@ export default function JobSummaryModal({
                 </tr>
               </thead>
               <tbody>
-                {/* Basecoat */}
-                {totals.baseA > 0 && <MaterialRow label="Base A" unit="gal" required={totals.baseA} onHand={baseCoatInventory.baseA} />}
-                {totals.baseBGrey > 0 && <MaterialRow label="Base B Grey" unit="gal" required={totals.baseBGrey} onHand={baseCoatInventory.baseBGrey} />}
-                {totals.baseBTan > 0 && <MaterialRow label="Base B Tan" unit="gal" required={totals.baseBTan} onHand={baseCoatInventory.baseBTan} />}
-                {totals.baseBClear > 0 && <MaterialRow label="Base B Clear" unit="gal" required={totals.baseBClear} onHand={baseCoatInventory.baseBClear} />}
-
-                {/* Topcoat */}
-                {totals.topA > 0 && <MaterialRow label="Top A" unit="gal" required={totals.topA} onHand={topCoatInventory.topA} />}
-                {totals.topB > 0 && <MaterialRow label="Top B" unit="gal" required={totals.topB} onHand={topCoatInventory.topB} />}
+                {/* Coating (topcoat + basecoat), one row per resolved SKU */}
+                {totals.coatingTotals.map((line) =>
+                  line.gallons > 0 ? (
+                    <MaterialRow
+                      key={line.key}
+                      label={line.label}
+                      unit="gal"
+                      required={line.gallons}
+                      onHand={coatingOnHand(line.part, line.variant, line.color)}
+                    />
+                  ) : null
+                )}
 
                 {/* Misc */}
                 {totals.moistureMitigation > 0 && (
