@@ -41,12 +41,17 @@ interface EmployeeHoursRow {
 const ALL_STATUSES: JobStatus[] = ['Pending', 'Verbal', 'Won', 'Lost'];
 type DateRangePreset = 'all' | '30d' | '90d' | 'ytd' | 'custom';
 type DateFieldMode = 'install' | 'created';
-type ReportView = 'tags' | 'monthly-won' | 'employee-hours';
+type ReportView = 'tags' | 'monthly-won' | 'employee-hours' | 'expenses';
 
 function getDefaultEmpStart() {
   const d = new Date();
   d.setDate(d.getDate() - 13);
   return d.toISOString().slice(0, 10);
+}
+
+function getDefaultExpStart() {
+  const d = new Date();
+  return `${d.getFullYear()}-01-01`;
 }
 
 interface ReportingProps {
@@ -76,6 +81,10 @@ export default function Reporting({ onEditJob }: ReportingProps) {
   // Employee hours date range
   const [empStartDate, setEmpStartDate] = useState(getDefaultEmpStart);
   const [empEndDate, setEmpEndDate] = useState(() => new Date().toISOString().slice(0, 10));
+
+  // Expenses report date range (defaults to year-to-date)
+  const [expStartDate, setExpStartDate] = useState(getDefaultExpStart);
+  const [expEndDate, setExpEndDate] = useState(() => new Date().toISOString().slice(0, 10));
 
   useEffect(() => {
     loadData();
@@ -403,6 +412,78 @@ export default function Reporting({ onEditJob }: ReportingProps) {
     uniqueJobs: new Set(employeeHoursData.map((r) => r.laborerId)).size,
   }), [employeeHoursData]);
 
+  // ==================== EXPENSES ====================
+
+  const expensesData = useMemo(() => {
+    const start = expStartDate ? new Date(`${expStartDate}T00:00:00`) : null;
+    const end = expEndDate ? new Date(`${expEndDate}T23:59:59`) : null;
+
+    const categories: { label: string; field: keyof ActualCosts }[] = [
+      { label: 'Chip', field: 'actualChipCost' },
+      { label: 'Base Coat', field: 'actualBaseCost' },
+      { label: 'Top Coat', field: 'actualTopCost' },
+      { label: 'Cyclo 1', field: 'actualCyclo1Cost' },
+      { label: 'Tint', field: 'actualTintCost' },
+      { label: 'Crack Repair', field: 'actualCrackRepairCost' },
+      { label: 'Moisture Mitigation', field: 'actualMoistureMitigationCost' },
+      { label: 'Gas – Generator', field: 'actualGasGeneratorCost' },
+      { label: 'Gas – Heater', field: 'actualGasHeaterCost' },
+      { label: 'Gas – Travel', field: 'actualGasTravelCost' },
+      { label: 'Labor', field: 'actualLaborCost' },
+      { label: 'Consumables', field: 'actualConsumablesCost' },
+      { label: 'Royalty', field: 'actualRoyaltyCost' },
+      { label: 'Adjustments', field: 'actualExpenseAdjustment' },
+    ];
+
+    const totals = new Map<string, number>(categories.map((c) => [c.field, 0]));
+    let jobCount = 0;
+
+    jobsWithCalc.forEach(({ job, mergedCosts, mergedPricing, mergedLaborers }) => {
+      if (job.status !== 'Won' || !job.installDate) return;
+      const d = new Date(`${job.installDate}T00:00:00`);
+      if (start && d < start) return;
+      if (end && d > end) return;
+      if (!job.actualInstallSchedule || job.actualInstallSchedule.length === 0) return;
+
+      const actuals = calculateActualCosts(
+        {
+          actualSchedule: job.actualInstallSchedule,
+          actualBaseCoatGallons: job.actualBaseCoatGallons || 0,
+          actualTopCoatGallons: job.actualTopCoatGallons || 0,
+          actualCyclo1Gallons: job.actualCyclo1Gallons || 0,
+          actualTintOz: job.actualTintOz || 0,
+          actualChipBoxes: job.actualChipBoxes || 0,
+          actualCrackRepairOz: job.actualCrackRepairOz || 0,
+          actualMoistureMitigationGallons: job.actualMoistureMitigationGallons || 0,
+          chipBoxCost: job.systemSnapshot?.boxCost ?? 0,
+          totalPrice: job.totalPrice,
+          installDays: job.installDays,
+          installDate: job.installDate,
+          travelDistance: job.travelDistance,
+          disableGasHeater: job.disableGasHeater,
+          actualExpenseAdjustment: job.actualExpenseAdjustment,
+        },
+        mergedCosts,
+        mergedPricing,
+        mergedLaborers
+      );
+
+      jobCount += 1;
+      categories.forEach(({ field }) => {
+        totals.set(field, (totals.get(field) ?? 0) + actuals[field]);
+      });
+    });
+
+    const rows = categories.map(({ label, field }) => ({
+      label,
+      field,
+      total: totals.get(field) ?? 0,
+    }));
+    const grandTotal = rows.reduce((s, r) => s + r.total, 0);
+
+    return { rows, grandTotal, jobCount };
+  }, [jobsWithCalc, expStartDate, expEndDate]);
+
   // ==================== HANDLERS ====================
 
   const handleStatusToggle = (status: JobStatus) => {
@@ -462,6 +543,7 @@ export default function Reporting({ onEditJob }: ReportingProps) {
           { id: 'tags', label: 'Tag Report' },
           { id: 'monthly-won', label: 'Monthly Won Jobs' },
           { id: 'employee-hours', label: 'Employee Hours' },
+          { id: 'expenses', label: 'Expenses' },
         ] as { id: ReportView; label: string }[]).map(({ id, label }) => (
           <button
             key={id}
@@ -900,6 +982,105 @@ export default function Reporting({ onEditJob }: ReportingProps) {
                           </td>
                           <td className="px-4 py-3 text-sm font-semibold text-right text-slate-900">{empTotals.totalHours.toFixed(1)}</td>
                           <td className="px-4 py-3" />
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* ===== EXPENSES ===== */}
+          {activeView === 'expenses' && (
+            <>
+              <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-3 sm:p-4 mb-4 sm:mb-6">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                  <label className="text-xs sm:text-sm text-slate-600 font-medium whitespace-nowrap">Install Date Range:</label>
+                  <input
+                    type="date"
+                    value={expStartDate}
+                    onChange={(e) => setExpStartDate(e.target.value)}
+                    className="px-2 sm:px-3 py-1.5 sm:py-2 border border-slate-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-gf-lime"
+                  />
+                  <span className="text-slate-400 text-sm">to</span>
+                  <input
+                    type="date"
+                    value={expEndDate}
+                    onChange={(e) => setExpEndDate(e.target.value)}
+                    className="px-2 sm:px-3 py-1.5 sm:py-2 border border-slate-300 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-gf-lime"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setExpStartDate(getDefaultExpStart());
+                      setExpEndDate(new Date().toISOString().slice(0, 10));
+                    }}
+                    className="px-3 py-1.5 text-xs font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-lg transition-colors"
+                  >
+                    Year to Date
+                  </button>
+                </div>
+                <p className="text-xs text-slate-400 mt-2">Shows actual expenses from won jobs with actuals recorded and an install date in this range.</p>
+              </div>
+
+              {/* Summary */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-4 sm:mb-6">
+                <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-3 sm:p-4">
+                  <p className="text-xs text-slate-500">Jobs with Actuals</p>
+                  <p className="text-xl sm:text-2xl font-bold text-slate-900">{expensesData.jobCount}</p>
+                </div>
+                <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-3 sm:p-4">
+                  <p className="text-xs text-slate-500">Total Expenses</p>
+                  <p className="text-xl sm:text-2xl font-bold text-slate-900">{formatCurrency(expensesData.grandTotal)}</p>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+                <div className="p-3 sm:p-4 border-b border-slate-200">
+                  <h3 className="text-base font-semibold text-slate-900">Expenses by Category</h3>
+                </div>
+                {expensesData.jobCount === 0 ? (
+                  <div className="p-6 sm:p-8 text-center text-slate-600 text-sm">
+                    No Won jobs with actuals in this date range.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200">
+                          <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700">Category</th>
+                          <th className="px-4 py-3 text-right text-sm font-semibold text-slate-700">Total</th>
+                          <th className="px-4 py-3 text-right text-sm font-semibold text-slate-700">% of Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {expensesData.rows.map((row) => {
+                          const isZero = row.total === 0;
+                          const pct = expensesData.grandTotal !== 0 ? (row.total / expensesData.grandTotal) * 100 : 0;
+                          return (
+                            <tr key={row.field} className="border-b border-slate-200 hover:bg-slate-50">
+                              <td className={`px-4 py-3 text-sm font-medium ${isZero ? 'text-slate-400' : 'text-slate-900'}`}>{row.label}</td>
+                              {isZero ? (
+                                <>
+                                  <td className="px-4 py-3 text-sm text-right text-slate-300">—</td>
+                                  <td className="px-4 py-3 text-sm text-right text-slate-300">—</td>
+                                </>
+                              ) : (
+                                <>
+                                  <td className={`px-4 py-3 text-sm text-right ${row.total < 0 ? 'text-red-600' : 'text-slate-700'}`}>{formatCurrency(row.total)}</td>
+                                  <td className="px-4 py-3 text-sm text-right text-slate-600">{pct.toFixed(1)}%</td>
+                                </>
+                              )}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-slate-50 border-t-2 border-slate-300 font-semibold">
+                          <td className="px-4 py-3 text-sm font-semibold text-slate-700">Total</td>
+                          <td className="px-4 py-3 text-sm font-semibold text-right text-slate-900">{formatCurrency(expensesData.grandTotal)}</td>
+                          <td className="px-4 py-3 text-sm font-semibold text-right text-slate-700">100.0%</td>
                         </tr>
                       </tfoot>
                     </table>
