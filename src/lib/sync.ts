@@ -12,6 +12,10 @@ import {
   getSupabaseTableName,
   getIndexedDBStoreName,
   batchArray,
+  isSingletonStore,
+  isSingletonTable,
+  getSingletonRemoteId,
+  SINGLETON_LOCAL_ID,
 } from './syncHelpers';
 import type { SyncResult } from '../types';
 import {
@@ -113,7 +117,13 @@ async function storeRemoteRecords(
   const storeName = getIndexedDBStoreName(tableName);
   const recordsToStore = data.map((record: any) => {
     const { user_id, synced_at, ...rest } = record;
-    return objectToCamelCase(rest);
+    const converted = objectToCamelCase(rest);
+    // Singleton records carry a tenant-scoped remote id; locally they
+    // always live under the fixed 'current' key
+    if (isSingletonTable(tableName)) {
+      converted.id = SINGLETON_LOCAL_ID;
+    }
+    return converted;
   });
 
   for (const record of recordsToStore) {
@@ -322,6 +332,11 @@ export async function pushToSupabase(): Promise<{
           const { chip_size, ...cleanRecord } = converted;
           return {
             ...cleanRecord,
+            // Singleton records use a tenant-scoped remote id so different
+            // users/orgs don't collide on the shared primary key
+            ...(isSingletonStore(storeName)
+              ? { id: getSingletonRemoteId(user.id, _currentOrgId) }
+              : {}),
             user_id: user.id,
             org_id: _currentOrgId,
             synced_at: new Date().toISOString(),
@@ -447,6 +462,11 @@ export async function pushAllToSupabase(options?: { bumpTimestamps?: boolean }):
           const { chip_size, ...cleanRecord } = converted;
           return {
             ...cleanRecord,
+            // Singleton records use a tenant-scoped remote id so different
+            // users/orgs don't collide on the shared primary key
+            ...(isSingletonStore(store)
+              ? { id: getSingletonRemoteId(user.id, _currentOrgId) }
+              : {}),
             user_id: user.id,
             org_id: _currentOrgId,
             // Optionally bump updated_at so other devices' lastSync filters pick up these records
