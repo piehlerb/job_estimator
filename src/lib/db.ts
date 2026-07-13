@@ -572,7 +572,13 @@ export async function saveCosts(costs: Costs): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const transaction = db.transaction(['costs'], 'readwrite');
     const store = transaction.objectStore('costs');
-    const request = store.put({ ...costs, id: 'current' });
+    const request = store.put({
+      ...costs,
+      id: 'current',
+      // Records without a fresh updatedAt lose every last-write-wins
+      // comparison during sync, so default it if the caller omitted it
+      updatedAt: costs.updatedAt || new Date().toISOString(),
+    });
 
     request.onerror = () => reject(request.error);
     request.onsuccess = () => resolve();

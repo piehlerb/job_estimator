@@ -84,6 +84,45 @@ export function resolveConflict<T extends { updatedAt: string }>(
 }
 
 /**
+ * Singleton stores keep exactly one local record with id 'current'.
+ * Remotely that id is scoped per tenant ('current:<orgId or userId>') so
+ * different users/orgs never collide on the shared primary key — the
+ * tables enforce this with a CHECK (id <> 'current') constraint.
+ */
+export const SINGLETON_LOCAL_ID = 'current';
+
+const SINGLETON_STORES = new Set([
+  'costs',
+  'pricing',
+  'topCoatInventory',
+  'baseCoatInventory',
+  'miscInventory',
+]);
+
+const SINGLETON_TABLES = new Set([
+  'costs',
+  'pricing',
+  'topcoat_inventory',
+  'basecoat_inventory',
+  'misc_inventory',
+]);
+
+export function isSingletonStore(storeName: string): boolean {
+  return SINGLETON_STORES.has(storeName);
+}
+
+export function isSingletonTable(tableName: string): boolean {
+  return SINGLETON_TABLES.has(tableName);
+}
+
+export function getSingletonRemoteId(
+  userId: string,
+  orgId: string | null
+): string {
+  return `${SINGLETON_LOCAL_ID}:${orgId || userId}`;
+}
+
+/**
  * Get table name mapping (IndexedDB store name -> Supabase table name)
  */
 export function getSupabaseTableName(storeName: string): string {
