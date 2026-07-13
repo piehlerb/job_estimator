@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#1e293b" />
+    <meta name="description" content="GFS job estimation app with offline support" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Archivo:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="manifest" href="./manifest.json" />
+    <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png" />
+    <title>GFS</title>
+    <script type="module" crossorigin src="/job_estimator/assets/main-DL2st5MK.js"></script>
+    <link rel="stylesheet" crossorigin href="/job_estimator/assets/main-D0IvuB9p.css">
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker.register("./sw.js", { scope: "./" }).catch((err) => {
+            console.log("Service Worker registration failed:", err);
+          });
+        });
+      }
+    </script>
+  </body>
+</html>
