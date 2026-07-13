@@ -48,6 +48,7 @@ import {
   getSyncQueue,
   clearSyncQueue,
   hasPendingChanges as checkPendingChanges,
+  type PendingChange,
 } from './syncQueue';
 
 // Sync state stored in IndexedDB
@@ -245,13 +246,14 @@ export async function pushToSupabase(): Promise<{
 
     console.log(`[Sync] Pushing ${pendingChanges.length} pending change(s)`);
 
-    // Group changes by store
-    const changesByStore = new Map<string, Set<string>>();
+    // Group changes by store, keeping the original queue entries (with
+    // their timestamps) so clearing won't drop edits re-queued mid-push
+    const changesByStore = new Map<string, Map<string, PendingChange>>();
     for (const change of pendingChanges) {
       if (!changesByStore.has(change.storeName)) {
-        changesByStore.set(change.storeName, new Set());
+        changesByStore.set(change.storeName, new Map());
       }
-      changesByStore.get(change.storeName)!.add(change.recordId);
+      changesByStore.get(change.storeName)!.set(change.recordId, change);
     }
 
     // Define getters for each store
@@ -281,11 +283,12 @@ export async function pushToSupabase(): Promise<{
     };
 
     // Track which changes were successfully pushed so we can clear them
-    // even if other stores fail
-    const successfulChanges: Array<{ storeName: string; recordId: string }> = [];
+    // even if other stores fail. We keep the original queue entries (with
+    // their timestamps) so clearing won't drop edits re-queued mid-push.
+    const successfulChanges: PendingChange[] = [];
 
     // Process each store with pending changes
-    for (const [storeName, recordIds] of changesByStore.entries()) {
+    for (const [storeName, storeChanges] of changesByStore.entries()) {
       try {
         const getter = storeGetters[storeName];
         if (!getter) {
@@ -297,15 +300,13 @@ export async function pushToSupabase(): Promise<{
         // the entire local store. Other stores are small enough to keep the
         // existing broad getter pattern.
         const changedRecords = storeName === 'jobs'
-          ? await getJobsByIds(Array.from(recordIds))
-          : (await getter()).filter((record: any) => recordIds.has(record.id));
+          ? await getJobsByIds(Array.from(storeChanges.keys()))
+          : (await getter()).filter((record: any) => storeChanges.has(record.id));
 
         if (changedRecords.length === 0) {
           console.log(`[Sync] No changed records found for ${storeName}`);
           // Record not found locally — clear from queue to prevent infinite retry
-          for (const recordId of recordIds) {
-            successfulChanges.push({ storeName, recordId });
-          }
+          successfulChanges.push(...storeChanges.values());
           continue;
         }
 
@@ -358,24 +359,18 @@ export async function pushToSupabase(): Promise<{
 
         // Track successfully pushed records for queue clearing
         if (!storeHadError) {
-          for (const recordId of recordIds) {
-            successfulChanges.push({ storeName, recordId });
-          }
+          successfulChanges.push(...storeChanges.values());
         }
       } catch (error: any) {
         errors.push(`${storeName}: ${error.message}`);
       }
     }
 
-    // Clear successfully pushed changes from the queue, even if some stores failed
+    // Clear successfully pushed changes from the queue, even if some stores
+    // failed. Entries re-queued during the push keep their newer timestamp
+    // and therefore survive the clear.
     if (successfulChanges.length > 0) {
-      const changesToClear = successfulChanges.map(c => ({
-        storeName: c.storeName,
-        recordId: c.recordId,
-        operation: 'update' as const,
-        timestamp: '',
-      }));
-      await clearSyncQueue(changesToClear);
+      await clearSyncQueue(successfulChanges);
       console.log(`[Sync] Cleared ${successfulChanges.length} successfully pushed change(s) from queue`);
     }
 
@@ -545,13 +540,17 @@ export async function pullFromSupabase(): Promise<{
           // Incremental pulls always fetch every updated record, including old
           // jobs. First/full job pulls cache only the active and recent working
           // set; older inactive jobs are loaded explicitly when needed.
+          // Filter on synced_at (server arrival time, stamped by the
+          // sync_lww_guard trigger) rather than updated_at (edit time):
+          // a record edited offline and pushed late still has a fresh
+          // synced_at, so other devices don't skip it.
           if (lastSync) {
-            query = query.gt('updated_at', lastSync);
+            query = query.gt('synced_at', lastSync);
           } else if (tableName === 'jobs') {
             query = query.or(buildJobWorkingSetOrFilter(getJobWorkingSetCutoff()));
           }
 
-          return query.order('updated_at', { ascending: true }).order('id', { ascending: true });
+          return query.order('synced_at', { ascending: true }).order('id', { ascending: true });
         });
 
         if (error) {

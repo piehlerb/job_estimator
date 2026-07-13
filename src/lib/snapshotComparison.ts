@@ -27,6 +27,8 @@ const COST_FIELDS: Array<keyof Costs> = [
   'tintCostPerQuart',
   'antiSlipCostPerGal',
   'abrasionResistanceCostPerGal',
+  'moistureMitigationCostPerGal',
+  'moistureMitigationSpreadRate',
 ];
 
 const FIELD_LABELS: Record<string, string> = {
@@ -47,6 +49,8 @@ const FIELD_LABELS: Record<string, string> = {
   tintCostPerQuart: 'Tint Cost/Quart',
   antiSlipCostPerGal: 'Anti-Slip Cost/Gal',
   abrasionResistanceCostPerGal: 'Abrasion Resistance Cost/Gal',
+  moistureMitigationCostPerGal: 'Moisture Mitigation Cost/Gal',
+  moistureMitigationSpreadRate: 'Moisture Mitigation Spread Rate',
 };
 
 export function getFieldLabel(field: string): string {
@@ -79,8 +83,10 @@ export function compareSnapshots(
     COST_FIELDS.forEach((field) => {
       const oldValue = snapshotCosts[field] as number;
       const newValue = currentCosts[field] as number;
-      // Only compare if both values exist and are numbers
-      // Skip comparison if either is undefined (new field added later)
+      // Only compare if both values exist and are numbers. Snapshots missing
+      // an optional field (e.g. moisture mitigation on older jobs) are
+      // skipped: the form falls back to current costs for those fields, and
+      // the full field set is snapshotted on the job's next save.
       if (typeof oldValue === 'number' && typeof newValue === 'number' && oldValue !== newValue) {
         costChanges.push({ field, oldValue, newValue });
       }

@@ -3,7 +3,7 @@
  * Batches and tracks pending changes for efficient synchronization
  */
 
-interface PendingChange {
+export interface PendingChange {
   storeName: string;
   recordId: string;
   operation: 'create' | 'update' | 'delete';
@@ -75,11 +75,24 @@ export async function addToSyncQueue(
           (change) => change.storeName === storeName && change.recordId === recordId
         );
 
+        // Timestamp must be strictly newer than any entry it replaces —
+        // clearSyncQueue uses timestamp equality to tell a pushed entry
+        // apart from one re-queued while that push was in flight
+        let timestamp = new Date().toISOString();
+        if (
+          existingIndex >= 0 &&
+          state.pendingChanges[existingIndex].timestamp >= timestamp
+        ) {
+          timestamp = new Date(
+            new Date(state.pendingChanges[existingIndex].timestamp).getTime() + 1
+          ).toISOString();
+        }
+
         const newChange: PendingChange = {
           storeName,
           recordId,
           operation,
-          timestamp: new Date().toISOString(),
+          timestamp,
         };
 
         if (existingIndex >= 0) {
@@ -125,13 +138,16 @@ export async function clearSyncQueue(processedChanges?: PendingChange[]): Promis
         }
 
         if (processedChanges) {
-          // Remove only the processed changes
+          // Remove only the processed changes. Timestamps must match: if a
+          // record was re-queued while the push was in flight (its timestamp
+          // changed), the newer edit must stay queued for the next push.
           state.pendingChanges = state.pendingChanges.filter(
             (change) =>
               !processedChanges.some(
                 (processed) =>
                   processed.storeName === change.storeName &&
-                  processed.recordId === change.recordId
+                  processed.recordId === change.recordId &&
+                  processed.timestamp === change.timestamp
               )
           );
         } else {

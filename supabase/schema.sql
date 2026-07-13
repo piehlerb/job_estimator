@@ -250,6 +250,7 @@ CREATE INDEX IF NOT EXISTS idx_jobs_tags_gin ON jobs USING GIN (tags);
 -- =====================================================
 
 -- Function to automatically update updated_at timestamp
+-- (used only by NON-synced tables; synced tables use sync_lww_guard below)
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -258,40 +259,67 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Apply updated_at trigger to all relevant tables
-CREATE TRIGGER update_systems_updated_at BEFORE UPDATE ON systems
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+-- Last-write-wins guard + arrival stamp for synced tables
+-- (see migration_fix_updated_at_lww.sql):
+--   * preserves a client-supplied updated_at (the edit time)
+--   * skips UPDATEs carrying an OLDER updated_at than the existing row
+--   * stamps synced_at = NOW() (server arrival time) on every accepted
+--     write; incremental pulls filter on synced_at
+CREATE OR REPLACE FUNCTION sync_lww_guard()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.updated_at IS NULL THEN
+    NEW.updated_at = NOW();
+  ELSIF TG_OP = 'UPDATE' AND OLD.updated_at IS NOT NULL
+        AND NEW.updated_at < OLD.updated_at THEN
+    -- Stale sync push: keep the newer existing row
+    RETURN NULL;
+  END IF;
+  NEW.synced_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 
-CREATE TRIGGER update_pricing_variables_updated_at BEFORE UPDATE ON pricing_variables
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+-- Apply the LWW guard to all synced tables
+CREATE TRIGGER sync_lww_guard_systems BEFORE INSERT OR UPDATE ON systems
+  FOR EACH ROW EXECUTE FUNCTION sync_lww_guard();
 
-CREATE TRIGGER update_costs_updated_at BEFORE UPDATE ON costs
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER sync_lww_guard_pricing_variables BEFORE INSERT OR UPDATE ON pricing_variables
+  FOR EACH ROW EXECUTE FUNCTION sync_lww_guard();
 
-CREATE TRIGGER update_laborers_updated_at BEFORE UPDATE ON laborers
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER sync_lww_guard_costs BEFORE INSERT OR UPDATE ON costs
+  FOR EACH ROW EXECUTE FUNCTION sync_lww_guard();
 
-CREATE TRIGGER update_chip_blends_updated_at BEFORE UPDATE ON chip_blends
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER sync_lww_guard_laborers BEFORE INSERT OR UPDATE ON laborers
+  FOR EACH ROW EXECUTE FUNCTION sync_lww_guard();
 
-CREATE TRIGGER update_base_coat_colors_updated_at BEFORE UPDATE ON base_coat_colors
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER sync_lww_guard_chip_blends BEFORE INSERT OR UPDATE ON chip_blends
+  FOR EACH ROW EXECUTE FUNCTION sync_lww_guard();
 
-CREATE TRIGGER update_jobs_updated_at BEFORE UPDATE ON jobs
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER sync_lww_guard_base_coat_colors BEFORE INSERT OR UPDATE ON base_coat_colors
+  FOR EACH ROW EXECUTE FUNCTION sync_lww_guard();
 
-CREATE TRIGGER update_chip_inventory_updated_at BEFORE UPDATE ON chip_inventory
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER sync_lww_guard_jobs BEFORE INSERT OR UPDATE ON jobs
+  FOR EACH ROW EXECUTE FUNCTION sync_lww_guard();
 
-CREATE TRIGGER update_topcoat_inventory_updated_at BEFORE UPDATE ON topcoat_inventory
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER sync_lww_guard_chip_inventory BEFORE INSERT OR UPDATE ON chip_inventory
+  FOR EACH ROW EXECUTE FUNCTION sync_lww_guard();
 
-CREATE TRIGGER update_basecoat_inventory_updated_at BEFORE UPDATE ON basecoat_inventory
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER sync_lww_guard_topcoat_inventory BEFORE INSERT OR UPDATE ON topcoat_inventory
+  FOR EACH ROW EXECUTE FUNCTION sync_lww_guard();
 
-CREATE TRIGGER update_misc_inventory_updated_at BEFORE UPDATE ON misc_inventory
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER sync_lww_guard_basecoat_inventory BEFORE INSERT OR UPDATE ON basecoat_inventory
+  FOR EACH ROW EXECUTE FUNCTION sync_lww_guard();
 
+CREATE TRIGGER sync_lww_guard_misc_inventory BEFORE INSERT OR UPDATE ON misc_inventory
+  FOR EACH ROW EXECUTE FUNCTION sync_lww_guard();
+
+-- Newer synced tables created by later migrations (pricing, customers,
+-- leads, lead_appointments, products, tint_inventory, coating_inventory,
+-- shopping_items, comm_templates, referral_services, referral_associates)
+-- get the same sync_lww_guard trigger via migration_fix_updated_at_lww.sql.
+
+-- user_preferences is not part of client sync; keep plain updated_at bump
 CREATE TRIGGER update_user_preferences_updated_at BEFORE UPDATE ON user_preferences
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
