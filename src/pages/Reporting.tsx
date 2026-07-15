@@ -46,6 +46,7 @@ interface LeadMonthRow {
   open: number;
   won: number;
   spend: number | null; // null = no spend entered for this month
+  bySource: Record<string, number>; // lead counts per source for this month
 }
 
 interface LeadSourceRow {
@@ -562,6 +563,13 @@ export default function Reporting({ onEditJob }: ReportingProps) {
       : leads.filter((lead) => selectedSources.includes(leadSourceName(lead)))
   ), [leads, selectedSources]);
 
+  // Source columns for the monthly table (respects the source filter)
+  const leadSourceColumns = useMemo(() => {
+    const sources = new Set(sourceFilteredLeads.map(leadSourceName));
+    const named = Array.from(sources).filter((s) => s !== NO_SOURCE).sort((a, b) => a.localeCompare(b));
+    return sources.has(NO_SOURCE) ? [...named, NO_SOURCE] : named;
+  }, [sourceFilteredLeads]);
+
   const leadTrackingRows = useMemo((): LeadMonthRow[] => {
     const spendByMonth = new Map<string, number>();
     adSpendRecords.forEach((r) => spendByMonth.set(r.month, r.amount));
@@ -569,17 +577,19 @@ export default function Reporting({ onEditJob }: ReportingProps) {
     const leadsWithAppointments = new Set(leadAppointments.map((a) => a.leadId));
 
     // Bucket leads by the month they came in
-    const byMonth = new Map<string, { leads: number; booked: number; decided: number; won: number }>();
+    const byMonth = new Map<string, { leads: number; booked: number; decided: number; won: number; bySource: Record<string, number> }>();
     sourceFilteredLeads.forEach((lead) => {
       const month = monthKeyFromDate(lead.firstSeenAt || lead.createdAt);
       if (!month) return;
 
       if (!byMonth.has(month)) {
-        byMonth.set(month, { leads: 0, booked: 0, decided: 0, won: 0 });
+        byMonth.set(month, { leads: 0, booked: 0, decided: 0, won: 0, bySource: {} });
       }
       const entry = byMonth.get(month)!;
       const { booked, decided, won } = classifyLead(lead, leadsWithAppointments);
+      const source = leadSourceName(lead);
       entry.leads += 1;
+      entry.bySource[source] = (entry.bySource[source] || 0) + 1;
       if (booked) entry.booked += 1;
       if (decided) entry.decided += 1;
       if (won) entry.won += 1;
@@ -599,7 +609,7 @@ export default function Reporting({ onEditJob }: ReportingProps) {
     while (true) {
       const month = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`;
       if (month > currentMonth) break;
-      const entry = byMonth.get(month) || { leads: 0, booked: 0, decided: 0, won: 0 };
+      const entry = byMonth.get(month) || { leads: 0, booked: 0, decided: 0, won: 0, bySource: {} };
       rows.push({
         month,
         leads: entry.leads,
@@ -608,6 +618,7 @@ export default function Reporting({ onEditJob }: ReportingProps) {
         open: entry.leads - entry.decided,
         won: entry.won,
         spend: spendByMonth.has(month) ? spendByMonth.get(month)! : null,
+        bySource: entry.bySource,
       });
       cursor.setMonth(cursor.getMonth() + 1);
     }
@@ -624,9 +635,12 @@ export default function Reporting({ onEditJob }: ReportingProps) {
         acc.open += row.open;
         acc.won += row.won;
         acc.spend += row.spend ?? 0;
+        Object.entries(row.bySource).forEach(([source, count]) => {
+          acc.bySource[source] = (acc.bySource[source] || 0) + count;
+        });
         return acc;
       },
-      { leads: 0, booked: 0, decided: 0, open: 0, won: 0, spend: 0 }
+      { leads: 0, booked: 0, decided: 0, open: 0, won: 0, spend: 0, bySource: {} as Record<string, number> }
     );
     return {
       ...totals,
@@ -1388,9 +1402,9 @@ export default function Reporting({ onEditJob }: ReportingProps) {
 
               <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
                 <div className="p-3 sm:p-4 border-b border-slate-200">
-                  <h3 className="text-base font-semibold text-slate-900">Leads by Month</h3>
+                  <h3 className="text-base font-semibold text-slate-900">Leads by Month &amp; Source</h3>
                   <p className="text-xs text-slate-400 mt-1">
-                    Leads are grouped by the month they came in. Enter your advertising spend for each month to see cost per lead.
+                    Leads are grouped by the month they came in, with a column per source. Enter your advertising spend for each month to see cost per lead.
                     Booked = the lead got an estimate appointment (or reached Estimate Booked or beyond).
                     Booking % (decided) only counts leads that booked or closed out (Lost/Disqualified) — it ignores leads still being
                     worked, so recent months aren't dragged down by leads that haven't had time to book yet.
@@ -1406,7 +1420,12 @@ export default function Reporting({ onEditJob }: ReportingProps) {
                       <thead>
                         <tr className="bg-slate-50 border-b border-slate-200">
                           <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700">Month</th>
-                          <th className="px-4 py-3 text-right text-sm font-semibold text-slate-700">Leads</th>
+                          {leadSourceColumns.map((source) => (
+                            <th key={source} className={`px-3 py-3 text-right text-sm font-semibold whitespace-nowrap ${source === NO_SOURCE ? 'text-slate-400 italic' : 'text-slate-700'}`}>
+                              {source}
+                            </th>
+                          ))}
+                          <th className="px-4 py-3 text-right text-sm font-semibold text-slate-700 border-l border-slate-200">Leads</th>
                           <th className="px-4 py-3 text-right text-sm font-semibold text-slate-700">Ad Spend</th>
                           <th className="px-4 py-3 text-right text-sm font-semibold text-slate-700">Cost / Lead</th>
                           <th className="px-4 py-3 text-right text-sm font-semibold text-slate-700">Booked</th>
@@ -1426,7 +1445,15 @@ export default function Reporting({ onEditJob }: ReportingProps) {
                           return (
                             <tr key={row.month} className="border-b border-slate-200 hover:bg-slate-50">
                               <td className="px-4 py-3 text-sm font-medium text-slate-900 whitespace-nowrap">{monthLabel(row.month)}</td>
-                              <td className="px-4 py-3 text-sm text-right text-slate-700">{row.leads}</td>
+                              {leadSourceColumns.map((source) => {
+                                const count = row.bySource[source] || 0;
+                                return (
+                                  <td key={source} className={`px-3 py-3 text-sm text-right ${count === 0 ? 'text-slate-300' : 'text-slate-700'}`}>
+                                    {count === 0 ? '—' : count}
+                                  </td>
+                                );
+                              })}
+                              <td className="px-4 py-3 text-sm text-right font-medium text-slate-900 border-l border-slate-200">{row.leads}</td>
                               <td className="px-4 py-3 text-right">
                                 <div className="inline-flex items-center gap-1 justify-end">
                                   <span className="text-sm text-slate-400">$</span>
@@ -1466,7 +1493,12 @@ export default function Reporting({ onEditJob }: ReportingProps) {
                       <tfoot>
                         <tr className="bg-slate-50 border-t-2 border-slate-300">
                           <td className="px-4 py-3 text-sm font-semibold text-slate-700">Total</td>
-                          <td className="px-4 py-3 text-sm font-semibold text-right text-slate-700">{leadTrackingTotals.leads}</td>
+                          {leadSourceColumns.map((source) => (
+                            <td key={source} className="px-3 py-3 text-sm font-semibold text-right text-slate-700">
+                              {leadTrackingTotals.bySource[source] || 0}
+                            </td>
+                          ))}
+                          <td className="px-4 py-3 text-sm font-semibold text-right text-slate-900 border-l border-slate-200">{leadTrackingTotals.leads}</td>
                           <td className="px-4 py-3 text-sm font-semibold text-right text-slate-700 pr-6">{formatCurrency(leadTrackingTotals.spend)}</td>
                           <td className="px-4 py-3 text-sm font-semibold text-right text-slate-700">
                             {leadTrackingTotals.costPerLead !== null && leadTrackingTotals.spend > 0
