@@ -204,6 +204,17 @@ export interface Lead {
   deleted?: boolean;
 }
 
+// Manually-entered advertising spend for a calendar month (used by lead tracking reports)
+export interface AdSpend {
+  id: string;
+  month: string; // YYYY-MM
+  amount: number; // Total advertising dollars spent in that month
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+  deleted?: boolean;
+}
+
 export type LeadAppointmentStatus = 'booked' | 'rescheduled' | 'canceled' | 'no_show' | 'completed';
 
 export interface LeadAppointment {
