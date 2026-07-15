@@ -1,9 +1,9 @@
-import { ChipSystem, PricingVariable, Job, Costs, Laborer, ChipInventory, TintInventory, CoatingInventory, TopCoatInventory, BaseCoatInventory, MiscInventory, Pricing, Customer, Product, BaseCoatColor, ShoppingItem, CommunicationTemplate, ReferralAssociate, ReferralService, Lead, LeadAppointment } from '../types';
+import { ChipSystem, PricingVariable, Job, Costs, Laborer, ChipInventory, TintInventory, CoatingInventory, TopCoatInventory, BaseCoatInventory, MiscInventory, Pricing, Customer, Product, BaseCoatColor, ShoppingItem, CommunicationTemplate, ReferralAssociate, ReferralService, Lead, LeadAppointment, AdSpend } from '../types';
 import { softDeleteLead } from './leadMutations';
 import { DEFAULT_COATING_SKUS, LEGACY_COATING_FIELDS, coatingSkuId, findCoatingSku } from './coatingSkus';
 
 const DB_NAME = 'JobEstimator';
-const DB_VERSION = 21; // Adds SKU-level coatingInventory store
+const DB_VERSION = 22; // Adds adSpend store (monthly advertising spend)
 
 // Auto-sync flag - can be disabled for batch operations
 let autoSyncEnabled = true;
@@ -195,6 +195,11 @@ export async function initDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains('referralServices')) {
         db.createObjectStore('referralServices', { keyPath: 'id' });
       }
+      const adSpendStore = db.objectStoreNames.contains('adSpend')
+        ? request.transaction!.objectStore('adSpend')
+        : db.createObjectStore('adSpend', { keyPath: 'id' });
+      ensureIndex(adSpendStore, 'month', 'month');
+      ensureIndex(adSpendStore, 'updatedAt', 'updatedAt');
     };
   });
 }
@@ -1615,6 +1620,73 @@ export async function updateLeadAppointment(appointment: LeadAppointment): Promi
 
   await queueForSync('leadAppointments', appointment.id, 'update');
   await triggerBackgroundSync();
+}
+
+// =====================
+// Ad Spend CRUD (monthly advertising spend for lead tracking)
+// =====================
+
+export async function getAllAdSpend(): Promise<AdSpend[]> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['adSpend'], 'readonly');
+    const store = transaction.objectStore('adSpend');
+    const request = store.getAll();
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const results = request.result || [];
+      resolve(results.filter((record: AdSpend) => !record.deleted));
+    };
+  });
+}
+
+// Sync version - returns all records including deleted
+export async function getAllAdSpendForSync(): Promise<AdSpend[]> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(['adSpend'], 'readonly');
+    const store = transaction.objectStore('adSpend');
+    const request = store.getAll();
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result || []);
+  });
+}
+
+export async function updateAdSpend(record: AdSpend): Promise<void> {
+  const db = await getDB();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(['adSpend'], 'readwrite');
+    const store = transaction.objectStore('adSpend');
+    const request = store.put(record);
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve();
+  });
+
+  await queueForSync('adSpend', record.id, 'update');
+  await triggerBackgroundSync();
+}
+
+/**
+ * Set the advertising spend for a calendar month (YYYY-MM).
+ * Updates the existing record for that month if one exists, otherwise creates one.
+ */
+export async function setAdSpendForMonth(month: string, amount: number): Promise<AdSpend> {
+  const existing = (await getAllAdSpend()).find((r) => r.month === month);
+  const now = new Date().toISOString();
+  const record: AdSpend = existing
+    ? { ...existing, amount, updatedAt: now }
+    : {
+        id: crypto.randomUUID(),
+        month,
+        amount,
+        createdAt: now,
+        updatedAt: now,
+      };
+  await updateAdSpend(record);
+  return record;
 }
 
 // =====================

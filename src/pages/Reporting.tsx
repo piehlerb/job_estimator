@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { getAllJobs, getAllLaborers, getCosts, getDefaultCosts, getPricing, getDefaultPricing } from '../lib/db';
+import { getAllAdSpend, getAllJobs, getAllLaborers, getAllLeadAppointments, getAllLeads, getCosts, getDefaultCosts, getPricing, getDefaultPricing, setAdSpendForMonth } from '../lib/db';
 import { calculateJobOutputs, calculateActualCosts } from '../lib/calculations';
-import { ActualCosts, Costs, Job, JobCalculation, JobStatus, Laborer, Pricing } from '../types';
+import { ActualCosts, AdSpend, Costs, Job, JobCalculation, JobStatus, Laborer, Lead, LeadAppointment, LeadStage, Pricing } from '../types';
 import { loadAllHistoricalJobsFromSupabase } from '../lib/sync';
 
 interface JobWithCalc {
@@ -38,10 +38,60 @@ interface EmployeeHoursRow {
   jobCount: number;
 }
 
+interface LeadMonthRow {
+  month: string; // YYYY-MM
+  leads: number;
+  booked: number;
+  decided: number;
+  open: number;
+  won: number;
+  spend: number | null; // null = no spend entered for this month
+}
+
+interface LeadSourceRow {
+  source: string;
+  leads: number;
+  booked: number;
+  decided: number;
+  open: number;
+  won: number;
+}
+
 const ALL_STATUSES: JobStatus[] = ['Pending', 'Verbal', 'Won', 'Lost'];
 type DateRangePreset = 'all' | '30d' | '90d' | 'ytd' | 'custom';
 type DateFieldMode = 'install' | 'created';
-type ReportView = 'tags' | 'monthly-won' | 'employee-hours' | 'expenses';
+type ReportView = 'tags' | 'monthly-won' | 'employee-hours' | 'expenses' | 'lead-tracking';
+
+// Stages at or beyond "Estimate Booked" — the lead converted to a booking
+const BOOKED_LEAD_STAGES = new Set<LeadStage>(['Estimate Booked', 'Estimate Completed', 'Quoted', 'Won']);
+// Terminal stages — the lead is decided even if it never booked
+const TERMINAL_LEAD_STAGES = new Set<LeadStage>(['Won', 'Lost', 'Disqualified']);
+
+const NO_SOURCE = '(No Source)';
+
+function leadSourceName(lead: Lead): string {
+  return (lead.source || '').trim() || NO_SOURCE;
+}
+
+function classifyLead(lead: Lead, leadsWithAppointments: Set<string>) {
+  // Booked = ever had an appointment, or stage reached Estimate Booked or beyond
+  const booked = leadsWithAppointments.has(lead.id) || BOOKED_LEAD_STAGES.has(lead.stage);
+  // Decided = booked or closed out without booking (Lost/Disqualified)
+  const decided = booked || TERMINAL_LEAD_STAGES.has(lead.stage);
+  return { booked, decided, won: lead.stage === 'Won' };
+}
+
+function monthKeyFromDate(value?: string): string | null {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function monthLabel(month: string): string {
+  const [year, mon] = month.split('-').map(Number);
+  return new Date(year, mon - 1, 1).toLocaleString('default', { month: 'short', year: 'numeric' });
+}
 
 function getDefaultEmpStart() {
   const d = new Date();
@@ -86,6 +136,14 @@ export default function Reporting({ onEditJob }: ReportingProps) {
   const [expStartDate, setExpStartDate] = useState(getDefaultExpStart);
   const [expEndDate, setExpEndDate] = useState(() => new Date().toISOString().slice(0, 10));
 
+  // Lead tracking data
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [leadAppointments, setLeadAppointments] = useState<LeadAppointment[]>([]);
+  const [adSpendRecords, setAdSpendRecords] = useState<AdSpend[]>([]);
+  const [spendDrafts, setSpendDrafts] = useState<Record<string, string>>({});
+  const [savingSpendMonth, setSavingSpendMonth] = useState<string | null>(null);
+  const [selectedSources, setSelectedSources] = useState<string[]>([]);
+
   useEffect(() => {
     loadData();
   }, []);
@@ -93,13 +151,19 @@ export default function Reporting({ onEditJob }: ReportingProps) {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [allJobs, currentCosts, currentPricing, laborers] = await Promise.all([
+      const [allJobs, currentCosts, currentPricing, laborers, allLeads, allAppointments, allAdSpend] = await Promise.all([
         getAllJobs(),
         getCosts(),
         getPricing(),
         getAllLaborers(),
+        getAllLeads(),
+        getAllLeadAppointments(),
+        getAllAdSpend(),
       ]);
       setAllLaborers(laborers.filter((l) => !l.deleted));
+      setLeads(allLeads);
+      setLeadAppointments(allAppointments);
+      setAdSpendRecords(allAdSpend);
       const costs = currentCosts || getDefaultCosts();
       const pricing = currentPricing || getDefaultPricing();
 
@@ -484,6 +548,165 @@ export default function Reporting({ onEditJob }: ReportingProps) {
     return { rows, grandTotal, jobCount };
   }, [jobsWithCalc, expStartDate, expEndDate]);
 
+  // ==================== LEAD TRACKING ====================
+
+  const availableLeadSources = useMemo(() => {
+    const sources = new Set(leads.map(leadSourceName));
+    const named = Array.from(sources).filter((s) => s !== NO_SOURCE).sort((a, b) => a.localeCompare(b));
+    return sources.has(NO_SOURCE) ? [...named, NO_SOURCE] : named;
+  }, [leads]);
+
+  const sourceFilteredLeads = useMemo(() => (
+    selectedSources.length === 0
+      ? leads
+      : leads.filter((lead) => selectedSources.includes(leadSourceName(lead)))
+  ), [leads, selectedSources]);
+
+  const leadTrackingRows = useMemo((): LeadMonthRow[] => {
+    const spendByMonth = new Map<string, number>();
+    adSpendRecords.forEach((r) => spendByMonth.set(r.month, r.amount));
+
+    const leadsWithAppointments = new Set(leadAppointments.map((a) => a.leadId));
+
+    // Bucket leads by the month they came in
+    const byMonth = new Map<string, { leads: number; booked: number; decided: number; won: number }>();
+    sourceFilteredLeads.forEach((lead) => {
+      const month = monthKeyFromDate(lead.firstSeenAt || lead.createdAt);
+      if (!month) return;
+
+      if (!byMonth.has(month)) {
+        byMonth.set(month, { leads: 0, booked: 0, decided: 0, won: 0 });
+      }
+      const entry = byMonth.get(month)!;
+      const { booked, decided, won } = classifyLead(lead, leadsWithAppointments);
+      entry.leads += 1;
+      if (booked) entry.booked += 1;
+      if (decided) entry.decided += 1;
+      if (won) entry.won += 1;
+    });
+
+    // Continuous month range: earliest month with data through the current month
+    const now = new Date();
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const monthsWithData = [...byMonth.keys(), ...spendByMonth.keys()];
+    const firstMonth = monthsWithData.length > 0
+      ? monthsWithData.reduce((min, m) => (m < min ? m : min), currentMonth)
+      : currentMonth;
+
+    const rows: LeadMonthRow[] = [];
+    const [startYear, startMon] = firstMonth.split('-').map(Number);
+    const cursor = new Date(startYear, startMon - 1, 1);
+    while (true) {
+      const month = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`;
+      if (month > currentMonth) break;
+      const entry = byMonth.get(month) || { leads: 0, booked: 0, decided: 0, won: 0 };
+      rows.push({
+        month,
+        leads: entry.leads,
+        booked: entry.booked,
+        decided: entry.decided,
+        open: entry.leads - entry.decided,
+        won: entry.won,
+        spend: spendByMonth.has(month) ? spendByMonth.get(month)! : null,
+      });
+      cursor.setMonth(cursor.getMonth() + 1);
+    }
+
+    return rows.reverse(); // newest first
+  }, [sourceFilteredLeads, leadAppointments, adSpendRecords]);
+
+  const leadTrackingTotals = useMemo(() => {
+    const totals = leadTrackingRows.reduce(
+      (acc, row) => {
+        acc.leads += row.leads;
+        acc.booked += row.booked;
+        acc.decided += row.decided;
+        acc.open += row.open;
+        acc.won += row.won;
+        acc.spend += row.spend ?? 0;
+        return acc;
+      },
+      { leads: 0, booked: 0, decided: 0, open: 0, won: 0, spend: 0 }
+    );
+    return {
+      ...totals,
+      costPerLead: totals.leads > 0 ? totals.spend / totals.leads : null,
+      bookingPct: totals.leads > 0 ? (totals.booked / totals.leads) * 100 : null,
+      decidedBookingPct: totals.decided > 0 ? (totals.booked / totals.decided) * 100 : null,
+    };
+  }, [leadTrackingRows]);
+
+  // Per-source breakdown across all months (unaffected by the source filter chips)
+  const leadSourceRows = useMemo((): LeadSourceRow[] => {
+    const leadsWithAppointments = new Set(leadAppointments.map((a) => a.leadId));
+    const bySource = new Map<string, LeadSourceRow>();
+
+    leads.forEach((lead) => {
+      const source = leadSourceName(lead);
+      if (!bySource.has(source)) {
+        bySource.set(source, { source, leads: 0, booked: 0, decided: 0, open: 0, won: 0 });
+      }
+      const entry = bySource.get(source)!;
+      const { booked, decided, won } = classifyLead(lead, leadsWithAppointments);
+      entry.leads += 1;
+      if (booked) entry.booked += 1;
+      if (decided) entry.decided += 1;
+      else entry.open += 1;
+      if (won) entry.won += 1;
+    });
+
+    const named = Array.from(bySource.values())
+      .filter((r) => r.source !== NO_SOURCE)
+      .sort((a, b) => b.leads - a.leads);
+    const noSource = bySource.get(NO_SOURCE);
+    return noSource ? [...named, noSource] : named;
+  }, [leads, leadAppointments]);
+
+  const handleSaveSpend = async (month: string) => {
+    const draft = spendDrafts[month];
+    if (draft === undefined) return; // untouched
+
+    const existing = adSpendRecords.find((r) => r.month === month);
+    if (draft.trim() === '' && !existing) {
+      // Nothing entered and nothing stored — leave as "no spend recorded"
+      setSpendDrafts((prev) => {
+        const next = { ...prev };
+        delete next[month];
+        return next;
+      });
+      return;
+    }
+
+    const amount = draft.trim() === '' ? 0 : Number(draft);
+    if (Number.isNaN(amount) || amount < 0) return;
+    if (existing && existing.amount === amount) {
+      setSpendDrafts((prev) => {
+        const next = { ...prev };
+        delete next[month];
+        return next;
+      });
+      return;
+    }
+
+    setSavingSpendMonth(month);
+    try {
+      const saved = await setAdSpendForMonth(month, amount);
+      setAdSpendRecords((prev) => {
+        const others = prev.filter((r) => r.id !== saved.id);
+        return [...others, saved];
+      });
+      setSpendDrafts((prev) => {
+        const next = { ...prev };
+        delete next[month];
+        return next;
+      });
+    } catch (error) {
+      console.error('Error saving ad spend:', error);
+    } finally {
+      setSavingSpendMonth(null);
+    }
+  };
+
   // ==================== HANDLERS ====================
 
   const handleStatusToggle = (status: JobStatus) => {
@@ -538,12 +761,13 @@ export default function Reporting({ onEditJob }: ReportingProps) {
       </div>
 
       {/* Tab Navigation */}
-      <div className="flex gap-1 mb-4 sm:mb-6 bg-slate-100 p-1 rounded-lg w-fit">
+      <div className="flex flex-wrap gap-1 mb-4 sm:mb-6 bg-slate-100 p-1 rounded-lg w-fit">
         {([
           { id: 'tags', label: 'Tag Report' },
           { id: 'monthly-won', label: 'Monthly Won Jobs' },
           { id: 'employee-hours', label: 'Employee Hours' },
           { id: 'expenses', label: 'Expenses' },
+          { id: 'lead-tracking', label: 'Lead Tracking' },
         ] as { id: ReportView; label: string }[]).map(({ id, label }) => (
           <button
             key={id}
@@ -1083,6 +1307,240 @@ export default function Reporting({ onEditJob }: ReportingProps) {
                           <td className="px-4 py-3 text-sm font-semibold text-right text-slate-700">100.0%</td>
                         </tr>
                       </tfoot>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* ===== LEAD TRACKING ===== */}
+          {activeView === 'lead-tracking' && (
+            <>
+              {/* Source filter */}
+              {availableLeadSources.length > 0 && (
+                <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-3 sm:p-4 mb-4 sm:mb-6">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <label className="text-xs sm:text-sm text-slate-600 font-medium">Source:</label>
+                    {availableLeadSources.map((source) => (
+                      <button
+                        key={source}
+                        type="button"
+                        onClick={() => setSelectedSources((prev) => (
+                          prev.includes(source)
+                            ? prev.filter((s) => s !== source)
+                            : [...prev, source]
+                        ))}
+                        className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                          selectedSources.includes(source)
+                            ? 'bg-indigo-100 text-indigo-800'
+                            : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                        } ${source === NO_SOURCE ? 'italic' : ''}`}
+                      >
+                        {source}
+                      </button>
+                    ))}
+                    {selectedSources.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedSources([])}
+                        className="px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-400 mt-2">
+                    Filters the monthly table and summary cards. Ad spend is entered per month regardless of source —
+                    filter to your paid source(s) to see cost per lead for just those leads.
+                  </p>
+                </div>
+              )}
+
+              {/* Summary cards */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-4 sm:mb-6">
+                <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-3 sm:p-4">
+                  <p className="text-xs text-slate-500">Total Leads</p>
+                  <p className="text-xl sm:text-2xl font-bold text-slate-900">{leadTrackingTotals.leads}</p>
+                </div>
+                <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-3 sm:p-4">
+                  <p className="text-xs text-slate-500">Total Ad Spend</p>
+                  <p className="text-xl sm:text-2xl font-bold text-slate-900">{formatCurrency(leadTrackingTotals.spend)}</p>
+                </div>
+                <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-3 sm:p-4">
+                  <p className="text-xs text-slate-500">Cost / Lead</p>
+                  <p className="text-xl sm:text-2xl font-bold text-slate-900">
+                    {leadTrackingTotals.costPerLead !== null && leadTrackingTotals.spend > 0
+                      ? formatCurrency(leadTrackingTotals.costPerLead)
+                      : '—'}
+                  </p>
+                </div>
+                <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-3 sm:p-4">
+                  <p className="text-xs text-slate-500">Lead → Booking</p>
+                  <p className="text-xl sm:text-2xl font-bold text-slate-900">
+                    {leadTrackingTotals.bookingPct !== null ? `${leadTrackingTotals.bookingPct.toFixed(1)}%` : '—'}
+                  </p>
+                  {leadTrackingTotals.decidedBookingPct !== null && (
+                    <p className="text-xs text-slate-400 mt-0.5">{leadTrackingTotals.decidedBookingPct.toFixed(1)}% of decided</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+                <div className="p-3 sm:p-4 border-b border-slate-200">
+                  <h3 className="text-base font-semibold text-slate-900">Leads by Month</h3>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Leads are grouped by the month they came in. Enter your advertising spend for each month to see cost per lead.
+                    Booked = the lead got an estimate appointment (or reached Estimate Booked or beyond).
+                    Booking % (decided) only counts leads that booked or closed out (Lost/Disqualified) — it ignores leads still being
+                    worked, so recent months aren't dragged down by leads that haven't had time to book yet.
+                  </p>
+                </div>
+                {leadTrackingRows.length === 0 ? (
+                  <div className="p-6 sm:p-8 text-center text-slate-600 text-sm">
+                    No leads recorded yet.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200">
+                          <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700">Month</th>
+                          <th className="px-4 py-3 text-right text-sm font-semibold text-slate-700">Leads</th>
+                          <th className="px-4 py-3 text-right text-sm font-semibold text-slate-700">Ad Spend</th>
+                          <th className="px-4 py-3 text-right text-sm font-semibold text-slate-700">Cost / Lead</th>
+                          <th className="px-4 py-3 text-right text-sm font-semibold text-slate-700">Booked</th>
+                          <th className="px-4 py-3 text-right text-sm font-semibold text-slate-700">Booking %</th>
+                          <th className="px-4 py-3 text-right text-sm font-semibold text-slate-700">Booking % (Decided)</th>
+                          <th className="px-4 py-3 text-right text-sm font-semibold text-slate-700">Still Open</th>
+                          <th className="px-4 py-3 text-right text-sm font-semibold text-slate-700">Won</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {leadTrackingRows.map((row) => {
+                          const draft = spendDrafts[row.month];
+                          const spendValue = draft !== undefined ? draft : (row.spend !== null ? String(row.spend) : '');
+                          const costPerLead = row.spend !== null && row.leads > 0 ? row.spend / row.leads : null;
+                          const bookingPct = row.leads > 0 ? (row.booked / row.leads) * 100 : null;
+                          const decidedPct = row.decided > 0 ? (row.booked / row.decided) * 100 : null;
+                          return (
+                            <tr key={row.month} className="border-b border-slate-200 hover:bg-slate-50">
+                              <td className="px-4 py-3 text-sm font-medium text-slate-900 whitespace-nowrap">{monthLabel(row.month)}</td>
+                              <td className="px-4 py-3 text-sm text-right text-slate-700">{row.leads}</td>
+                              <td className="px-4 py-3 text-right">
+                                <div className="inline-flex items-center gap-1 justify-end">
+                                  <span className="text-sm text-slate-400">$</span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="any"
+                                    inputMode="decimal"
+                                    value={spendValue}
+                                    placeholder="0"
+                                    disabled={savingSpendMonth === row.month}
+                                    onChange={(e) => setSpendDrafts((prev) => ({ ...prev, [row.month]: e.target.value }))}
+                                    onBlur={() => handleSaveSpend(row.month)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                                    }}
+                                    className="w-24 px-2 py-1 border border-slate-300 rounded-lg text-sm text-right focus:outline-none focus:ring-2 focus:ring-gf-lime disabled:opacity-60"
+                                  />
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-sm text-right text-slate-700">
+                                {costPerLead !== null ? formatCurrency(costPerLead) : <span className="text-slate-300">—</span>}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-right text-blue-700">{row.booked}</td>
+                              <td className="px-4 py-3 text-sm text-right text-slate-700">
+                                {bookingPct !== null ? `${bookingPct.toFixed(1)}%` : <span className="text-slate-300">—</span>}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-right text-slate-700">
+                                {decidedPct !== null ? `${decidedPct.toFixed(1)}%` : <span className="text-slate-300">—</span>}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-right text-amber-700">{row.open}</td>
+                              <td className="px-4 py-3 text-sm text-right text-green-700">{row.won}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-slate-50 border-t-2 border-slate-300">
+                          <td className="px-4 py-3 text-sm font-semibold text-slate-700">Total</td>
+                          <td className="px-4 py-3 text-sm font-semibold text-right text-slate-700">{leadTrackingTotals.leads}</td>
+                          <td className="px-4 py-3 text-sm font-semibold text-right text-slate-700 pr-6">{formatCurrency(leadTrackingTotals.spend)}</td>
+                          <td className="px-4 py-3 text-sm font-semibold text-right text-slate-700">
+                            {leadTrackingTotals.costPerLead !== null && leadTrackingTotals.spend > 0
+                              ? formatCurrency(leadTrackingTotals.costPerLead)
+                              : '—'}
+                          </td>
+                          <td className="px-4 py-3 text-sm font-semibold text-right text-blue-700">{leadTrackingTotals.booked}</td>
+                          <td className="px-4 py-3 text-sm font-semibold text-right text-slate-700">
+                            {leadTrackingTotals.bookingPct !== null ? `${leadTrackingTotals.bookingPct.toFixed(1)}%` : '—'}
+                          </td>
+                          <td className="px-4 py-3 text-sm font-semibold text-right text-slate-700">
+                            {leadTrackingTotals.decidedBookingPct !== null ? `${leadTrackingTotals.decidedBookingPct.toFixed(1)}%` : '—'}
+                          </td>
+                          <td className="px-4 py-3 text-sm font-semibold text-right text-amber-700">{leadTrackingTotals.open}</td>
+                          <td className="px-4 py-3 text-sm font-semibold text-right text-green-700">{leadTrackingTotals.won}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* Leads by Source */}
+              <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden mt-4 sm:mt-6">
+                <div className="p-3 sm:p-4 border-b border-slate-200">
+                  <h3 className="text-base font-semibold text-slate-900">Leads by Source</h3>
+                  <p className="text-xs text-slate-400 mt-1">All leads across all months, broken down by where they came from.</p>
+                </div>
+                {leadSourceRows.length === 0 ? (
+                  <div className="p-6 sm:p-8 text-center text-slate-600 text-sm">
+                    No leads recorded yet.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200">
+                          <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700">Source</th>
+                          <th className="px-4 py-3 text-right text-sm font-semibold text-slate-700">Leads</th>
+                          <th className="px-4 py-3 text-right text-sm font-semibold text-slate-700">% of Leads</th>
+                          <th className="px-4 py-3 text-right text-sm font-semibold text-slate-700">Booked</th>
+                          <th className="px-4 py-3 text-right text-sm font-semibold text-slate-700">Booking %</th>
+                          <th className="px-4 py-3 text-right text-sm font-semibold text-slate-700">Booking % (Decided)</th>
+                          <th className="px-4 py-3 text-right text-sm font-semibold text-slate-700">Still Open</th>
+                          <th className="px-4 py-3 text-right text-sm font-semibold text-slate-700">Won</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {leadSourceRows.map((row) => {
+                          const totalLeads = leads.length;
+                          const shareOfLeads = totalLeads > 0 ? (row.leads / totalLeads) * 100 : null;
+                          const bookingPct = row.leads > 0 ? (row.booked / row.leads) * 100 : null;
+                          const decidedPct = row.decided > 0 ? (row.booked / row.decided) * 100 : null;
+                          const isNoSource = row.source === NO_SOURCE;
+                          return (
+                            <tr key={row.source} className={`border-b border-slate-200 hover:bg-slate-50 ${isNoSource ? 'bg-slate-50' : ''}`}>
+                              <td className={`px-4 py-3 text-sm font-medium ${isNoSource ? 'text-slate-400 italic' : 'text-slate-900'}`}>{row.source}</td>
+                              <td className="px-4 py-3 text-sm text-right text-slate-700">{row.leads}</td>
+                              <td className="px-4 py-3 text-sm text-right text-slate-600">
+                                {shareOfLeads !== null ? `${shareOfLeads.toFixed(1)}%` : <span className="text-slate-300">—</span>}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-right text-blue-700">{row.booked}</td>
+                              <td className="px-4 py-3 text-sm text-right text-slate-700">
+                                {bookingPct !== null ? `${bookingPct.toFixed(1)}%` : <span className="text-slate-300">—</span>}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-right text-slate-700">
+                                {decidedPct !== null ? `${decidedPct.toFixed(1)}%` : <span className="text-slate-300">—</span>}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-right text-amber-700">{row.open}</td>
+                              <td className="px-4 py-3 text-sm text-right text-green-700">{row.won}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
                     </table>
                   </div>
                 )}
