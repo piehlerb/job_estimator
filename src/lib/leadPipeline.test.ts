@@ -38,6 +38,41 @@ describe('GHL lead pipeline', () => {
     assert.equal(normalized.lead.source, 'Facebook');
   });
 
+  test('uses the contact Lead Source instead of opaque attribution session data', () => {
+    const normalized = normalizeGhlWebhook({
+      contact_id: 'abc',
+      source: 'Top-level webhook source',
+      contact: {
+        source: 'Customer Referral',
+        attributionSource: {
+          sessionSource: 'gclid:opaque-session-id',
+          medium: 'cpc',
+        },
+      },
+    });
+
+    assert.equal(normalized.lead.source, 'Customer Referral');
+  });
+
+  test('reads the contact_source field from the live GHL workflow payload shape', () => {
+    const normalized = normalizeGhlWebhook({
+      contact_id: 'abc',
+      contact_source: 'EZMedia',
+      attributionSource: {
+        sessionSource: 'CRM UI',
+        medium: 'manual',
+      },
+      contact: {
+        attributionSource: {
+          sessionSource: 'CRM UI',
+          medium: 'manual',
+        },
+      },
+    });
+
+    assert.equal(normalized.lead.source, 'EZMedia');
+  });
+
   test('reads GHL standard webhook custom data and nested appointment fields', () => {
     const normalized = normalizeGhlWebhook({
       contact_id: 'abc',

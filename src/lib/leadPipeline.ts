@@ -257,11 +257,13 @@ export function normalizeGhlWebhook(payload: Record<string, unknown>): Normalize
     email: normalizeEmail(readFirstString(payload, ['email', 'contact.email'])),
     address: normalizeWhitespace(readFirstString(payload, ['address', 'full_address', 'fullAddress', 'location.fullAddress'])),
     source: normalizeWhitespace(readFirstString(payload, [
+      'contact_source',
+      'contact.source',
+      'contact.lead_source',
+      'contact.leadSource',
       'source',
       'lead_source',
       'leadSource',
-      'contact.attributionSource.sessionSource',
-      'contact.attributionSource.medium',
     ])),
     campaign: normalizeWhitespace(readFirstString(payload, [
       'campaign',
