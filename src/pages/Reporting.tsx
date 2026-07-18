@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
-import { getAllAdSpend, getAllJobs, getAllLaborers, getAllLeadAppointments, getAllLeads, getCosts, getDefaultCosts, getPricing, getDefaultPricing, setAdSpendForMonth } from '../lib/db';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { getAllAdSpend, getAllJobs, getAllLaborers, getAllLeadAppointments, getAllLeads, getCosts, getDefaultCosts, getPricing, getDefaultPricing, setAdSpendForMonth, updateJob } from '../lib/db';
 import { calculateJobOutputs, calculateActualCosts } from '../lib/calculations';
 import { ActualCosts, AdSpend, Costs, Job, JobCalculation, JobStatus, Laborer, Lead, LeadAppointment, LeadStage, Pricing } from '../types';
 import { loadAllHistoricalJobsFromSupabase } from '../lib/sync';
 import ZipGeographyReport from '../components/ZipGeographyReport';
+import { applyZipToAddress } from '../lib/zipGeography';
 
 interface JobWithCalc {
   job: Job;
@@ -146,11 +147,7 @@ export default function Reporting({ onEditJob }: ReportingProps) {
   const [savingSpendMonth, setSavingSpendMonth] = useState<string | null>(null);
   const [selectedSources, setSelectedSources] = useState<string[]>([]);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const [allJobs, currentCosts, currentPricing, laborers, allLeads, allAppointments, allAdSpend] = await Promise.all([
@@ -221,9 +218,9 @@ export default function Reporting({ onEditJob }: ReportingProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const handleLoadFullHistory = async () => {
+  const handleLoadFullHistory = useCallback(async () => {
     if (loadingHistory) return;
 
     setLoadingHistory(true);
@@ -242,12 +239,41 @@ export default function Reporting({ onEditJob }: ReportingProps) {
     } finally {
       setLoadingHistory(false);
     }
-  };
+  }, [loadData, loadingHistory]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const zipGeographyJobs = useMemo(
     () => jobsWithCalc.map(({ job }) => job),
     [jobsWithCalc]
   );
+
+  const handleApplyZip = useCallback(async (jobIds: readonly string[], zip: string) => {
+    const requestedIds = new Set(jobIds);
+    const now = new Date().toISOString();
+    const updates = jobsWithCalc
+      .map(({ job }) => job)
+      .filter((job) => requestedIds.has(job.id))
+      .map((job) => ({
+        ...job,
+        customerAddress: applyZipToAddress(job.customerAddress, zip),
+        updatedAt: now,
+        synced: false,
+      }));
+
+    if (updates.length !== requestedIds.size) {
+      throw new Error('Some matching jobs are no longer loaded. Refresh the report and try again.');
+    }
+
+    const results = await Promise.allSettled(updates.map((job) => updateJob(job)));
+    await loadData();
+    const failed = results.filter((result) => result.status === 'rejected');
+    if (failed.length > 0) {
+      throw new Error(`${failed.length} ${failed.length === 1 ? 'job' : 'jobs'} could not be updated. The report was refreshed to show the saved results.`);
+    }
+  }, [jobsWithCalc, loadData]);
 
   // ==================== TAG REPORT ====================
 
@@ -1337,7 +1363,11 @@ export default function Reporting({ onEditJob }: ReportingProps) {
 
           {/* ===== ZIP GEOGRAPHY ===== */}
           {activeView === 'zip-geography' && (
-            <ZipGeographyReport jobs={zipGeographyJobs} />
+            <ZipGeographyReport
+              jobs={zipGeographyJobs}
+              onApplyZip={handleApplyZip}
+              onEditJob={onEditJob}
+            />
           )}
 
           {/* ===== LEAD TRACKING ===== */}
