@@ -3,6 +3,7 @@ import { getAllAdSpend, getAllJobs, getAllLaborers, getAllLeadAppointments, getA
 import { calculateJobOutputs, calculateActualCosts } from '../lib/calculations';
 import { ActualCosts, AdSpend, Costs, Job, JobCalculation, JobStatus, Laborer, Lead, LeadAppointment, LeadStage, Pricing } from '../types';
 import { loadAllHistoricalJobsFromSupabase } from '../lib/sync';
+import ZipGeographyReport from '../components/ZipGeographyReport';
 
 interface JobWithCalc {
   job: Job;
@@ -61,7 +62,7 @@ interface LeadSourceRow {
 const ALL_STATUSES: JobStatus[] = ['Pending', 'Verbal', 'Won', 'Lost'];
 type DateRangePreset = 'all' | '30d' | '90d' | 'ytd' | 'custom';
 type DateFieldMode = 'install' | 'created';
-type ReportView = 'tags' | 'monthly-won' | 'employee-hours' | 'expenses' | 'lead-tracking';
+type ReportView = 'tags' | 'monthly-won' | 'employee-hours' | 'expenses' | 'lead-tracking' | 'zip-geography';
 
 // Stages at or beyond "Estimate Booked" — the lead converted to a booking
 const BOOKED_LEAD_STAGES = new Set<LeadStage>(['Estimate Booked', 'Estimate Completed', 'Quoted', 'Won']);
@@ -242,6 +243,11 @@ export default function Reporting({ onEditJob }: ReportingProps) {
       setLoadingHistory(false);
     }
   };
+
+  const zipGeographyJobs = useMemo(
+    () => jobsWithCalc.map(({ job }) => job),
+    [jobsWithCalc]
+  );
 
   // ==================== TAG REPORT ====================
 
@@ -782,6 +788,7 @@ export default function Reporting({ onEditJob }: ReportingProps) {
           { id: 'employee-hours', label: 'Employee Hours' },
           { id: 'expenses', label: 'Expenses' },
           { id: 'lead-tracking', label: 'Lead Tracking' },
+          { id: 'zip-geography', label: 'ZIP Geography' },
         ] as { id: ReportView; label: string }[]).map(({ id, label }) => (
           <button
             key={id}
@@ -1326,6 +1333,11 @@ export default function Reporting({ onEditJob }: ReportingProps) {
                 )}
               </div>
             </>
+          )}
+
+          {/* ===== ZIP GEOGRAPHY ===== */}
+          {activeView === 'zip-geography' && (
+            <ZipGeographyReport jobs={zipGeographyJobs} />
           )}
 
           {/* ===== LEAD TRACKING ===== */}

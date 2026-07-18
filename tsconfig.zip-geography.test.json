@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.test.json",
+  "include": [
+    "src/lib/zipGeography.ts",
+    "src/lib/zipGeography.test.ts",
+    "src/lib/nhMeZipRegistry.ts",
+    "src/types/index.ts"
+  ]
+}
