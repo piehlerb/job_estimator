@@ -1,6 +1,14 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { aggregateJobsByZip, extractZipCandidates, resolveNhMeZip } from './zipGeography.js';
+import {
+  aggregateJobsByZip,
+  applyZipToAddress,
+  extractZipCandidates,
+  filterJobsByZipDate,
+  filterJobsByZipStatus,
+  resolveNhMeZip,
+  zipReportJobDate,
+} from './zipGeography.js';
 
 describe('NH/ME ZIP geography', () => {
   test('extracts standalone five-digit and ZIP+4 tokens without embedded or overlong digits', () => {
@@ -12,7 +20,7 @@ describe('NH/ME ZIP geography', () => {
   test('uses the rightmost exact NH/ME registry member deterministically', () => {
     assert.deepEqual(resolveNhMeZip('Old reference 03101; ship to Portland, ME 04101-9999'), {
       zip: '04101',
-      centroid: { state: 'ME', lat: 43.6606, lon: -70.2589 },
+      centroid: { state: 'ME', city: 'Portland', lat: 43.6606, lon: -70.2589 },
     });
   });
 
@@ -46,5 +54,45 @@ describe('NH/ME ZIP geography', () => {
       { zip: '04101', estimates: 2, won: 1, lost: 1 },
     ]);
     assert.deepEqual(report.excluded, { missing: 1, 'invalid-format': 0, 'out-of-scope-or-unrecognized': 1 });
+  });
+
+  test('adds a ZIP to an address or replaces the rightmost existing ZIP token', () => {
+    assert.equal(applyZipToAddress('12 Main St, Hampton, NH', '03842'), '12 Main St, Hampton, NH 03842');
+    assert.equal(applyZipToAddress('12 Main St, Boston, MA 02110', '03842'), '12 Main St, Boston, MA 03842');
+    assert.equal(applyZipToAddress('  ', '04101'), '04101');
+    assert.throws(() => applyZipToAddress('12 Main St', '02110'), /recognized Maine or New Hampshire ZIP/);
+  });
+
+  test('uses estimate date with a created-date fallback and filters inclusively', () => {
+    const jobs = [
+      { id: 'estimate', estimateDate: '2026-06-10', installDate: '2026-07-10', createdAt: '2026-06-01T12:00:00.000Z' },
+      { id: 'created', estimateDate: undefined, installDate: '2026-07-20', createdAt: '2026-06-20T12:00:00.000Z' },
+      { id: 'old', estimateDate: '2025-12-31', installDate: '', createdAt: '2025-12-01T12:00:00.000Z' },
+    ];
+
+    assert.equal(zipReportJobDate(jobs[1], 'estimate'), '2026-06-20');
+    assert.deepEqual(
+      filterJobsByZipDate(jobs, 'estimate', '2026-06-10', '2026-06-20').map(({ id }) => id),
+      ['estimate', 'created']
+    );
+    assert.deepEqual(
+      filterJobsByZipDate(jobs, 'install', '2026-07-15', '2026-07-31').map(({ id }) => id),
+      ['created']
+    );
+  });
+
+  test('filters jobs by any selected status and supports an empty selection', () => {
+    const jobs = [
+      { id: 'pending', status: 'Pending' as const },
+      { id: 'verbal', status: 'Verbal' as const },
+      { id: 'won', status: 'Won' as const },
+      { id: 'lost', status: 'Lost' as const },
+    ];
+
+    assert.deepEqual(
+      filterJobsByZipStatus(jobs, ['Pending', 'Won']).map(({ id }) => id),
+      ['pending', 'won']
+    );
+    assert.deepEqual(filterJobsByZipStatus(jobs, []), []);
   });
 });
