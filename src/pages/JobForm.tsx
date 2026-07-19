@@ -5,6 +5,7 @@ import {
   getJob,
   getAllJobs,
   getAllCustomers,
+  addCustomer,
   addJob,
   updateJob,
   getCosts,
@@ -45,6 +46,7 @@ import {
   type InventoryReviewRow,
 } from '../lib/inventoryActuals';
 import { stageForLinkedJobStatus } from '../lib/leadPipeline';
+import { ensureCustomerPersistence } from '../lib/customerPersistence';
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -1871,6 +1873,8 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
       // Normalize chip blend name before saving (trim whitespace, title case)
       const normalizedChipBlend = normalizeChipBlendName(formData.chipBlend);
       const normalizedTags = parseJobTags(formData.tags);
+      const customerName = formData.customerName.trim();
+      const customerAddress = formData.customerAddress.trim();
       const savedAt = new Date().toISOString();
 
       // If chip blend is entered and not in the list, add it
@@ -1883,12 +1887,22 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
         setChipBlends([...chipBlends, newBlend]);
       }
 
+      await ensureCustomerPersistence(
+        { name: customerName, address: customerAddress },
+        {
+          getAllCustomers,
+          addCustomer,
+          generateId,
+          now: () => savedAt,
+        }
+      );
+
       const job: Job = {
         id: jobId || generateId(),
         name: formData.name,
         leadId: formData.leadId || undefined,
-        customerName: formData.customerName || undefined,
-        customerAddress: formData.customerAddress || undefined,
+        customerName: customerName || undefined,
+        customerAddress: customerAddress || undefined,
         systemId: formData.system,
         floorFootage: parseFloat(formData.floorFootage) || 0,
         verticalFootage: parseFloat(formData.verticalFootage) || 0,
