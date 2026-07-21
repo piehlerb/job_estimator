@@ -17,6 +17,45 @@ interface ReminderCalendarItem {
   reminder: JobReminder;
 }
 
+const DAY_IN_MS = 24 * 60 * 60 * 1000;
+const CALENDAR_INSTALL_LOOKBACK_DAYS = 31;
+
+function toCalendarDateString(year: number, month: number, day: number): string {
+  return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function toUtcDayNumber(dateString: string): number | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateString);
+  if (!match) return null;
+
+  const [, yearString, monthString, dayString] = match;
+  const year = Number(yearString);
+  const month = Number(monthString);
+  const day = Number(dayString);
+  const timestamp = Date.UTC(year, month - 1, day);
+  const date = new Date(timestamp);
+
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
+    return null;
+  }
+
+  return timestamp / DAY_IN_MS;
+}
+
+function getInstallDays(job: Job): number {
+  const installDays = Number(job.installDays);
+  return Number.isFinite(installDays) ? Math.max(1, Math.floor(installDays)) : 1;
+}
+
+function getInstallDayIndex(job: Job, dateString: string): number | null {
+  const installStart = toUtcDayNumber(job.installDate);
+  const targetDay = toUtcDayNumber(dateString);
+  if (installStart === null || targetDay === null) return null;
+
+  const dayIndex = targetDay - installStart;
+  return dayIndex >= 0 && dayIndex < getInstallDays(job) ? dayIndex : null;
+}
+
 export default function Calendar({ onEditJob }: CalendarProps) {
   const { permissions } = useAuth();
   const installOnly = permissions.calendar === 'install';
@@ -65,8 +104,17 @@ export default function Calendar({ onEditJob }: CalendarProps) {
     let cancelled = false;
 
     const loadVisibleMonth = async () => {
-      const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`;
-      const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
+      const monthStart = toCalendarDateString(year, month, 1);
+      const endDate = toCalendarDateString(year, month, daysInMonth);
+      // An install can begin in the previous month and continue into this one.
+      const installLookbackStart = new Date(year, month, 1 - CALENDAR_INSTALL_LOOKBACK_DAYS);
+      const startDate = dateMode === 'install'
+        ? toCalendarDateString(
+            installLookbackStart.getFullYear(),
+            installLookbackStart.getMonth(),
+            installLookbackStart.getDate()
+          )
+        : monthStart;
 
       setLoadingMonthJobs(true);
       try {
@@ -96,10 +144,9 @@ export default function Calendar({ onEditJob }: CalendarProps) {
   }, [year, month, daysInMonth, dateMode]);
 
   // Get jobs for a specific date
-  const getJobsForDate = (day: number): Job[] => {
-    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  const getJobsForDate = (dateStr: string): Job[] => {
     if (dateMode === 'install') {
-      return filteredJobs.filter((job) => job.installDate === dateStr);
+      return filteredJobs.filter((job) => getInstallDayIndex(job, dateStr) !== null);
     } else {
       return filteredJobs.filter((job) => {
         const estimateDate = job.estimateDate || job.createdAt?.slice(0, 10);
@@ -109,7 +156,7 @@ export default function Calendar({ onEditJob }: CalendarProps) {
   };
 
   const getRemindersForDate = (day: number): ReminderCalendarItem[] => {
-    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const dateStr = toCalendarDateString(year, month, day);
     const items: ReminderCalendarItem[] = [];
 
     filteredJobs.forEach((job) => {
@@ -290,7 +337,8 @@ export default function Calendar({ onEditJob }: CalendarProps) {
                   return <div key={`empty-${index}`} className="min-h-[100px] bg-slate-50 rounded-lg" />;
                 }
 
-                const dayJobs = getJobsForDate(day);
+                const dateStr = toCalendarDateString(year, month, day);
+                const dayJobs = getJobsForDate(dateStr);
                 const dayReminders = installOnly ? [] : getRemindersForDate(day);
 
                 return (
@@ -308,15 +356,25 @@ export default function Calendar({ onEditJob }: CalendarProps) {
                       {day}
                     </div>
                     <div className="space-y-1">
-                      {dayJobs.map((job) => (
-                        <button
-                          key={job.id}
-                          onClick={() => onEditJob(job.id)}
-                          className={`w-full text-left p-1.5 rounded border text-xs transition-colors hover:opacity-80 ${getStatusColor(job.status)}`}
-                        >
-                          <div className="font-medium truncate">{job.name || 'Untitled Job'}</div>
-                        </button>
-                      ))}
+                      {dayJobs.map((job) => {
+                        const installDayIndex = dateMode === 'install' ? getInstallDayIndex(job, dateStr) : null;
+                        const installDays = getInstallDays(job);
+                        const isMultiDayInstall = installDayIndex !== null && installDays > 1;
+                        const dayLabel = isMultiDayInstall ? `Day ${installDayIndex + 1} of ${installDays}` : null;
+
+                        return (
+                          <button
+                            key={job.id}
+                            type="button"
+                            onClick={() => onEditJob(job.id)}
+                            aria-label={`${job.name || 'Untitled Job'}${dayLabel ? `, ${dayLabel}` : ''}`}
+                            className={`w-full text-left p-1.5 rounded border text-xs transition-colors hover:opacity-80 ${getStatusColor(job.status)}`}
+                          >
+                            <div className="font-medium truncate">{job.name || 'Untitled Job'}</div>
+                            {dayLabel && <div className="mt-0.5 text-[10px] font-medium opacity-80">{dayLabel}</div>}
+                          </button>
+                        );
+                      })}
                       {dateMode === 'install' && dayReminders.map(({ job, reminder }) => (
                         <button
                           key={`${job.id}-${reminder.id}`}
