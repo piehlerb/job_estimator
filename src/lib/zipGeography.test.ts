@@ -3,6 +3,7 @@ import { describe, test } from 'node:test';
 import {
   aggregateJobsByZip,
   applyZipToAddress,
+  countZipReportJobs,
   extractZipCandidates,
   filterJobsByZipDate,
   filterJobsByZipStatus,
@@ -54,6 +55,34 @@ describe('NH/ME ZIP geography', () => {
       { zip: '04101', estimates: 2, won: 1, lost: 1 },
     ]);
     assert.deepEqual(report.excluded, { missing: 1, 'invalid-format': 0, 'out-of-scope-or-unrecognized': 1 });
+  });
+
+  test('counts alternative estimates once while retaining ordinary and bundled jobs', () => {
+    const report = aggregateJobsByZip([
+      { customerAddress: 'Manchester, NH 03101', status: 'Lost', groupId: 'alternatives-with-primary', groupType: 'alternative', isPrimaryEstimate: false },
+      { customerAddress: 'Portland, ME 04101', status: 'Won', groupId: 'alternatives-with-primary', groupType: 'alternative', isPrimaryEstimate: true },
+      { customerAddress: 'Portland, ME 04101', status: 'Verbal', groupId: 'alternatives-without-primary', groupType: 'alternative', isPrimaryEstimate: false },
+      { customerAddress: 'Manchester, NH 03101', status: 'Won', groupId: 'alternatives-without-primary', groupType: 'alternative', isPrimaryEstimate: false },
+      { customerAddress: 'Manchester, NH 03101', status: 'Pending' },
+      { customerAddress: 'Portland, ME 04101', status: 'Lost', groupId: 'bundle', groupType: 'bundled', isPrimaryEstimate: true },
+      { customerAddress: 'Manchester, NH 03101', status: 'Won', groupId: 'bundle', groupType: 'bundled', isPrimaryEstimate: false },
+    ]);
+
+    assert.deepEqual(report.totals, { estimates: 5, won: 2, lost: 1 });
+    assert.deepEqual(report.rows.map(({ zip, estimates, won, lost }) => ({ zip, estimates, won, lost })), [
+      { zip: '04101', estimates: 3, won: 1, lost: 1 },
+      { zip: '03101', estimates: 2, won: 1, lost: 0 },
+    ]);
+  });
+
+  test('counts alternative groups once while retaining ordinary and bundled jobs', () => {
+    assert.equal(countZipReportJobs([
+      { customerAddress: 'Manchester, NH 03101', status: 'Pending', groupId: 'alternatives', groupType: 'alternative', isPrimaryEstimate: false },
+      { customerAddress: 'Portland, ME 04101', status: 'Won', groupId: 'alternatives', groupType: 'alternative', isPrimaryEstimate: true },
+      { customerAddress: 'Portland, ME 04101', status: 'Pending' },
+      { customerAddress: 'Portland, ME 04101', status: 'Lost', groupId: 'bundle', groupType: 'bundled', isPrimaryEstimate: true },
+      { customerAddress: 'Manchester, NH 03101', status: 'Won', groupId: 'bundle', groupType: 'bundled', isPrimaryEstimate: false },
+    ]), 4);
   });
 
   test('adds a ZIP to an address or replaces the rightmost existing ZIP token', () => {
