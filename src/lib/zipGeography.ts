@@ -23,6 +23,7 @@ export type ZipAddressResolution =
 
 type ZipDatedJob = Pick<Job, 'estimateDate' | 'installDate' | 'createdAt'>;
 type ZipStatusJob = Pick<Job, 'status'>;
+type ZipAggregateJob = Pick<Job, 'customerAddress' | 'status' | 'groupId' | 'groupType' | 'isPrimaryEstimate'>;
 
 // A US ZIP token must be isolated from letters/digits and is either 5 digits or ZIP+4.
 // This deliberately does not infer a state from numeric prefixes or address text.
@@ -116,7 +117,34 @@ export function isLostStatus(status: JobStatus): boolean {
   return status === 'Lost';
 }
 
-export function aggregateJobsByZip(jobs: readonly Pick<Job, 'customerAddress' | 'status'>[]): ZipGeographyReport {
+function collapseAlternativeJobs(jobs: readonly ZipAggregateJob[]): ZipAggregateJob[] {
+  const logicalJobs: ZipAggregateJob[] = [];
+  const alternatives = new Map<string, { index: number; job: ZipAggregateJob }>();
+
+  for (const job of jobs) {
+    if (job.groupType !== 'alternative' || !job.groupId?.trim()) {
+      logicalJobs.push(job);
+      continue;
+    }
+
+    const representative = alternatives.get(job.groupId);
+    if (!representative) {
+      alternatives.set(job.groupId, { index: logicalJobs.length, job });
+      logicalJobs.push(job);
+    } else if (job.isPrimaryEstimate && !representative.job.isPrimaryEstimate) {
+      representative.job = job;
+      logicalJobs[representative.index] = job;
+    }
+  }
+
+  return logicalJobs;
+}
+
+export function countZipReportJobs(jobs: readonly ZipAggregateJob[]): number {
+  return collapseAlternativeJobs(jobs).length;
+}
+
+export function aggregateJobsByZip(jobs: readonly ZipAggregateJob[]): ZipGeographyReport {
   const aggregates = new Map<string, ZipAggregate>();
   const excluded: Record<ZipExclusionReason, number> = {
     missing: 0,
@@ -124,7 +152,7 @@ export function aggregateJobsByZip(jobs: readonly Pick<Job, 'customerAddress' | 
     'out-of-scope-or-unrecognized': 0,
   };
 
-  for (const job of jobs) {
+  for (const job of collapseAlternativeJobs(jobs)) {
     const resolution = resolveNhMeZip(job.customerAddress);
     if ('reason' in resolution) {
       excluded[resolution.reason] += 1;
