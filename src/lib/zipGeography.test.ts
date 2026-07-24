@@ -110,6 +110,19 @@ describe('NH/ME ZIP geography', () => {
     );
   });
 
+  test('buckets a created-date fallback by the local day, not the UTC day', () => {
+    // 11:30 PM local: behind UTC this instant already reads as the next day,
+    // which used to push evening estimates into the following report bucket.
+    const lateEvening = new Date(2026, 6, 24, 23, 30);
+    const job = { id: 'evening', estimateDate: undefined, installDate: '', createdAt: lateEvening.toISOString() };
+
+    assert.equal(zipReportJobDate(job, 'estimate'), '2026-07-24');
+    assert.deepEqual(
+      filterJobsByZipDate([job], 'estimate', '2026-07-24', '2026-07-24').map(({ id }) => id),
+      ['evening']
+    );
+  });
+
   test('filters jobs by any selected status and supports an empty selection', () => {
     const jobs = [
       { id: 'pending', status: 'Pending' as const },

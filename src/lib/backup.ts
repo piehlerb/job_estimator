@@ -6,6 +6,7 @@ import {
   EXPORT_VERSION,
 } from '../types';
 import { coatingSkuLabel } from './coatingSkus';
+import { localToday } from './dateUtils';
 import {
   getAllSystems,
   getCosts,
@@ -122,7 +123,7 @@ export function downloadExport(data: ExportData): void {
   const blob = new Blob([json], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
 
-  const date = new Date().toISOString().split('T')[0];
+  const date = localToday();
   const filename = `job-estimator-backup-${date}.json`;
 
   const a = document.createElement('a');

@@ -1,5 +1,6 @@
 import { Job, JobStatus } from '../types/index.js';
 import { NH_ME_ZIP_CENTROIDS, ZipCentroid } from './nhMeZipRegistry.js';
+import { toLocalDateString } from './dateUtils.js';
 
 export type ZipExclusionReason = 'missing' | 'invalid-format' | 'out-of-scope-or-unrecognized';
 export type ZipDateField = 'estimate' | 'install';
@@ -70,11 +71,16 @@ export function applyZipToAddress(address: string | undefined, zip: string): str
 
 function dateOnly(value?: string): string | null {
   if (!value) return null;
-  const isoDate = value.match(/^\d{4}-\d{2}-\d{2}/)?.[0];
-  if (isoDate) return isoDate;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
 
-  const timestamp = Date.parse(value);
-  return Number.isNaN(timestamp) ? null : new Date(timestamp).toISOString().slice(0, 10);
+  // Date-only fields (installDate, estimateDate) already hold a local calendar day.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+
+  // Anything with a time component (createdAt) is a UTC instant, so slicing its
+  // ISO prefix would bucket evening jobs into the next day. Use the local day.
+  const timestamp = Date.parse(trimmed);
+  return Number.isNaN(timestamp) ? null : toLocalDateString(new Date(timestamp));
 }
 
 export function zipReportJobDate(job: ZipDatedJob, field: ZipDateField): string | null {
