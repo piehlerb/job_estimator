@@ -6,6 +6,7 @@ import type { Job, JobStatus } from '../types';
 import { NH_ME_ZIP_CENTROIDS } from '../lib/nhMeZipRegistry';
 import {
   aggregateJobsByZip,
+  countZipReportJobs,
   filterJobsByZipDate,
   filterJobsByZipStatus,
   resolveNhMeZip,
@@ -184,17 +185,18 @@ export default function ZipGeographyReport({
     () => filterJobsByZipDate(jobs, dateField, bounds.start, bounds.end),
     [jobs, dateField, bounds.start, bounds.end]
   );
-  const statusCounts = useMemo(() => dateFilteredJobs.reduce<Record<JobStatus, number>>(
-    (counts, job) => {
-      counts[job.status] += 1;
-      return counts;
-    },
-    { Pending: 0, Verbal: 0, Won: 0, Lost: 0 }
-  ), [dateFilteredJobs]);
+  const statusCounts = useMemo(() => ({
+    Pending: countZipReportJobs(filterJobsByZipStatus(dateFilteredJobs, ['Pending'])),
+    Verbal: countZipReportJobs(filterJobsByZipStatus(dateFilteredJobs, ['Verbal'])),
+    Won: countZipReportJobs(filterJobsByZipStatus(dateFilteredJobs, ['Won'])),
+    Lost: countZipReportJobs(filterJobsByZipStatus(dateFilteredJobs, ['Lost'])),
+  }), [dateFilteredJobs]);
   const filteredJobs = useMemo(
     () => filterJobsByZipStatus(dateFilteredJobs, selectedStatuses),
     [dateFilteredJobs, selectedStatuses]
   );
+  const filteredJobCount = useMemo(() => countZipReportJobs(filteredJobs), [filteredJobs]);
+  const totalJobCount = useMemo(() => countZipReportJobs(jobs), [jobs]);
   const report = useMemo(() => aggregateJobsByZip(filteredJobs), [filteredJobs]);
   const selectedRow = report.rows.find((row) => row.zip === selectedZip) ?? report.rows[0] ?? null;
   const selectedZipRef = useRef<string | null>(selectedRow?.zip ?? null);
@@ -399,7 +401,7 @@ export default function ZipGeographyReport({
             </div>
           </div>
           <p className="rounded-lg bg-lime-50 px-3 py-2 text-xs font-medium text-gf-dark-green">
-            {filteredJobs.length} of {jobs.length} jobs · {dateRangeLabel(datePreset, bounds.start, bounds.end)} · {statusFilterLabel(selectedStatuses)}
+            {filteredJobCount} of {totalJobCount} jobs · {dateRangeLabel(datePreset, bounds.start, bounds.end)} · {statusFilterLabel(selectedStatuses)}
           </p>
         </div>
         {datePreset === 'custom' && (
