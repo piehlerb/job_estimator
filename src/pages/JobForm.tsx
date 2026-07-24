@@ -47,6 +47,7 @@ import {
 } from '../lib/inventoryActuals';
 import { stageForLinkedJobStatus } from '../lib/leadPipeline';
 import { ensureCustomerPersistence } from '../lib/customerPersistence';
+import { localToday, toLocalDateString, timestampToLocalDateString } from '../lib/dateUtils';
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -177,7 +178,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
   const [commTemplates, setCommTemplates] = useState<CommunicationTemplate[]>([]);
   const [copiedReminderId, setCopiedReminderId] = useState<string | null>(null);
   const [followUpForm, setFollowUpForm] = useState({
-    date: new Date().toISOString().slice(0, 10),
+    date: localToday(),
     notes: '',
   });
 
@@ -219,7 +220,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
     baseColor: '' as BaseColor | '',
     status: 'Pending' as JobStatus,
     probability: '20',
-    estimateDate: new Date().toISOString().split('T')[0],
+    estimateDate: localToday(),
     decisionDate: '',
     notes: '',
     includeBasecoatTint: false,
@@ -654,7 +655,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
             baseColor: job.baseColor || '',
             status: job.status || 'Pending',
             probability: (job.probability?.toString()) ?? (job.status === 'Won' ? '100' : job.status === 'Lost' ? '0' : job.status === 'Verbal' ? '80' : '20'),
-            estimateDate: job.estimateDate || job.createdAt.split('T')[0],
+            estimateDate: job.estimateDate || timestampToLocalDateString(job.createdAt),
             decisionDate: job.decisionDate || '',
             notes: job.notes || '',
             includeBasecoatTint: job.includeBasecoatTint || false,
@@ -1126,7 +1127,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
     setReminderForm({
       subject: '',
       details: '',
-      dueDate: defaultDate.toISOString().split('T')[0],
+      dueDate: toLocalDateString(defaultDate),
       dueTime: pricing.defaultReminderTime ?? '05:00',
     });
     setShowReminderModal(true);
@@ -1252,7 +1253,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
       nextDefaultDate.setDate(nextDefaultDate.getDate() + nextDefaultDays);
       setNextReminderForm({
         subject: '',
-        dueDate: nextDefaultDate.toISOString().split('T')[0],
+        dueDate: toLocalDateString(nextDefaultDate),
         dueTime: pricing.defaultReminderTime ?? '05:00',
         details: '',
       });
@@ -1328,7 +1329,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
       console.error('Error saving follow-up:', error);
       alert('Error saving follow-up. Please try again.');
     }
-    setFollowUpForm({ date: new Date().toISOString().slice(0, 10), notes: '' });
+    setFollowUpForm({ date: localToday(), notes: '' });
     setShowFollowUpForm(false);
   };
 
@@ -4134,7 +4135,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
                   <button
                     type="button"
                     onClick={() => {
-                      setFollowUpForm({ date: new Date().toISOString().slice(0, 10), notes: '' });
+                      setFollowUpForm({ date: localToday(), notes: '' });
                       setShowFollowUpForm(true);
                     }}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-medium bg-gf-lime text-white rounded-lg hover:bg-gf-dark-green transition-colors"

@@ -338,7 +338,7 @@ export default function Customers() {
                       </td>
                       <td className="px-4 lg:px-6 py-4 text-sm text-right text-slate-700">
                         {customer.lastInstallDate
-                          ? new Date(customer.lastInstallDate).toLocaleDateString()
+                          ? new Date(customer.lastInstallDate + 'T12:00:00').toLocaleDateString()
                           : '-'}
                       </td>
                       <td className="px-4 lg:px-6 py-4 text-right">

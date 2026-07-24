@@ -6,6 +6,7 @@ import { loadAllHistoricalJobsFromSupabase } from '../lib/sync';
 import ZipGeographyReport from '../components/ZipGeographyReport';
 import LeadCreatedDateReport from '../components/LeadCreatedDateReport';
 import { applyZipToAddress } from '../lib/zipGeography';
+import { localToday, toLocalDateString } from '../lib/dateUtils';
 
 interface JobWithCalc {
   job: Job;
@@ -100,7 +101,7 @@ function monthLabel(month: string): string {
 function getDefaultEmpStart() {
   const d = new Date();
   d.setDate(d.getDate() - 13);
-  return d.toISOString().slice(0, 10);
+  return toLocalDateString(d);
 }
 
 function getDefaultExpStart() {
@@ -134,11 +135,11 @@ export default function Reporting({ onEditJob }: ReportingProps) {
 
   // Employee hours date range
   const [empStartDate, setEmpStartDate] = useState(getDefaultEmpStart);
-  const [empEndDate, setEmpEndDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [empEndDate, setEmpEndDate] = useState(() => localToday());
 
   // Expenses report date range (defaults to year-to-date)
   const [expStartDate, setExpStartDate] = useState(getDefaultExpStart);
-  const [expEndDate, setExpEndDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [expEndDate, setExpEndDate] = useState(() => localToday());
 
   // Lead tracking data
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -289,6 +290,7 @@ export default function Reporting({ onEditJob }: ReportingProps) {
   const filteredJobs = useMemo(() => {
     const today = new Date();
     const todayDateOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
 
     const matchesDateRange = (job: Job) => {
       if (dateRangePreset === 'all') return true;
@@ -317,13 +319,13 @@ export default function Reporting({ onEditJob }: ReportingProps) {
 
       if (dateRangePreset === 'ytd') {
         const startOfYear = new Date(todayDateOnly.getFullYear(), 0, 1);
-        return selectedDate >= startOfYear && selectedDate <= todayDateOnly;
+        return selectedDate >= startOfYear && selectedDate <= endOfToday;
       }
 
       const days = dateRangePreset === '30d' ? 30 : 90;
       const start = new Date(todayDateOnly);
       start.setDate(start.getDate() - days);
-      return selectedDate >= start && selectedDate <= todayDateOnly;
+      return selectedDate >= start && selectedDate <= endOfToday;
     };
 
     let filtered = jobsWithCalc.filter(({ job }) =>
@@ -1194,7 +1196,7 @@ export default function Reporting({ onEditJob }: ReportingProps) {
                     type="button"
                     onClick={() => {
                       setEmpStartDate(getDefaultEmpStart());
-                      setEmpEndDate(new Date().toISOString().slice(0, 10));
+                      setEmpEndDate(localToday());
                     }}
                     className="px-3 py-1.5 text-xs font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-lg transition-colors"
                   >
@@ -1287,7 +1289,7 @@ export default function Reporting({ onEditJob }: ReportingProps) {
                     type="button"
                     onClick={() => {
                       setExpStartDate(getDefaultExpStart());
-                      setExpEndDate(new Date().toISOString().slice(0, 10));
+                      setExpEndDate(localToday());
                     }}
                     className="px-3 py-1.5 text-xs font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-lg transition-colors"
                   >

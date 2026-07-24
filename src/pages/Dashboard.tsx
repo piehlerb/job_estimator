@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { loadOlderJobsFromSupabase } from '../lib/sync';
 import { getJobWorkingSetCutoff } from '../lib/jobSyncPolicy';
 import { findPendingJobsWithoutActiveReminders } from '../lib/reminderCoverage';
+import { localToday, timestampToLocalDateString } from '../lib/dateUtils';
 
 interface DashboardProps {
   onViewJobSheet: (id: string) => void;
@@ -404,7 +405,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
   };
 
   const overdueReminders = useMemo(() => {
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = localToday();
     const items: (ReminderItem & { customerName?: string })[] = [];
 
     jobsWithCalc.forEach(({ job }) => {
@@ -495,7 +496,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
   }, [jobsWithCalc, dashboardPricing]);
 
   const todayItems = useMemo(() => {
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = localToday();
     const todayMs = new Date(todayStr + 'T12:00:00').getTime();
     const msPerDay = 24 * 60 * 60 * 1000;
 
@@ -514,7 +515,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
         }
       }
 
-      if ((job.estimateDate || job.createdAt.split('T')[0]) === todayStr) {
+      if ((job.estimateDate || timestampToLocalDateString(job.createdAt)) === todayStr) {
         estimates.push({ job });
       }
 
@@ -1046,7 +1047,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
             <div className="divide-y divide-red-100">
               {overdueReminders.map((reminder) => {
                 const daysOverdue = Math.floor(
-                  (new Date(new Date().toISOString().split('T')[0] + 'T00:00:00').getTime() -
+                  (new Date(localToday() + 'T00:00:00').getTime() -
                    new Date(reminder.dueAt).getTime()) / (24 * 60 * 60 * 1000)
                 );
                 return (
