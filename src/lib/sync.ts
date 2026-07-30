@@ -63,14 +63,36 @@ const SELECT_PAGE_SIZE = 500; // Supabase/PostgREST page size for reads
 
 // Current organization context — set by AuthContext when user logs in.
 // When set, push attaches org_id to records and pull filters by org_id.
+//
+// `_orgContextResolved` distinguishes "we know this user has no org" (resolved,
+// personal scope) from "we haven't found out yet" (unresolved). Syncing while
+// unresolved is destructive: pushes would stamp org_id = NULL on org records,
+// making them invisible to every other device, and pulls would silently fetch
+// the empty personal scope while still advancing the sync cursor.
 let _currentOrgId: string | null = null;
+let _orgContextResolved = false;
 
 export function setSyncOrgContext(orgId: string | null): void {
   _currentOrgId = orgId;
+  _orgContextResolved = true;
+}
+
+/**
+ * Mark the organization context as unknown (signed out, or the org lookup
+ * failed). Sync stays parked until it resolves again rather than falling back
+ * to personal scope.
+ */
+export function clearSyncOrgContext(): void {
+  _currentOrgId = null;
+  _orgContextResolved = false;
 }
 
 export function getSyncOrgContext(): string | null {
   return _currentOrgId;
+}
+
+export function isSyncOrgContextResolved(): boolean {
+  return _orgContextResolved;
 }
 
 function getScopedTableQuery(tableName: string, userId: string): any {
@@ -247,6 +269,13 @@ export async function pushToSupabase(): Promise<{
       throw new Error('User not authenticated');
     }
 
+    if (!_orgContextResolved) {
+      // Pushing now would stamp org_id = NULL on org-scoped records and hide
+      // them from every other device. Leave the queue intact and retry later.
+      console.warn('[Sync] Skipping push — organization context not resolved yet');
+      return { recordsPushed: 0, errors: [] };
+    }
+
     // Get pending changes from queue
     const pendingChanges = await getSyncQueue();
 
@@ -418,6 +447,11 @@ export async function pushAllToSupabase(options?: { bumpTimestamps?: boolean }):
       throw new Error('User not authenticated');
     }
 
+    if (!_orgContextResolved) {
+      console.warn('[Sync] Skipping full push — organization context not resolved yet');
+      return { recordsPushed: 0, errors: ['Organization context not resolved'] };
+    }
+
     console.log('[Sync] Performing FULL push of all data');
 
     // Define tables to sync in order (respecting dependencies)
@@ -523,6 +557,13 @@ export async function pullFromSupabase(): Promise<{
     const user = await getCurrentUser();
     if (!user) {
       throw new Error('User not authenticated');
+    }
+
+    if (!_orgContextResolved) {
+      // Pulling the personal scope here would return nothing while still
+      // advancing the sync cursor, permanently skipping org records that
+      // arrived during the window.
+      throw new Error('Organization context not resolved');
     }
 
     const lastSync = await getLastSyncTimestamp();
@@ -631,6 +672,9 @@ async function ensureAuthenticatedUser() {
   const user = await getCurrentUser();
   if (!user) {
     throw new Error('User not authenticated');
+  }
+  if (!_orgContextResolved) {
+    throw new Error('Organization context not resolved');
   }
   return user;
 }
@@ -761,6 +805,21 @@ export async function loadAllHistoricalJobsFromSupabase(): Promise<HistoricalJob
  */
 export async function syncWithSupabase(): Promise<SyncResult> {
   const startTime = new Date().toISOString();
+
+  // Park the sync until AuthContext has resolved the org context. Reported as
+  // a quiet no-op (no errors) so it doesn't surface as a sync failure — the
+  // next scheduled or manual sync picks up once the org lookup lands.
+  if (!_orgContextResolved) {
+    console.warn('[Sync] Skipping sync — organization context not resolved yet');
+    return {
+      success: false,
+      recordsPushed: 0,
+      recordsPulled: 0,
+      conflicts: 0,
+      errors: [],
+      timestamp: startTime,
+    };
+  }
 
   try {
     // Push local changes first — ensures user's saves aren't overwritten by a stale pull

@@ -12,7 +12,7 @@ import {
   getPendingInviteCode,
   joinPendingOrganizationInvite,
 } from '../lib/organizationService';
-import { setSyncOrgContext, clearLastSyncTimestamp } from '../lib/sync';
+import { setSyncOrgContext, clearSyncOrgContext, clearLastSyncTimestamp } from '../lib/sync';
 import { resolvePermissions, FULL_PERMISSIONS } from '../lib/permissions';
 import type { Organization, OrgAccessLevel, MemberPermissions } from '../types';
 
@@ -49,6 +49,24 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // cursor whenever the org context changes (e.g. after first org-aware load).
   const lastSyncedOrgRef = useRef<string | null | undefined>(undefined);
 
+  // Retry the org lookup with backoff whenever it fails. Sync is parked while
+  // the org context is unresolved, so recovering here is what un-parks it.
+  const orgRetryRef = useRef<{ attempt: number; timer: number | null }>({ attempt: 0, timer: null });
+  const loadOrganizationRef = useRef<() => void>(() => {});
+
+  const scheduleOrgRetry = useCallback(() => {
+    const state = orgRetryRef.current;
+    if (state.timer !== null) return;
+
+    const delayMs = Math.min(30000, 2000 * 2 ** state.attempt);
+    state.attempt += 1;
+    state.timer = window.setTimeout(() => {
+      state.timer = null;
+      console.log('[Auth] Retrying organization load...');
+      loadOrganizationRef.current();
+    }, delayMs);
+  }, []);
+
   const loadOrganization = useCallback(async () => {
     setOrgLoading(true);
     try {
@@ -63,6 +81,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
           console.warn('[Auth] Failed to join pending organization invite:', inviteError);
         }
       }
+
+      // Lookup succeeded (org or genuinely org-less) — reset the retry backoff.
+      orgRetryRef.current.attempt = 0;
 
       if (result) {
         setOrganization(result.org);
@@ -92,11 +113,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setOrganization(null);
       setOrgRole(null);
       setMemberPermissions(null);
-      setSyncOrgContext(null);
+      // Unknown, NOT personal scope: a transient failure here used to leave the
+      // session syncing as org-less, which stamped org_id = NULL on pushed
+      // records and hid them from every other device. Sync stays parked until
+      // a retry resolves the org, so keep retrying rather than stranding the
+      // session until the next reload.
+      clearSyncOrgContext();
+      scheduleOrgRetry();
     } finally {
       setOrgLoading(false);
     }
-  }, []);
+  }, [scheduleOrgRetry]);
+
+  loadOrganizationRef.current = loadOrganization;
 
   useEffect(() => {
     // Detect password recovery flow. Two signals, either one is sufficient:
@@ -141,12 +170,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setOrgRole(null);
         setOrgAccessLevel(null);
         setMemberPermissions(null);
-        setSyncOrgContext(null);
+        clearSyncOrgContext();
+        lastSyncedOrgRef.current = undefined;
       }
     });
 
     return () => {
       unsubscribe();
+      if (orgRetryRef.current.timer !== null) {
+        clearTimeout(orgRetryRef.current.timer);
+        orgRetryRef.current.timer = null;
+      }
     };
   }, [loadOrganization]);
 
