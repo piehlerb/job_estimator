@@ -20,6 +20,19 @@ export function localToday(): string {
   return toLocalDateString();
 }
 
+/**
+ * Add (or subtract) whole days to a YYYY-MM-DD string, staying on the local
+ * calendar. Returns '' when the input is not a usable date-only string.
+ */
+export function addDaysToLocalDate(dateOnly: string, days: number): string {
+  if (!dateOnly) return '';
+  const [y, m, d] = dateOnly.split('-').map(Number);
+  if (!y || !m || !d) return '';
+  const date = new Date(y, m - 1, d);
+  date.setDate(date.getDate() + days);
+  return toLocalDateString(date);
+}
+
 /** Local calendar day (YYYY-MM-DD) of an ISO timestamp string. */
 export function timestampToLocalDateString(isoTimestamp: string): string {
   return toLocalDateString(new Date(isoTimestamp));

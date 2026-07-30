@@ -685,6 +685,7 @@ export function getDefaultPricing(): Pricing {
     chipReclaimRate: 0,
     defaultDayHours: 8,
     staleContactDays: 30,
+    autoReminderRules: [],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };

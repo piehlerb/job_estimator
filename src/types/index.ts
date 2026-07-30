@@ -105,8 +105,22 @@ export interface Pricing {
   staleContactDays?: number; // Days without contact before a job appears in "Needs Contact" (default 30)
   defaultReminderDays?: number; // Days from today for default reminder date (default 7)
   defaultReminderTime?: string; // Default reminder time in HH:mm format (default "05:00")
+  autoReminderRules?: AutoReminderRule[]; // Reminders added automatically to new jobs
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * A rule that automatically adds a reminder to a newly created job.
+ * Timing is relative to the job's estimate date.
+ */
+export interface AutoReminderRule {
+  id: string;
+  subject: string;             // Reminder subject
+  templateId?: string;         // CommunicationTemplate used to prefill reminder details
+  daysAfterEstimate: number;   // Days added to the job's estimate date (0 = day of estimate)
+  time?: string;               // HH:mm; falls back to Pricing.defaultReminderTime
+  enabled: boolean;
 }
 
 export interface Customer {
@@ -274,6 +288,7 @@ export interface JobReminder {
   dueAt: string; // ISO timestamp
   notifiedAt?: string;
   completed?: boolean;
+  autoRuleId?: string; // Set when created by an AutoReminderRule (see Pricing.autoReminderRules)
   createdAt: string;
   updatedAt: string;
 }

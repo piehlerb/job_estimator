@@ -13,10 +13,31 @@ import {
   updateCommTemplate,
   deleteCommTemplate,
 } from '../lib/db';
-import { Pricing, BaseCoatColor, DiscountConfig, DiscountMode, TagDiscount, CommunicationTemplate } from '../types';
+import { Pricing, BaseCoatColor, DiscountConfig, DiscountMode, TagDiscount, CommunicationTemplate, AutoReminderRule } from '../types';
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+}
+
+/** Editable form shape for an auto-reminder rule (numeric fields held as strings while typing). */
+type AutoReminderRuleDraft = {
+  id: string;
+  subject: string;
+  templateId: string;
+  daysAfterEstimate: string;
+  time: string;
+  enabled: boolean;
+};
+
+function toRuleDraft(rule: AutoReminderRule): AutoReminderRuleDraft {
+  return {
+    id: rule.id,
+    subject: rule.subject,
+    templateId: rule.templateId || '',
+    daysAfterEstimate: rule.daysAfterEstimate.toString(),
+    time: rule.time || '',
+    enabled: rule.enabled,
+  };
 }
 
 export default function Settings() {
@@ -34,6 +55,11 @@ export default function Settings() {
   const [showTemplateForm, setShowTemplateForm] = useState(false);
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
   const [templateForm, setTemplateForm] = useState({ name: '', body: '' });
+
+  // Auto-add reminder rules state
+  const [autoReminderRules, setAutoReminderRules] = useState<AutoReminderRuleDraft[]>([]);
+  const [savingAutoReminders, setSavingAutoReminders] = useState(false);
+  const [autoReminderSaved, setAutoReminderSaved] = useState(false);
 
   const [form, setForm] = useState({
     minimumMarginBuffer: '',
@@ -98,6 +124,7 @@ export default function Settings() {
         defaultReminderDays: (mergedPricing.defaultReminderDays ?? 7).toString(),
         defaultReminderTime: mergedPricing.defaultReminderTime ?? '05:00',
       });
+      setAutoReminderRules((mergedPricing.autoReminderRules ?? []).map(toRuleDraft));
 
       // Load discount config, migrating from legacy fields if needed
       if (mergedPricing.discountConfig) {
@@ -133,6 +160,7 @@ export default function Settings() {
         defaultReminderDays: '7',
         defaultReminderTime: '05:00',
       });
+      setAutoReminderRules([]);
       setDiscountMode('per_sqft');
       setPerSqftAmount('1');
       setPerSqftMaxSqft('500');
@@ -258,6 +286,75 @@ export default function Settings() {
 
   const handleRemoveTagDiscount = (id: string) => {
     setTagDiscounts(tagDiscounts.filter(td => td.id !== id));
+  };
+
+  // Auto-add reminder rule handlers
+  const handleAddAutoReminderRule = () => {
+    setAutoReminderSaved(false);
+    setAutoReminderRules(rules => [
+      ...rules,
+      {
+        id: generateId(),
+        subject: '',
+        templateId: '',
+        daysAfterEstimate: (parseInt(form.defaultReminderDays) || 7).toString(),
+        time: '',
+        enabled: true,
+      },
+    ]);
+  };
+
+  const handleUpdateAutoReminderRule = (id: string, patch: Partial<AutoReminderRuleDraft>) => {
+    setAutoReminderSaved(false);
+    setAutoReminderRules(rules => rules.map(rule => (rule.id === id ? { ...rule, ...patch } : rule)));
+  };
+
+  const handleRemoveAutoReminderRule = (id: string) => {
+    setAutoReminderSaved(false);
+    setAutoReminderRules(rules => rules.filter(rule => rule.id !== id));
+  };
+
+  const handleSaveAutoReminders = async () => {
+    const cleaned: AutoReminderRule[] = [];
+    for (const draft of autoReminderRules) {
+      const subject = draft.subject.trim();
+      const template = commTemplates.find(t => t.id === draft.templateId);
+      if (!subject && !template) {
+        alert('Each auto-add reminder needs a subject or a template.');
+        return;
+      }
+      const days = parseInt(draft.daysAfterEstimate);
+      if (isNaN(days) || days < 0) {
+        alert(`Enter a valid number of days for "${subject || template?.name}".`);
+        return;
+      }
+      cleaned.push({
+        id: draft.id,
+        subject: subject || template?.name || '',
+        templateId: template ? template.id : undefined,
+        daysAfterEstimate: days,
+        time: draft.time || undefined,
+        enabled: draft.enabled,
+      });
+    }
+
+    setSavingAutoReminders(true);
+    try {
+      const updatedPricing: Pricing = {
+        ...pricing,
+        autoReminderRules: cleaned,
+        updatedAt: new Date().toISOString(),
+      };
+      await savePricing(updatedPricing);
+      setPricing(updatedPricing);
+      setAutoReminderRules(cleaned.map(toRuleDraft));
+      setAutoReminderSaved(true);
+    } catch (error) {
+      console.error('Error saving auto-add reminders:', error);
+      alert('Error saving auto-add reminders. Please try again.');
+    } finally {
+      setSavingAutoReminders(false);
+    }
   };
 
   const resetColorForm = () => {
@@ -1006,6 +1103,121 @@ export default function Settings() {
           >
             {saving ? 'Saving...' : 'Save Settings'}
           </button>
+        </div>
+      </div>
+
+      {/* Auto-Add Reminders */}
+      <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900">Auto-Add Reminders</h3>
+            <p className="text-sm text-slate-600 mt-1">
+              These reminders are added automatically to every new job, scheduled a set number of days from the job's estimate date. Pick a template to prefill the reminder message.
+            </p>
+          </div>
+          <button
+            onClick={handleAddAutoReminderRule}
+            className="flex items-center gap-2 px-4 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors shrink-0"
+          >
+            <Plus size={18} />
+            <span>Add Reminder</span>
+          </button>
+        </div>
+
+        {commTemplates.length === 0 && (
+          <p className="text-xs text-slate-500 mb-4">
+            Tip: add a Communication Template above to prefill each auto-added reminder's message.
+          </p>
+        )}
+
+        {autoReminderRules.length === 0 ? (
+          <p className="text-sm text-slate-500 italic">No auto-add reminders configured. New jobs will not get reminders automatically.</p>
+        ) : (
+          <div className="space-y-3">
+            {autoReminderRules.map((rule) => (
+              <div key={rule.id} className="border border-slate-200 rounded-lg p-4">
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
+                  <div className="md:col-span-4">
+                    <label className="block text-xs font-semibold text-slate-900 mb-1">Subject</label>
+                    <input
+                      type="text"
+                      value={rule.subject}
+                      onChange={(e) => handleUpdateAutoReminderRule(rule.id, { subject: e.target.value })}
+                      placeholder="e.g. Follow-up call"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime text-sm"
+                    />
+                  </div>
+                  <div className="md:col-span-3">
+                    <label className="block text-xs font-semibold text-slate-900 mb-1">Template</label>
+                    <select
+                      value={rule.templateId}
+                      onChange={(e) => handleUpdateAutoReminderRule(rule.id, { templateId: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime text-sm"
+                    >
+                      <option value="">— None —</option>
+                      {commTemplates.map((t) => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-semibold text-slate-900 mb-1">Days After Estimate</label>
+                    <input
+                      type="number"
+                      step="1"
+                      min="0"
+                      value={rule.daysAfterEstimate}
+                      onChange={(e) => handleUpdateAutoReminderRule(rule.id, { daysAfterEstimate: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime text-sm"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-semibold text-slate-900 mb-1">Time</label>
+                    <input
+                      type="time"
+                      value={rule.time}
+                      onChange={(e) => handleUpdateAutoReminderRule(rule.id, { time: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime text-sm"
+                    />
+                    <p className="text-xs text-slate-500 mt-1">Blank uses {form.defaultReminderTime || '05:00'}.</p>
+                  </div>
+                  <div className="md:col-span-1 flex items-center justify-between md:justify-end gap-2 md:pt-6">
+                    <label
+                      className="flex items-center gap-2 text-xs font-semibold text-slate-900"
+                      title={rule.enabled ? 'Active' : 'Paused'}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={rule.enabled}
+                        onChange={(e) => handleUpdateAutoReminderRule(rule.id, { enabled: e.target.checked })}
+                        className="w-4 h-4 text-gf-lime focus:ring-gf-lime border-slate-300 rounded"
+                      />
+                      <span className="md:hidden">Active</span>
+                    </label>
+                    <button
+                      onClick={() => handleRemoveAutoReminderRule(rule.id)}
+                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      title="Remove"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="pt-4 flex items-center gap-3">
+          <button
+            type="button"
+            disabled={savingAutoReminders}
+            onClick={handleSaveAutoReminders}
+            className="px-6 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors disabled:opacity-50"
+          >
+            {savingAutoReminders ? 'Saving...' : 'Save Auto-Add Reminders'}
+          </button>
+          {autoReminderSaved && <span className="text-sm text-gf-dark-green font-medium">Saved</span>}
         </div>
       </div>
     </div>

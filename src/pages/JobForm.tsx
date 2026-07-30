@@ -48,6 +48,7 @@ import {
 import { stageForLinkedJobStatus } from '../lib/leadPipeline';
 import { ensureCustomerPersistence } from '../lib/customerPersistence';
 import { localToday, toLocalDateString, timestampToLocalDateString } from '../lib/dateUtils';
+import { buildAutoReminders } from '../lib/autoReminders';
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -1898,6 +1899,22 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
         }
       );
 
+      // New jobs pick up the auto-add reminders configured in Settings, timed
+      // off the estimate date. Existing jobs are left alone so rule changes
+      // never backfill reminders onto older jobs.
+      const autoReminders = jobId
+        ? []
+        : buildAutoReminders({
+            rules: pricing.autoReminderRules,
+            templates: commTemplates,
+            estimateDate: formData.estimateDate,
+            customerName,
+            defaultTime: pricing.defaultReminderTime,
+            existingReminders: reminders,
+            generateId,
+          });
+      const allReminders = [...reminders, ...autoReminders];
+
       const job: Job = {
         id: jobId || generateId(),
         name: formData.name,
@@ -1959,8 +1976,8 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
         actualExpenseAdjustment: parseFloat(actualMaterials.actualExpenseAdjustment) || undefined,
         actualExpenseAdjustmentNotes: actualMaterials.actualExpenseAdjustmentNotes.trim() || undefined,
         products: jobProducts.length > 0 ? jobProducts : undefined,
-        reminders: reminders.length > 0
-          ? [...reminders].sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime())
+        reminders: allReminders.length > 0
+          ? [...allReminders].sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime())
           : undefined,
         followUps: followUps.length > 0
           ? [...followUps].sort((a, b) => a.date.localeCompare(b.date))
@@ -1982,6 +1999,10 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
         await updateJob(job);
       } else {
         await addJob(job);
+      }
+      if (autoReminders.length > 0) {
+        setReminders(allReminders);
+        await requestReminderNotificationPermission();
       }
       await syncLinkedLeadFromJob(job);
 
@@ -4079,7 +4100,12 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
                           className="text-left flex-1"
                           disabled={reminder.completed}
                         >
-                          <p className={`text-sm font-semibold ${reminder.completed ? 'line-through text-slate-400' : 'text-slate-900'}`}>{reminder.subject}</p>
+                          <p className={`text-sm font-semibold ${reminder.completed ? 'line-through text-slate-400' : 'text-slate-900'}`}>
+                            {reminder.subject}
+                            {reminder.autoRuleId && (
+                              <span className="ml-2 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-slate-100 text-slate-600 rounded align-middle">Auto</span>
+                            )}
+                          </p>
                           <p className="text-xs text-slate-600">Due {new Date(reminder.dueAt).toLocaleString()}</p>
                           {reminder.details && (
                             <p className="text-xs text-slate-500 mt-1 whitespace-pre-wrap">{reminder.details}</p>
