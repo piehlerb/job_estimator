@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getAllAdSpend, getAllJobs, getAllLaborers, getAllLeadAppointments, getAllLeads, getCosts, getDefaultCosts, getPricing, getDefaultPricing, setAdSpendForMonth, updateJob } from '../lib/db';
-import { calculateJobOutputs, calculateActualCosts } from '../lib/calculations';
+import { calculateJobOutputs, calculateActualCosts, getActualLaborerHours } from '../lib/calculations';
 import { ActualCosts, AdSpend, Costs, Job, JobCalculation, JobStatus, Laborer, Lead, LeadAppointment, LeadStage, Pricing } from '../types';
 import { loadAllHistoricalJobsFromSupabase } from '../lib/sync';
 import ZipGeographyReport from '../components/ZipGeographyReport';
@@ -491,7 +491,7 @@ export default function Reporting({ onEditJob }: ReportingProps) {
             map.set(laborerId, { name, hours: 0, jobIds: new Set() });
           }
           const entry = map.get(laborerId)!;
-          entry.hours += day.hours;
+          entry.hours += getActualLaborerHours(day, laborerId);
           entry.jobIds.add(job.id);
         });
       });

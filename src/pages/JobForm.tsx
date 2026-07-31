@@ -36,6 +36,7 @@ import { coatingSkuId, findCoatingSku, DEFAULT_COATING_SKUS } from '../lib/coati
 import { resolveJobMaterials, defaultBaseComponents, sharesValid } from '../lib/materialAllocation';
 import { calculateJobOutputs, calculateActualCosts } from '../lib/calculations';
 import InstallDayScheduleComponent from '../components/InstallDaySchedule';
+import ActualDayScheduleComponent from '../components/ActualDaySchedule';
 import { convertLegacyJobToSchedule } from '../lib/jobMigration';
 import { compareSnapshots, SnapshotChanges } from '../lib/snapshotComparison';
 import SnapshotChangeBanner, { SelectedChanges } from '../components/SnapshotChangeBanner';
@@ -697,7 +698,16 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
             actualsInitialized.current = true;
           } else if (schedule) {
             // Pre-populate from estimated schedule as starting point
-            setActualInstallSchedule(schedule.map(d => ({ ...d })));
+            setActualInstallSchedule(schedule.map(d => ({ ...d, laborerIds: [...d.laborerIds] })));
+          } else if (job.installDays >= 1) {
+            // No estimated schedule to copy — seed empty days matching the plan
+            setActualInstallSchedule(
+              Array.from({ length: Math.round(job.installDays) }, (_, i) => ({
+                day: i + 1,
+                hours: job.installDays > 0 ? job.jobHours / job.installDays : 0,
+                laborerIds: [],
+              }))
+            );
           }
           if (
             job.actualBaseCoatGallons != null ||
@@ -3814,16 +3824,16 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
               {/* Section A: Actual Labor */}
               <div className="rounded-lg border border-slate-200 p-4 sm:p-5 bg-slate-50">
                 <h3 className="text-sm sm:text-base font-semibold text-slate-900 mb-1">Actual Labor</h3>
-                <p className="text-xs text-slate-500 mb-4">Record actual hours and crew for each install day.</p>
-                <InstallDayScheduleComponent
-                  installDays={parseFloat(formData.installDays) || 1}
+                <p className="text-xs text-slate-500 mb-4">Record actual hours and crew for each install day. Add or remove days if the job ran long or finished early.</p>
+                <ActualDayScheduleComponent
                   schedule={actualInstallSchedule}
                   availableLaborers={existingJob
                     ? [...activeLaborers, ...existingJob.laborersSnapshot.filter(sl => !activeLaborers.some(al => al.id === sl.id))]
                     : activeLaborers
                   }
-                  onChange={(s) => setActualInstallSchedule(s as ActualDaySchedule[])}
+                  onChange={setActualInstallSchedule}
                   defaultDayHours={pricing.defaultDayHours ?? 8}
+                  plannedDays={parseFloat(formData.installDays) || 1}
                 />
               </div>
 
