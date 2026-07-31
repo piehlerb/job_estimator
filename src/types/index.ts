@@ -314,10 +314,22 @@ export interface InstallDaySchedule {
   laborerIds: string[];
 }
 
+/** Hours one laborer worked on a day, when they differ from the day's default hours. */
+export interface ActualLaborerHours {
+  laborerId: string;
+  hours: number;
+}
+
 export interface ActualDaySchedule {
   day: number;
-  hours: number;
+  hours: number; // default hours worked on this day; applies to every laborer without an override
   laborerIds: string[];
+  /**
+   * Per-laborer hour overrides for this day. Laborers without an entry worked `hours`.
+   * Stored as a list rather than a keyed map so sync's recursive case conversion
+   * never rewrites laborer ids.
+   */
+  laborerHours?: ActualLaborerHours[];
 }
 
 export interface ActualCosts {

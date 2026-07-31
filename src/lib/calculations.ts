@@ -1,4 +1,4 @@
-import { ChipSystem, Costs, Laborer, JobCalculation, InstallDaySchedule, ActualDaySchedule, ActualCosts, Pricing, CoatingRemovalType } from '../types/index.js';
+import { ChipSystem, Costs, Laborer, JobCalculation, InstallDaySchedule, ActualDaySchedule, ActualLaborerHours, ActualCosts, Pricing, CoatingRemovalType } from '../types/index.js';
 
 interface JobInputs {
   floorFootage: number;
@@ -367,6 +367,34 @@ export function calculateJobOutputs(
   };
 }
 
+/** The day's overrides, tolerating records where the field is missing or malformed. */
+export function getActualHourOverrides(day: ActualDaySchedule): ActualLaborerHours[] {
+  return Array.isArray(day.laborerHours) ? day.laborerHours : [];
+}
+
+/** Hours a specific laborer worked on a day — the per-laborer override when set, otherwise the day default. */
+export function getActualLaborerHours(day: ActualDaySchedule, laborerId: string): number {
+  const override = getActualHourOverrides(day).find(o => o.laborerId === laborerId)?.hours;
+  return typeof override === 'number' && !isNaN(override) ? override : day.hours;
+}
+
+/**
+ * How long the crew was on site for a day. With no overrides this is just the day's hours;
+ * when laborers worked different lengths the longest shift drives equipment runtime.
+ */
+export function getActualDayDurationHours(day: ActualDaySchedule): number {
+  if (day.laborerIds.length === 0) return day.hours;
+  return Math.max(...day.laborerIds.map(id => getActualLaborerHours(day, id)));
+}
+
+/** Total person-hours across the actual schedule. */
+export function getActualCrewHours(schedule: ActualDaySchedule[]): number {
+  return schedule.reduce(
+    (sum, day) => sum + day.laborerIds.reduce((s, id) => s + getActualLaborerHours(day, id), 0),
+    0
+  );
+}
+
 interface ActualCostParams {
   actualSchedule: ActualDaySchedule[];
   actualBaseCoatGallons: number;
@@ -430,7 +458,7 @@ export function calculateActualCosts(
     ? actualMoistureMitigationGallons * moistureMitigationCostPerGal
     : 0;
 
-  const actualTotalHours = actualSchedule.reduce((sum, day) => sum + day.hours, 0);
+  const actualTotalHours = actualSchedule.reduce((sum, day) => sum + getActualDayDurationHours(day), 0);
 
   const gasGeneratorGallonsPerHour = pricing.gasGeneratorGallonsPerHour ?? 1.2;
   const gasHeaterGallonsPerHour = pricing.gasHeaterGallonsPerHour ?? 1;
@@ -449,12 +477,16 @@ export function calculateActualCosts(
   const travelGasMpg = pricing.travelGasMpg ?? 10;
   const roundTripMiles = travelDistance * 2;
   const travelGasCostPerRoundTrip = travelGasMpg > 0 ? (roundTripMiles * gasCost / travelGasMpg) : 0;
-  const actualGasTravelCost = travelGasCostPerRoundTrip * (installDays + 1);
+  // Actual day count can differ from the plan (jobs finish early or run long).
+  const actualInstallDays = actualSchedule.length > 0 ? actualSchedule.length : installDays;
+  const actualGasTravelCost = travelGasCostPerRoundTrip * (actualInstallDays + 1);
 
   const actualLaborCost = actualSchedule.reduce((total, daySchedule) => {
     const dayLaborers = laborers.filter(l => daySchedule.laborerIds.includes(l.id));
-    const dayRate = dayLaborers.reduce((sum, l) => sum + l.fullyLoadedRate, 0);
-    return total + (dayRate * daySchedule.hours);
+    return total + dayLaborers.reduce(
+      (sum, l) => sum + l.fullyLoadedRate * getActualLaborerHours(daySchedule, l.id),
+      0
+    );
   }, 0);
 
   const actualConsumablesCost = consumablesCost;
