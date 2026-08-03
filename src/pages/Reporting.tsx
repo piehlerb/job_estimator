@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { getAllAdSpend, getAllJobs, getAllLaborers, getAllLeadAppointments, getAllLeads, getCosts, getDefaultCosts, getPricing, getDefaultPricing, setAdSpendForMonth, updateJob } from '../lib/db';
 import { calculateJobOutputs, calculateActualCosts, getActualLaborerHours } from '../lib/calculations';
 import { ActualCosts, AdSpend, Costs, Job, JobCalculation, JobStatus, Laborer, Lead, LeadAppointment, LeadStage, Pricing } from '../types';
@@ -35,11 +36,21 @@ interface MonthlyWonRow {
   actuals: ActualCosts | null;
 }
 
+interface EmployeeJobHours {
+  jobId: string;
+  jobName: string;
+  customerName?: string;
+  installDate?: string;
+  days: number;
+  hours: number;
+}
+
 interface EmployeeHoursRow {
   laborerId: string;
   laborerName: string;
   totalHours: number;
   jobCount: number;
+  jobs: EmployeeJobHours[];
 }
 
 interface LeadMonthRow {
@@ -136,6 +147,7 @@ export default function Reporting({ onEditJob }: ReportingProps) {
   // Employee hours date range
   const [empStartDate, setEmpStartDate] = useState(getDefaultEmpStart);
   const [empEndDate, setEmpEndDate] = useState(() => localToday());
+  const [expandedLaborerIds, setExpandedLaborerIds] = useState<Set<string>>(new Set());
 
   // Expenses report date range (defaults to year-to-date)
   const [expStartDate, setExpStartDate] = useState(getDefaultExpStart);
@@ -469,7 +481,7 @@ export default function Reporting({ onEditJob }: ReportingProps) {
     const start = empStartDate ? new Date(`${empStartDate}T00:00:00`) : null;
     const end = empEndDate ? new Date(`${empEndDate}T23:59:59`) : null;
 
-    const map = new Map<string, { name: string; hours: number; jobIds: Set<string> }>();
+    const map = new Map<string, { name: string; hours: number; jobs: Map<string, EmployeeJobHours> }>();
 
     jobsWithCalc.forEach(({ job }) => {
       if (job.status !== 'Won' || !job.installDate) return;
@@ -488,11 +500,25 @@ export default function Reporting({ onEditJob }: ReportingProps) {
           const name = laborer?.name ?? `Unknown (${laborerId.slice(0, 8)})`;
 
           if (!map.has(laborerId)) {
-            map.set(laborerId, { name, hours: 0, jobIds: new Set() });
+            map.set(laborerId, { name, hours: 0, jobs: new Map() });
           }
           const entry = map.get(laborerId)!;
-          entry.hours += getActualLaborerHours(day, laborerId);
-          entry.jobIds.add(job.id);
+          const dayHours = getActualLaborerHours(day, laborerId);
+          entry.hours += dayHours;
+
+          if (!entry.jobs.has(job.id)) {
+            entry.jobs.set(job.id, {
+              jobId: job.id,
+              jobName: job.name,
+              customerName: job.customerName,
+              installDate: job.installDate,
+              days: 0,
+              hours: 0,
+            });
+          }
+          const jobEntry = entry.jobs.get(job.id)!;
+          jobEntry.days += 1;
+          jobEntry.hours += dayHours;
         });
       });
     });
@@ -502,15 +528,25 @@ export default function Reporting({ onEditJob }: ReportingProps) {
         laborerId,
         laborerName: data.name,
         totalHours: data.hours,
-        jobCount: data.jobIds.size,
+        jobCount: data.jobs.size,
+        jobs: Array.from(data.jobs.values()).sort((a, b) => b.hours - a.hours),
       }))
       .sort((a, b) => b.totalHours - a.totalHours);
   }, [jobsWithCalc, allLaborers, empStartDate, empEndDate]);
 
   const empTotals = useMemo(() => ({
     totalHours: employeeHoursData.reduce((s, r) => s + r.totalHours, 0),
-    uniqueJobs: new Set(employeeHoursData.map((r) => r.laborerId)).size,
+    uniqueJobs: new Set(employeeHoursData.flatMap((r) => r.jobs.map((j) => j.jobId))).size,
   }), [employeeHoursData]);
+
+  const toggleLaborerExpanded = useCallback((laborerId: string) => {
+    setExpandedLaborerIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(laborerId)) next.delete(laborerId);
+      else next.add(laborerId);
+      return next;
+    });
+  }, []);
 
   // ==================== EXPENSES ====================
 
@@ -1238,22 +1274,75 @@ export default function Reporting({ onEditJob }: ReportingProps) {
                         </tr>
                       </thead>
                       <tbody>
-                        {employeeHoursData.map((row) => (
-                          <tr key={row.laborerId} className="border-b border-slate-200 hover:bg-slate-50">
-                            <td className="px-4 py-3 text-sm font-medium text-slate-900">{row.laborerName}</td>
-                            <td className="px-4 py-3 text-sm text-right text-slate-700">{row.jobCount}</td>
-                            <td className="px-4 py-3 text-sm text-right font-semibold text-slate-900">{row.totalHours.toFixed(1)}</td>
-                            <td className="px-4 py-3 text-sm text-right text-slate-600">
-                              {row.jobCount > 0 ? (row.totalHours / row.jobCount).toFixed(1) : '—'}
-                            </td>
-                          </tr>
-                        ))}
+                        {employeeHoursData.map((row) => {
+                          const isExpanded = expandedLaborerIds.has(row.laborerId);
+                          return (
+                            <Fragment key={row.laborerId}>
+                              <tr
+                                className="border-b border-slate-200 hover:bg-slate-50 cursor-pointer"
+                                onClick={() => toggleLaborerExpanded(row.laborerId)}
+                              >
+                                <td className="px-4 py-3 text-sm font-medium text-slate-900">
+                                  <span className="flex items-center gap-2">
+                                    {isExpanded
+                                      ? <ChevronDown size={16} className="text-slate-400 shrink-0" />
+                                      : <ChevronRight size={16} className="text-slate-400 shrink-0" />}
+                                    {row.laborerName}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 text-sm text-right text-slate-700">{row.jobCount}</td>
+                                <td className="px-4 py-3 text-sm text-right font-semibold text-slate-900">{row.totalHours.toFixed(1)}</td>
+                                <td className="px-4 py-3 text-sm text-right text-slate-600">
+                                  {row.jobCount > 0 ? (row.totalHours / row.jobCount).toFixed(1) : '—'}
+                                </td>
+                              </tr>
+                              {isExpanded && (
+                                <tr className="border-b border-slate-200 bg-slate-50">
+                                  <td colSpan={4} className="px-4 py-3">
+                                    <table className="w-full">
+                                      <thead>
+                                        <tr className="border-b border-slate-200">
+                                          <th className="px-2 py-1.5 text-left text-xs font-semibold text-slate-500">Job</th>
+                                          <th className="px-2 py-1.5 text-left text-xs font-semibold text-slate-500">Install Date</th>
+                                          <th className="px-2 py-1.5 text-right text-xs font-semibold text-slate-500">Days</th>
+                                          <th className="px-2 py-1.5 text-right text-xs font-semibold text-slate-500">Hours</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {row.jobs.map((jobRow) => (
+                                          <tr
+                                            key={jobRow.jobId}
+                                            className="border-b border-slate-100 last:border-b-0 hover:bg-white cursor-pointer"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              onEditJob(jobRow.jobId);
+                                            }}
+                                          >
+                                            <td className="px-2 py-2 text-sm font-medium text-gf-dark-green hover:underline">
+                                              {jobRow.jobName}
+                                              {jobRow.customerName && (
+                                                <span className="block text-xs font-normal text-slate-500">{jobRow.customerName}</span>
+                                              )}
+                                            </td>
+                                            <td className="px-2 py-2 text-sm text-slate-600">{jobRow.installDate ?? '—'}</td>
+                                            <td className="px-2 py-2 text-sm text-right text-slate-600">{jobRow.days}</td>
+                                            <td className="px-2 py-2 text-sm text-right font-semibold text-slate-900">{jobRow.hours.toFixed(1)}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </td>
+                                </tr>
+                              )}
+                            </Fragment>
+                          );
+                        })}
                       </tbody>
                       <tfoot>
                         <tr className="bg-slate-50 border-t-2 border-slate-300">
                           <td className="px-4 py-3 text-sm font-semibold text-slate-700">Total</td>
                           <td className="px-4 py-3 text-sm font-semibold text-right text-slate-700">
-                            {/* unique jobs across all employees */}
+                            {empTotals.uniqueJobs}
                           </td>
                           <td className="px-4 py-3 text-sm font-semibold text-right text-slate-900">{empTotals.totalHours.toFixed(1)}</td>
                           <td className="px-4 py-3" />
