@@ -2,8 +2,8 @@ import { ChipSystem, Costs } from '../types';
 
 export interface SnapshotChanges {
   hasChanges: boolean;
-  systemChanges: Array<{ field: string; oldValue: number; newValue: number }>;
-  costChanges: Array<{ field: string; oldValue: number; newValue: number }>;
+  systemChanges: Array<{ field: keyof ChipSystem; oldValue: number; newValue: number }>;
+  costChanges: Array<{ field: keyof Costs; oldValue: number; newValue: number }>;
 }
 
 const SYSTEM_FIELDS: Array<keyof ChipSystem> = [
@@ -63,8 +63,8 @@ export function compareSnapshots(
   snapshotCosts: Costs | null,
   currentCosts: Costs | null
 ): SnapshotChanges {
-  const systemChanges: Array<{ field: string; oldValue: number; newValue: number }> = [];
-  const costChanges: Array<{ field: string; oldValue: number; newValue: number }> = [];
+  const systemChanges: SnapshotChanges['systemChanges'] = [];
+  const costChanges: SnapshotChanges['costChanges'] = [];
 
   // Compare system fields
   if (snapshotSystem && currentSystem) {

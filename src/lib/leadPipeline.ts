@@ -134,8 +134,82 @@ export function normalizeEmail(value?: string): string | undefined {
   return normalized || undefined;
 }
 
-function normalizeIso(value?: string): string | undefined {
+/**
+ * Timezone assumed for naive appointment times when the payload doesn't name one.
+ * GHL sends the booking timezone on every appointment webhook we've seen, so this
+ * is only a backstop; Eastern matches the business (see lib/dateUtils.ts).
+ */
+const DEFAULT_APPOINTMENT_TIMEZONE = 'America/New_York';
+
+/** Accept a payload timezone only if the runtime recognizes it; otherwise fall back. */
+function resolveTimeZone(value?: string): string {
+  const candidate = value?.trim();
+  if (!candidate) return DEFAULT_APPOINTMENT_TIMEZONE;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: candidate });
+    return candidate;
+  } catch {
+    return DEFAULT_APPOINTMENT_TIMEZONE;
+  }
+}
+
+/** True when a datetime string already carries a UTC marker or numeric offset. */
+function hasExplicitOffset(value: string): boolean {
+  return /(?:Z|[+-]\d{2}:?\d{2})$/i.test(value.trim());
+}
+
+/** Offset in ms between `timeZone` and UTC at the given instant (positive east of UTC). */
+function zoneOffsetMs(instant: Date, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hour12: false,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).formatToParts(instant);
+
+  const read = (type: string) => Number(parts.find((part) => part.type === type)?.value);
+  const hour = read('hour') % 24; // en-US hour12:false renders midnight as 24
+  const asUtc = Date.UTC(read('year'), read('month') - 1, read('day'), hour, read('minute'), read('second'));
+  return asUtc - instant.getTime();
+}
+
+/**
+ * Interpret a naive "YYYY-MM-DDTHH:mm:ss" wall time as belonging to `timeZone`
+ * and return the corresponding UTC instant.
+ *
+ * Runs the offset lookup twice: the first pass uses the wall time read as UTC to
+ * pick an offset, the second re-checks it at the resulting instant so times near
+ * a DST transition land on the correct side of the change.
+ */
+function naiveWallTimeToUtc(value: string, timeZone: string): Date | null {
+  const wallAsUtc = Date.parse(`${value.trim().replace(' ', 'T')}Z`);
+  if (Number.isNaN(wallAsUtc)) return null;
+
+  const firstPass = wallAsUtc - zoneOffsetMs(new Date(wallAsUtc), timeZone);
+  const refinedOffset = zoneOffsetMs(new Date(firstPass), timeZone);
+  return new Date(wallAsUtc - refinedOffset);
+}
+
+/**
+ * Normalize a webhook datetime to a UTC ISO string.
+ *
+ * Values that already carry an offset are trusted as-is. Naive values (GHL sends
+ * `calendar.startTime` as bare local wall time) are interpreted in `timeZone`
+ * rather than in whatever timezone the runtime happens to use — the edge function
+ * runs in UTC, which silently shifted every appointment by the Eastern offset.
+ */
+function normalizeIso(value?: string, timeZone: string = DEFAULT_APPOINTMENT_TIMEZONE): string | undefined {
   if (!value) return undefined;
+
+  if (!hasExplicitOffset(value)) {
+    const zoned = naiveWallTimeToUtc(value, timeZone);
+    if (zoned) return zoned.toISOString();
+  }
+
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? value : parsed.toISOString();
 }
@@ -223,6 +297,18 @@ export function normalizeGhlWebhook(payload: Record<string, unknown>): Normalize
     'calendar.appointmentId',
     'calendar.appointment_id',
   ]);
+  // GHL sends appointment times as bare wall time plus the booking timezone in a
+  // separate field; both are needed to pin down the actual instant.
+  const appointmentTimeZone = resolveTimeZone(readFirstString(payload, [
+    'calendar.selectedTimezone',
+    'calendar.timezone',
+    'selected_timezone',
+    'selectedTimezone',
+    'timezone',
+    'appointment.timezone',
+    'triggerData.timezone',
+    'contact.timezone',
+  ]));
   const scheduledStartAt = normalizeIso(readFirstString(payload, [
     'scheduled_start_at',
     'scheduledStartAt',
@@ -236,7 +322,7 @@ export function normalizeGhlWebhook(payload: Record<string, unknown>): Normalize
     'triggerData.start_time',
     'calendar.startTime',
     'calendar.start_time',
-  ]));
+  ]), appointmentTimeZone);
 
   const firstName = readFirstString(payload, ['first_name', 'firstName']);
   const lastName = readFirstString(payload, ['last_name', 'lastName']);
@@ -295,7 +381,7 @@ export function normalizeGhlWebhook(payload: Record<string, unknown>): Normalize
           'triggerData.end_time',
           'calendar.endTime',
           'calendar.end_time',
-        ])),
+        ]), appointmentTimeZone),
         status: appointmentStatusForEvent(eventType),
         calendarName: normalizeWhitespace(readFirstString(payload, [
           'calendar_name',
