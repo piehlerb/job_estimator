@@ -1,4 +1,4 @@
-import { ArrowLeft, Save, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, X, Plus, Trash2, Link, Shuffle, Check, Copy, FileText, Search } from 'lucide-react';
+import { ArrowLeft, Save, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, X, Plus, Trash2, Link, Shuffle, Check, Copy, FileText } from 'lucide-react';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   getAllSystems,
@@ -67,6 +67,15 @@ function parseJobTags(input: string): string[] {
       seen.add(normalized);
       return true;
     });
+}
+
+/** Copy `fields` from `source` onto a shallow clone of `base`, leaving all other fields alone. */
+function copySelectedFields<T extends object>(base: T, source: T, fields: Array<keyof T>): T {
+  const merged = { ...base };
+  for (const field of fields) {
+    merged[field] = source[field];
+  }
+  return merged;
 }
 
 interface JobFormProps {
@@ -191,7 +200,6 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
   // Snapshot comparison state
   const [snapshotChanges, setSnapshotChanges] = useState<SnapshotChanges | null>(null);
   const [showSnapshotBanner, setShowSnapshotBanner] = useState(false);
-  const [acceptedChanges, setAcceptedChanges] = useState<SelectedChanges | null>(null);
 
   // Estimate group state
   const [groupJobs, setGroupJobs] = useState<Job[]>([]);
@@ -1577,26 +1585,18 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
   };
 
   const handleUpdateToCurrentValues = async (selected: SelectedChanges) => {
-    setAcceptedChanges(selected);
     setShowSnapshotBanner(false);
 
     if (existingJob) {
       const selectedSystem = systems.find((s) => s.id === formData.system);
 
       // Selectively merge: only update fields the user accepted
-      const mergedCosts = { ...existingJob.costsSnapshot };
-      for (const field of selected.costFields) {
-        (mergedCosts as Record<string, unknown>)[field] = (costs as Record<string, unknown>)[field];
-      }
+      const mergedCosts = copySelectedFields(existingJob.costsSnapshot, costs, selected.costFields);
 
-      const mergedSystem = existingJob.systemSnapshot
-        ? { ...existingJob.systemSnapshot }
-        : selectedSystem || existingJob.systemSnapshot;
-      if (selectedSystem && selected.systemFields.length > 0) {
-        for (const field of selected.systemFields) {
-          (mergedSystem as Record<string, unknown>)[field] = (selectedSystem as Record<string, unknown>)[field];
-        }
-      }
+      const systemBase = existingJob.systemSnapshot || selectedSystem;
+      const mergedSystem = systemBase && selectedSystem
+        ? copySelectedFields(systemBase, selectedSystem, selected.systemFields)
+        : systemBase;
 
       const updatedJob: Job = {
         ...existingJob,
@@ -1611,7 +1611,6 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
   };
 
   const handleKeepOriginalValues = () => {
-    setAcceptedChanges(null);
     setShowSnapshotBanner(false);
   };
 

@@ -33,7 +33,8 @@
       "Bash(netstat -ano)",
       "Bash(findstr :5173)",
       "Bash(where npm:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "PowerShell(npm run typecheck)"
     ],
     "deny": [],
     "ask": []

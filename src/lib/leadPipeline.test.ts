@@ -120,6 +120,89 @@ describe('GHL lead pipeline', () => {
     assert.equal(normalized.appointment?.assignedUser, 'Brian Piehler');
   });
 
+  test('interprets naive GHL appointment times in the payload timezone, not the runtime timezone', () => {
+    // GHL sends bare wall time plus the booking timezone in a separate field.
+    // 9:00 AM Eastern in August is EDT (UTC-4), so the instant is 13:00Z.
+    const normalized = normalizeGhlWebhook({
+      contact_id: 'abc',
+      email: 'jane@example.com',
+      timezone: 'America/New_York',
+      customData: { event_type: 'appointment.booked' },
+      calendar: {
+        appointmentId: 'appt-789',
+        startTime: '2026-08-13T09:00:00',
+        endTime: '2026-08-13T09:30:00',
+        selectedTimezone: 'US/Eastern',
+      },
+    });
+
+    assert.equal(normalized.appointment?.scheduledStartAt, '2026-08-13T13:00:00.000Z');
+    assert.equal(normalized.appointment?.scheduledEndAt, '2026-08-13T13:30:00.000Z');
+  });
+
+  test('applies standard time offset for naive appointment times outside DST', () => {
+    // 9:00 AM Eastern in January is EST (UTC-5), so the instant is 14:00Z.
+    const normalized = normalizeGhlWebhook({
+      contact_id: 'abc',
+      email: 'jane@example.com',
+      customData: { event_type: 'appointment.booked' },
+      calendar: {
+        appointmentId: 'appt-winter',
+        startTime: '2026-01-14T09:00:00',
+        selectedTimezone: 'US/Eastern',
+      },
+    });
+
+    assert.equal(normalized.appointment?.scheduledStartAt, '2026-01-14T14:00:00.000Z');
+  });
+
+  test('honors a non-Eastern booking timezone from the payload', () => {
+    const normalized = normalizeGhlWebhook({
+      contact_id: 'abc',
+      email: 'jane@example.com',
+      customData: { event_type: 'appointment.booked' },
+      calendar: {
+        appointmentId: 'appt-pacific',
+        startTime: '2026-08-13T09:00:00',
+        selectedTimezone: 'America/Los_Angeles',
+      },
+    });
+
+    assert.equal(normalized.appointment?.scheduledStartAt, '2026-08-13T16:00:00.000Z');
+  });
+
+  test('leaves appointment times that already carry an offset untouched', () => {
+    const normalized = normalizeGhlWebhook({
+      contact_id: 'abc',
+      email: 'jane@example.com',
+      customData: { event_type: 'appointment.booked' },
+      calendar: {
+        appointmentId: 'appt-offset',
+        startTime: '2026-08-13T09:00:00-04:00',
+        endTime: '2026-08-13T09:30:00Z',
+        selectedTimezone: 'US/Eastern',
+      },
+    });
+
+    assert.equal(normalized.appointment?.scheduledStartAt, '2026-08-13T13:00:00.000Z');
+    assert.equal(normalized.appointment?.scheduledEndAt, '2026-08-13T09:30:00.000Z');
+  });
+
+  test('falls back to Eastern when the payload names no usable timezone', () => {
+    const normalized = normalizeGhlWebhook({
+      contact_id: 'abc',
+      email: 'jane@example.com',
+      customData: { event_type: 'appointment.booked' },
+      calendar: {
+        appointmentId: 'appt-no-tz',
+        startTime: '2026-08-13T09:00:00',
+        selectedTimezone: 'Not/AZone',
+      },
+    });
+
+    assert.equal(normalized.appointment?.scheduledStartAt, '2026-08-13T13:00:00.000Z');
+  });
+
   test('moves new lead to booked but never moves won lead backward', () => {
     assert.equal(nextLeadStageForEvent('New', 'appointment.booked'), 'Estimate Booked');
     assert.equal(nextLeadStageForEvent('Won', 'appointment.canceled'), 'Won');

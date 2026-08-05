@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { AlertCircle, RefreshCw, X, Check } from 'lucide-react';
 import { SnapshotChanges, getFieldLabel } from '../lib/snapshotComparison';
+import { ChipSystem, Costs } from '../types';
 
 export interface SelectedChanges {
-  systemFields: string[];
-  costFields: string[];
+  systemFields: Array<keyof ChipSystem>;
+  costFields: Array<keyof Costs>;
 }
 
 interface SnapshotChangeBannerProps {
@@ -14,10 +15,10 @@ interface SnapshotChangeBannerProps {
 }
 
 export default function SnapshotChangeBanner({ changes, onUpdate, onDismiss }: SnapshotChangeBannerProps) {
-  const [selectedSystem, setSelectedSystem] = useState<Set<string>>(
+  const [selectedSystem, setSelectedSystem] = useState<Set<keyof ChipSystem>>(
     () => new Set(changes.systemChanges.map(c => c.field))
   );
-  const [selectedCosts, setSelectedCosts] = useState<Set<string>>(
+  const [selectedCosts, setSelectedCosts] = useState<Set<keyof Costs>>(
     () => new Set(changes.costChanges.map(c => c.field))
   );
 
@@ -45,7 +46,7 @@ export default function SnapshotChangeBanner({ changes, onUpdate, onDismiss }: S
   const totalSelected = selectedSystem.size + selectedCosts.size;
   const showCheckboxes = totalChanges > 1;
 
-  const toggleSystem = (field: string) => {
+  const toggleSystem = (field: keyof ChipSystem) => {
     setSelectedSystem(prev => {
       const next = new Set(prev);
       if (next.has(field)) next.delete(field);
@@ -54,7 +55,7 @@ export default function SnapshotChangeBanner({ changes, onUpdate, onDismiss }: S
     });
   };
 
-  const toggleCost = (field: string) => {
+  const toggleCost = (field: keyof Costs) => {
     setSelectedCosts(prev => {
       const next = new Set(prev);
       if (next.has(field)) next.delete(field);
