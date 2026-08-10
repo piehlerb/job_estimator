@@ -672,10 +672,12 @@ export interface ExportData {
   metadata: ExportMetadata;
   systems: ChipSystem[];
   costs: Costs | null;
+  pricing?: Pricing | null; // Optional: older backups predate pricing settings
+  pricingVariables?: PricingVariable[]; // Optional: older backups predate pricing variables
   laborers: Laborer[];
   customers: Customer[];
   products: Product[];
-  baseCoatColors: BaseCoatColor[];
+  baseCoatColors?: BaseCoatColor[]; // Optional: older backups predate base coat colors
   jobs: Job[];
   chipBlends: ChipBlend[];
   chipInventory: ChipInventory[];
@@ -687,6 +689,10 @@ export interface ExportData {
   baseCoatInventory: BaseCoatInventory | null;
   miscInventory: MiscInventory | null;
   commTemplates?: CommunicationTemplate[];
+  shoppingItems?: ShoppingItem[]; // Optional: older backups predate the shopping list
+  referralServices?: ReferralService[]; // Optional: older backups predate referral tracking
+  referralAssociates?: ReferralAssociate[]; // Optional: older backups predate referral tracking
+  adSpend?: AdSpend[]; // Optional: older backups predate lead tracking ad spend
 }
 
 export type MergeAction = 'add' | 'update' | 'skip' | 'delete';

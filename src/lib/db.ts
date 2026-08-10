@@ -1716,6 +1716,32 @@ export async function setAdSpendForMonth(month: string, amount: number): Promise
   return record;
 }
 
+export async function deleteAdSpend(id: string): Promise<void> {
+  const db = await getDB();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(['adSpend'], 'readwrite');
+    const store = transaction.objectStore('adSpend');
+    const getRequest = store.get(id);
+
+    getRequest.onerror = () => reject(getRequest.error);
+    getRequest.onsuccess = () => {
+      const record = getRequest.result;
+      if (record) {
+        record.deleted = true;
+        record.updatedAt = new Date().toISOString();
+        const putRequest = store.put(record);
+        putRequest.onerror = () => reject(putRequest.error);
+        putRequest.onsuccess = () => resolve();
+      } else {
+        resolve();
+      }
+    };
+  });
+
+  await queueForSync('adSpend', id, 'delete');
+  await triggerBackgroundSync();
+}
+
 // =====================
 // Products CRUD
 // =====================
