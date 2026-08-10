@@ -2,6 +2,8 @@ import {
   ExportData,
   ExportMetadata,
   ImportPreview,
+  Lead,
+  LeadAppointment,
   MergeLogEntry,
   EXPORT_VERSION,
 } from '../types';
@@ -53,6 +55,12 @@ import {
   addCommTemplate,
   updateCommTemplate,
   deleteCommTemplate,
+  getAllLeads,
+  updateLead,
+  deleteLead,
+  getAllLeadAppointments,
+  updateLeadAppointment,
+  deleteLeadAppointment,
   addBaseCoatColor,
   updateBaseCoatColor,
   deleteBaseCoatColor,
@@ -79,6 +87,18 @@ import {
   deleteAdSpend,
 } from './db';
 
+// Leads have no required display field, so fall back through the identifying
+// fields we do have before landing on the raw id
+function leadLabel(lead: Lead): string {
+  return lead.name || lead.phone || lead.email || lead.id;
+}
+
+function leadAppointmentLabel(appointment: LeadAppointment): string {
+  return appointment.scheduledStartAt
+    ? `${appointment.scheduledStartAt} (${appointment.status})`
+    : appointment.id;
+}
+
 // Export all data from the database
 export async function exportAllData(): Promise<ExportData> {
   const [
@@ -103,6 +123,8 @@ export async function exportAllData(): Promise<ExportData> {
     referralServices,
     referralAssociates,
     adSpend,
+    leads,
+    leadAppointments,
   ] = await Promise.all([
     getAllSystems(),
     getCosts(),
@@ -125,6 +147,8 @@ export async function exportAllData(): Promise<ExportData> {
     getAllReferralServices(),
     getAllReferralAssociates(),
     getAllAdSpend(),
+    getAllLeads(),
+    getAllLeadAppointments(),
   ]);
 
   const metadata: ExportMetadata = {
@@ -156,6 +180,8 @@ export async function exportAllData(): Promise<ExportData> {
     referralServices,
     referralAssociates,
     adSpend,
+    leads,
+    leadAppointments,
   };
 }
 
@@ -535,6 +561,8 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
     localReferralServices,
     localReferralAssociates,
     localAdSpend,
+    localLeads,
+    localLeadAppointments,
   ] = await Promise.all([
     getAllSystems(),
     getCosts(),
@@ -557,6 +585,8 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
     getAllReferralServices(),
     getAllReferralAssociates(),
     getAllAdSpend(),
+    getAllLeads(),
+    getAllLeadAppointments(),
   ]);
 
   // Create lookup maps
@@ -576,6 +606,8 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
   const localReferralServicesMap = new Map(localReferralServices.map(s => [s.id, s]));
   const localReferralAssociatesMap = new Map(localReferralAssociates.map(a => [a.id, a]));
   const localAdSpendMap = new Map(localAdSpend.map(r => [r.id, r]));
+  const localLeadsMap = new Map(localLeads.map(l => [l.id, l]));
+  const localLeadAppointmentsMap = new Map(localLeadAppointments.map(a => [a.id, a]));
 
   // Track which IDs are in import for delete detection
   const importSystemIds = new Set(importData.systems.map(s => s.id));
@@ -594,6 +626,8 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
   const importReferralServiceIds = new Set((importData.referralServices || []).map(s => s.id));
   const importReferralAssociateIds = new Set((importData.referralAssociates || []).map(a => a.id));
   const importAdSpendIds = new Set((importData.adSpend || []).map(r => r.id));
+  const importLeadIds = new Set((importData.leads || []).map(l => l.id));
+  const importLeadAppointmentIds = new Set((importData.leadAppointments || []).map(a => a.id));
 
   // Compare systems
   for (const importSystem of importData.systems) {
@@ -1024,6 +1058,48 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
     }
   }
 
+  // Compare leads
+  for (const importLead of (importData.leads || [])) {
+    const local = localLeadsMap.get(importLead.id);
+    if (!local) {
+      preview.toAdd.push({ entityType: 'Lead', entityName: leadLabel(importLead) });
+    } else if (isNewer(importLead.updatedAt, local.updatedAt)) {
+      preview.toUpdate.push({
+        entityType: 'Lead',
+        entityName: leadLabel(importLead),
+        localUpdatedAt: local.updatedAt,
+        importUpdatedAt: importLead.updatedAt,
+      });
+    } else {
+      preview.toSkip.push({
+        entityType: 'Lead',
+        entityName: leadLabel(importLead),
+        reason: 'Local version is same or newer',
+      });
+    }
+  }
+
+  // Compare lead appointments
+  for (const importAppointment of (importData.leadAppointments || [])) {
+    const local = localLeadAppointmentsMap.get(importAppointment.id);
+    if (!local) {
+      preview.toAdd.push({ entityType: 'LeadAppointment', entityName: leadAppointmentLabel(importAppointment) });
+    } else if (isNewer(importAppointment.updatedAt, local.updatedAt)) {
+      preview.toUpdate.push({
+        entityType: 'LeadAppointment',
+        entityName: leadAppointmentLabel(importAppointment),
+        localUpdatedAt: local.updatedAt,
+        importUpdatedAt: importAppointment.updatedAt,
+      });
+    } else {
+      preview.toSkip.push({
+        entityType: 'LeadAppointment',
+        entityName: leadAppointmentLabel(importAppointment),
+        reason: 'Local version is same or newer',
+      });
+    }
+  }
+
   // Find orphans to delete (if option enabled)
   if (deleteOrphans) {
     for (const local of localSystems) {
@@ -1099,7 +1175,7 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
       }
     }
     // Only treat local shopping items as orphans if the backup actually has
-    // them (old backups predate them and must not wipe the store)
+    // them (old backups predate the shopping list and must not wipe the store)
     if (importData.shoppingItems) {
       for (const local of localShoppingItems) {
         if (!importShoppingItemIds.has(local.id)) {
@@ -1108,7 +1184,7 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
       }
     }
     // Only treat local referral services as orphans if the backup actually has
-    // them (old backups predate them and must not wipe the store)
+    // them (old backups predate referral tracking and must not wipe the store)
     if (importData.referralServices) {
       for (const local of localReferralServices) {
         if (!importReferralServiceIds.has(local.id)) {
@@ -1117,7 +1193,7 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
       }
     }
     // Only treat local referral associates as orphans if the backup actually has
-    // them (old backups predate them and must not wipe the store)
+    // them (old backups predate referral tracking and must not wipe the store)
     if (importData.referralAssociates) {
       for (const local of localReferralAssociates) {
         if (!importReferralAssociateIds.has(local.id)) {
@@ -1131,6 +1207,22 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
       for (const local of localAdSpend) {
         if (!importAdSpendIds.has(local.id)) {
           preview.toDelete.push({ entityType: 'AdSpend', entityName: local.month });
+        }
+      }
+    }
+    // Only treat local leads as orphans if the backup actually has leads
+    // (old backups predate lead tracking and must not wipe the store)
+    if (importData.leads) {
+      for (const local of localLeads) {
+        if (!importLeadIds.has(local.id)) {
+          preview.toDelete.push({ entityType: 'Lead', entityName: leadLabel(local) });
+        }
+      }
+    }
+    if (importData.leadAppointments) {
+      for (const local of localLeadAppointments) {
+        if (!importLeadAppointmentIds.has(local.id)) {
+          preview.toDelete.push({ entityType: 'LeadAppointment', entityName: leadAppointmentLabel(local) });
         }
       }
     }
@@ -1166,6 +1258,8 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
     localReferralServices,
     localReferralAssociates,
     localAdSpend,
+    localLeads,
+    localLeadAppointments,
   ] = await Promise.all([
     getAllSystems(),
     getCosts(),
@@ -1188,6 +1282,8 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
     getAllReferralServices(),
     getAllReferralAssociates(),
     getAllAdSpend(),
+    getAllLeads(),
+    getAllLeadAppointments(),
   ]);
 
   // Create lookup maps
@@ -1207,6 +1303,8 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
   const localReferralServicesMap = new Map(localReferralServices.map(s => [s.id, s]));
   const localReferralAssociatesMap = new Map(localReferralAssociates.map(a => [a.id, a]));
   const localAdSpendMap = new Map(localAdSpend.map(r => [r.id, r]));
+  const localLeadsMap = new Map(localLeads.map(l => [l.id, l]));
+  const localLeadAppointmentsMap = new Map(localLeadAppointments.map(a => [a.id, a]));
 
   // Track import IDs for deletion
   const importSystemIds = new Set(importData.systems.map(s => s.id));
@@ -1224,6 +1322,8 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
   const importReferralServiceIds = new Set((importData.referralServices || []).map(s => s.id));
   const importReferralAssociateIds = new Set((importData.referralAssociates || []).map(a => a.id));
   const importAdSpendIds = new Set((importData.adSpend || []).map(r => r.id));
+  const importLeadIds = new Set((importData.leads || []).map(l => l.id));
+  const importLeadAppointmentIds = new Set((importData.leadAppointments || []).map(a => a.id));
 
   // Import systems
   for (const importSystem of importData.systems) {
@@ -1521,7 +1621,7 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
     }
   }
 
-  // Import ad spend (updateAdSpend upserts, so it covers both add and update)
+  // Import ad spend (updateAdSpend is a put, so it covers both add and update)
   for (const importRecord of (importData.adSpend || [])) {
     const local = localAdSpendMap.get(importRecord.id);
     if (!local) {
@@ -1532,6 +1632,34 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
       log.push({ entityType: 'AdSpend', entityName: importRecord.month, action: 'update', reason: 'Import is newer' });
     } else {
       log.push({ entityType: 'AdSpend', entityName: importRecord.month, action: 'skip', reason: 'Local is same or newer' });
+    }
+  }
+
+  // Import leads (updateLead is a put, so it covers both add and update)
+  for (const importLead of (importData.leads || [])) {
+    const local = localLeadsMap.get(importLead.id);
+    if (!local) {
+      await updateLead(importLead);
+      log.push({ entityType: 'Lead', entityName: leadLabel(importLead), action: 'add', reason: 'New record' });
+    } else if (isNewer(importLead.updatedAt, local.updatedAt)) {
+      await updateLead(importLead);
+      log.push({ entityType: 'Lead', entityName: leadLabel(importLead), action: 'update', reason: 'Import is newer' });
+    } else {
+      log.push({ entityType: 'Lead', entityName: leadLabel(importLead), action: 'skip', reason: 'Local is same or newer' });
+    }
+  }
+
+  // Import lead appointments
+  for (const importAppointment of (importData.leadAppointments || [])) {
+    const local = localLeadAppointmentsMap.get(importAppointment.id);
+    if (!local) {
+      await updateLeadAppointment(importAppointment);
+      log.push({ entityType: 'LeadAppointment', entityName: leadAppointmentLabel(importAppointment), action: 'add', reason: 'New record' });
+    } else if (isNewer(importAppointment.updatedAt, local.updatedAt)) {
+      await updateLeadAppointment(importAppointment);
+      log.push({ entityType: 'LeadAppointment', entityName: leadAppointmentLabel(importAppointment), action: 'update', reason: 'Import is newer' });
+    } else {
+      log.push({ entityType: 'LeadAppointment', entityName: leadAppointmentLabel(importAppointment), action: 'skip', reason: 'Local is same or newer' });
     }
   }
 
@@ -1653,6 +1781,24 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
         if (!importAdSpendIds.has(local.id)) {
           await deleteAdSpend(local.id);
           log.push({ entityType: 'AdSpend', entityName: local.month, action: 'delete', reason: 'Not in import file' });
+        }
+      }
+    }
+    // Only delete lead orphans if the backup actually has leads (old backups
+    // predate lead tracking and must not wipe the store)
+    if (importData.leads) {
+      for (const local of localLeads) {
+        if (!importLeadIds.has(local.id)) {
+          await deleteLead(local.id);
+          log.push({ entityType: 'Lead', entityName: leadLabel(local), action: 'delete', reason: 'Not in import file' });
+        }
+      }
+    }
+    if (importData.leadAppointments) {
+      for (const local of localLeadAppointments) {
+        if (!importLeadAppointmentIds.has(local.id)) {
+          await deleteLeadAppointment(local.id);
+          log.push({ entityType: 'LeadAppointment', entityName: leadAppointmentLabel(local), action: 'delete', reason: 'Not in import file' });
         }
       }
     }

@@ -193,13 +193,42 @@ export interface GhlWebhookEvent {
   deleted?: boolean;
 }
 
+/**
+ * How a structured address was derived.
+ *   A  = anchored on a known ZIP, or supplied as discrete fields by GHL
+ *   A! = ZIP contradicts the typed town, in a different county — needs a human
+ *   B  = city + state matched, ZIP derived from a single-ZIP town
+ *   C  = city matched without a state, unique across reference data
+ *   D  = nothing resolvable
+ *   M  = entered or corrected by hand; never overwritten
+ */
+export type AddressParseTier = 'A' | 'A!' | 'B' | 'C' | 'D' | 'M';
+
 export interface Lead {
   id: string;
   ghlContactId?: string;
   name?: string;
   phone?: string;
   email?: string;
+  /**
+   * Free-text address as typed or as received from GHL. Never derived from the
+   * structured fields below — it stays the record of what actually arrived, so a
+   * bad parse can always be re-derived from the original.
+   */
   address?: string;
+  street?: string;
+  street2?: string;
+  city?: string;
+  /** Two-letter uppercase code, or absent. Enforced by a CHECK constraint. */
+  state?: string;
+  /** Five digits, or absent. Enforced by a CHECK constraint. */
+  zip?: string;
+  addressParseTier?: AddressParseTier;
+  /**
+   * Set once a human confirms the address. Any row carrying this is off-limits
+   * to automated passes and to webhook overwrites — see the ghl-webhook merge.
+   */
+  addressVerifiedAt?: string;
   source?: string;
   campaign?: string;
   utmSource?: string;
@@ -654,6 +683,8 @@ export interface ExportData {
   chipInventory: ChipInventory[];
   tintInventory: TintInventory[];
   coatingInventory?: CoatingInventory[]; // Optional: older backups predate SKU-level coating inventory
+  leads?: Lead[]; // Optional: older backups predate lead tracking
+  leadAppointments?: LeadAppointment[]; // Optional: older backups predate lead tracking
   topCoatInventory: TopCoatInventory | null;
   baseCoatInventory: BaseCoatInventory | null;
   miscInventory: MiscInventory | null;
