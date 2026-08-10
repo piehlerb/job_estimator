@@ -652,6 +652,8 @@ export interface ExportData {
   chipInventory: ChipInventory[];
   tintInventory: TintInventory[];
   coatingInventory?: CoatingInventory[]; // Optional: older backups predate SKU-level coating inventory
+  leads?: Lead[]; // Optional: older backups predate lead tracking
+  leadAppointments?: LeadAppointment[]; // Optional: older backups predate lead tracking
   topCoatInventory: TopCoatInventory | null;
   baseCoatInventory: BaseCoatInventory | null;
   miscInventory: MiscInventory | null;
