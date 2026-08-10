@@ -2,6 +2,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
 import {
   normalizeGhlWebhook,
   nextLeadStageForEvent,
+  resolveLeadAddressMerge,
   shouldOverwriteLeadValue,
   type NormalizedGhlWebhook,
 } from '../_shared/leadPipeline.ts';
@@ -28,6 +29,13 @@ type LeadRow = {
   phone: string | null;
   email: string | null;
   address: string | null;
+  street: string | null;
+  street2: string | null;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
+  address_parse_tier: string | null;
+  address_verified_at: string | null;
   source: string | null;
   campaign: string | null;
   utm_source: string | null;
@@ -155,6 +163,14 @@ function mergeLeadRow(
     phone: existing?.phone || null,
     email: existing?.email || null,
     address: existing?.address || null,
+    street: existing?.street || null,
+    // street2 is never sent by GHL; preserved so the full-row upsert can't null it.
+    street2: existing?.street2 || null,
+    city: existing?.city || null,
+    state: existing?.state || null,
+    zip: existing?.zip || null,
+    address_parse_tier: existing?.address_parse_tier || null,
+    address_verified_at: existing?.address_verified_at || null,
     source: existing?.source || null,
     campaign: existing?.campaign || null,
     utm_source: existing?.utm_source || null,
@@ -172,7 +188,6 @@ function mergeLeadRow(
     ['name', normalized.lead.name],
     ['phone', normalized.lead.phone],
     ['email', normalized.lead.email],
-    ['address', normalized.lead.address],
     ['source', normalized.lead.source],
     ['campaign', normalized.lead.campaign],
     ['utm_source', normalized.lead.utmSource],
@@ -189,6 +204,11 @@ function mergeLeadRow(
       mergedValues[key] = incoming || null;
     }
   }
+
+  // The address columns are decided together, not field by field — see
+  // resolveLeadAddressMerge for why merging them independently corrupts rows.
+  // An empty patch means the stored address stands.
+  Object.assign(merged, resolveLeadAddressMerge(existing, normalized.lead));
 
   return merged;
 }

@@ -34,7 +34,18 @@ export interface NormalizedWebhookLead {
   name?: string;
   phone?: string;
   email?: string;
+  /** The flattened address as it arrived. Kept as the record of what GHL sent. */
   address?: string;
+  street?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  /**
+   * Only ever 'A' here: GHL's discrete fields are source-of-truth structure, not
+   * a parse. A partial set is left untiered so the client-side parser still
+   * visits the row.
+   */
+  addressParseTier?: 'A';
   source?: string;
   campaign?: string;
   utmSource?: string;
@@ -81,6 +92,100 @@ function readFirstString(payload: Record<string, unknown>, keys: string[]): stri
   return undefined;
 }
 
+/** The address-bearing columns of a leads row, as stored. */
+export interface LeadAddressColumns {
+  address: string | null;
+  street: string | null;
+  street2: string | null;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
+  address_parse_tier: string | null;
+  address_verified_at: string | null;
+}
+
+export type IncomingLeadAddress = Pick<
+  NormalizedWebhookLead,
+  'address' | 'street' | 'city' | 'state' | 'zip' | 'addressParseTier'
+>;
+
+function addressPartsConflict(incoming?: string, existing?: string | null): boolean {
+  if (!incoming?.trim() || !existing?.trim()) return false;
+  return incoming.trim().toLowerCase() !== existing.trim().toLowerCase();
+}
+
+/**
+ * Decide which address columns a webhook may write, returning a patch to apply
+ * over the stored row. An empty patch means "leave everything as it is".
+ *
+ * Two rules, and the second one is the subtle one:
+ *
+ * 1. The ratchet. A row that a human has confirmed (address_verified_at set) or
+ *    hand-entered (tier 'M') is never touched. Without this the next webhook
+ *    reverts the correction and the cleanup worklist never empties.
+ *
+ * 2. The group is atomic when the address *changes*. Merging these columns
+ *    independently is what makes a partial payload dangerous: GHL frequently
+ *    sends city/state/postal_code with no address1, so field-by-field merging
+ *    would keep the previous address's street and weld it onto the new town —
+ *    then stamp tier 'A' on the result, telling everything downstream that the
+ *    row is deterministic and needs no review. So if any of city/state/zip
+ *    contradicts what is stored, the whole projection is replaced and absent
+ *    members become null (street2 included, since a unit number belongs to the
+ *    address it came with). A blank field beats a confidently wrong one.
+ *
+ * When nothing contradicts — the same address arriving again, or a first address
+ * for a bare row — fields fill in individually, which is safe precisely because
+ * there is no disagreement to resolve.
+ */
+export function resolveLeadAddressMerge(
+  existing: Partial<LeadAddressColumns> | null,
+  incoming: IncomingLeadAddress
+): Partial<LeadAddressColumns> {
+  const ratcheted =
+    Boolean(existing?.address_verified_at) || existing?.address_parse_tier === 'M';
+  if (ratcheted) return {};
+
+  const addressChanged =
+    addressPartsConflict(incoming.city, existing?.city) ||
+    addressPartsConflict(incoming.state, existing?.state) ||
+    addressPartsConflict(incoming.zip, existing?.zip);
+
+  if (addressChanged) {
+    return {
+      // The raw string that came with the superseded address is not kept: it
+      // describes a place this lead is no longer at. Full history stays in
+      // ghl_webhook_events.raw_payload.
+      address: incoming.address || null,
+      street: incoming.street || null,
+      street2: null,
+      city: incoming.city || null,
+      state: incoming.state || null,
+      zip: incoming.zip || null,
+      address_parse_tier: incoming.addressParseTier || null,
+    };
+  }
+
+  const patch: Partial<LeadAddressColumns> = {};
+  const fill = (
+    key: keyof LeadAddressColumns,
+    existingValue: string | null | undefined,
+    incomingValue: string | undefined
+  ) => {
+    if (shouldOverwriteLeadValue(existingValue || undefined, incomingValue)) {
+      patch[key] = incomingValue || null;
+    }
+  };
+
+  fill('address', existing?.address, incoming.address);
+  fill('street', existing?.street, incoming.street);
+  fill('city', existing?.city, incoming.city);
+  fill('state', existing?.state, incoming.state);
+  fill('zip', existing?.zip, incoming.zip);
+  fill('address_parse_tier', existing?.address_parse_tier, incoming.addressParseTier);
+  return patch;
+}
+
 function normalizeEventType(value?: string): GhlWebhookEventType {
   const normalized = value?.trim().toLowerCase().replace(/_/g, '.');
   switch (normalized) {
@@ -117,6 +222,46 @@ export function normalizePhone(value?: string): string | undefined {
 export function normalizeEmail(value?: string): string | undefined {
   const normalized = value?.trim().toLowerCase();
   return normalized || undefined;
+}
+
+/**
+ * Two-letter state codes only.
+ *
+ * Payloads carry 'Nh' alongside 'NH', so casing is normalized. Anything longer
+ * than two letters (a spelled-out state) is dropped rather than guessed at: the
+ * raw address is still stored, so the address parser can recover it later, and
+ * writing an unvalidated value here would be rejected by the leads.state CHECK
+ * constraint — which fails the whole batched sync upsert, not just one row.
+ */
+export function normalizeStateCode(value?: string): string | undefined {
+  const candidate = value?.trim();
+  // Test for two ASCII letters BEFORE upper-casing: some single characters widen
+  // to two under toUpperCase ('ß' -> 'SS', the 'ﬅ' ligature -> 'ST'), which would
+  // otherwise manufacture a real-looking state code out of one junk character.
+  if (!candidate || !/^[A-Za-z]{2}$/.test(candidate)) return undefined;
+  return candidate.toUpperCase();
+}
+
+/**
+ * Five-digit US ZIP. ZIP+4 collapses to its prefix.
+ *
+ * Short values are left-padded, which is recovery rather than guessing: JSON
+ * numbers cannot carry a leading zero, so a numeric postal_code of 3885 can only
+ * ever have meant 03885. That case matters disproportionately here — every ME and
+ * NH ZIP begins with 0, so without the pad a single upstream change from string
+ * to number would silently drop every in-territory ZIP.
+ */
+export function normalizeZipCode(value?: string): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  const digits = trimmed.replace(/\D/g, '');
+  if (digits.length === 5) return digits;
+  if (digits.length === 9) return digits.slice(0, 5);
+  // Pad only a wholly numeric value. Digits salvaged from mixed text are not a
+  // ZIP and must never be padded into one — a Canadian 'K1A 0B1' reduces to
+  // '101', which would otherwise become the very real ZIP 00101.
+  if (digits.length < 5 && /^[0-9]+$/.test(trimmed)) return digits.padStart(5, '0');
+  return undefined;
 }
 
 /**
@@ -315,12 +460,47 @@ export function normalizeGhlWebhook(payload: Record<string, unknown>): Normalize
     'contact.name',
   ]);
   const joinedName = normalizeWhitespace([firstName, lastName].filter(Boolean).join(' '));
+
+  // GHL sends the address both flattened (`full_address`) and as discrete fields.
+  // The discrete fields are read directly rather than recovered by parsing the
+  // flattened string — parsing structure we were handed would only add a way to
+  // get it wrong.
+  //
+  // Verified against the 237 payloads stored between 2026-06-23 and 2026-08-10:
+  // the keys are top-level and snake_case, the `contact` sub-object carries no
+  // address fields at all, and `address1` is the only street source — when it is
+  // absent `full_address` holds just "City, ST 12345" (2-25 chars), so there is
+  // no street hiding in it. The camelCase spellings below are defensive only.
+  const street = normalizeWhitespace(readFirstString(payload, [
+    'address1',
+    'address_1',
+    'addressLine1',
+    'address_line_1',
+    'street',
+    'contact.address1',
+  ]));
+  const city = normalizeWhitespace(readFirstString(payload, ['city', 'contact.city']));
+  const state = normalizeStateCode(readFirstString(payload, ['state', 'contact.state']));
+  const zip = normalizeZipCode(readFirstString(payload, [
+    'postal_code',
+    'postalCode',
+    'zip',
+    'zip_code',
+    'contact.postal_code',
+    'contact.postalCode',
+  ]));
+
   const lead: NormalizedWebhookLead = {
     ghlContactId,
     name: normalizeWhitespace(fullName || joinedName),
     phone: normalizePhone(readFirstString(payload, ['phone', 'phone_number', 'phoneNumber', 'contact.phone'])),
     email: normalizeEmail(readFirstString(payload, ['email', 'contact.email'])),
     address: normalizeWhitespace(readFirstString(payload, ['address', 'full_address', 'fullAddress', 'location.fullAddress'])),
+    street,
+    city,
+    state,
+    zip,
+    addressParseTier: zip && city && state ? 'A' : undefined,
     source: normalizeWhitespace(readFirstString(payload, [
       'contact_source',
       'contact.source',
