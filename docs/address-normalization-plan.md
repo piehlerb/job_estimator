@@ -110,6 +110,14 @@ digits, `country` is always `US`.
    full-row upsert including the new columns, so against an un-migrated `leads`
    table every webhook fails with "column leads.street does not exist" and the
    events land as `failed`. Migration first, function second — not the reverse.
+
+   Deploy with `supabase functions deploy ghl-webhook --project-ref <ref>`, from
+   a checkout that actually contains the new code. `verify_jwt` is pinned to
+   `false` in [`supabase/config.toml`](../supabase/config.toml) — it defaults to
+   **true**, and with it on the gateway 401s every GHL webhook before the
+   function runs, while the deploy still reports success and the app keeps
+   working. That file is the only thing standing between a routine deploy and
+   leads silently stopping; read its comment before touching it.
 8. Mirror the change into [`src/lib/leadPipeline.ts`](../src/lib/leadPipeline.ts).
    These two files are near-duplicates today; they must not drift. Nothing
    enforces this — `tsconfig.app.json` includes only `src`, so the `_shared` copy
