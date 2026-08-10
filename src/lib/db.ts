@@ -1623,6 +1623,32 @@ export async function updateLeadAppointment(appointment: LeadAppointment): Promi
   await triggerBackgroundSync();
 }
 
+export async function deleteLeadAppointment(id: string): Promise<void> {
+  const db = await getDB();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(['leadAppointments'], 'readwrite');
+    const store = transaction.objectStore('leadAppointments');
+    const getRequest = store.get(id);
+
+    getRequest.onerror = () => reject(getRequest.error);
+    getRequest.onsuccess = () => {
+      const appointment = getRequest.result;
+      if (appointment) {
+        appointment.deleted = true;
+        appointment.updatedAt = new Date().toISOString();
+        const putRequest = store.put(appointment);
+        putRequest.onerror = () => reject(putRequest.error);
+        putRequest.onsuccess = () => resolve();
+      } else {
+        resolve();
+      }
+    };
+  });
+
+  await queueForSync('leadAppointments', id, 'delete');
+  await triggerBackgroundSync();
+}
+
 // =====================
 // Ad Spend CRUD (monthly advertising spend for lead tracking)
 // =====================
