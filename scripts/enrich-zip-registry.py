@@ -104,6 +104,23 @@ def read_existing(path):
     return records, crlf
 
 
+DIRECTIONAL_EXPANSION = {
+    "n": "North", "n.": "North", "no": "North", "no.": "North",
+    "s": "South", "s.": "South", "so": "South", "so.": "South",
+    "e": "East", "e.": "East", "w": "West", "w.": "West",
+    "mt": "Mount", "mt.": "Mount", "st": "Saint", "st.": "Saint",
+    "ctr": "Center", "ctr.": "Center",
+}
+
+
+def expand_directional(name):
+    """'N Shapleigh' -> 'North Shapleigh'. Leaves anything else alone."""
+    words = name.split()
+    if len(words) > 1 and words[0].lower() in DIRECTIONAL_EXPANSION:
+        return " ".join([DIRECTIONAL_EXPANSION[words[0].lower()]] + words[1:])
+    return name
+
+
 def alias_forms(city):
     words = city.split()
     if not words:
@@ -152,21 +169,56 @@ def main():
             base, county=u["county"] or "", zip_type=u["zip_code_type"]
         )
 
-    # --- aliases -------------------------------------------------------------
-    # An alias that is itself a real city in the same state is ambiguous and is
-    # dropped: better unresolved than resolved to the wrong town.
+    # --- two alias tables, because the two USPS lists mean different things ---
+    #
+    # `unacceptable_cities` are USPS-known MISSPELLINGS and abbreviations of the
+    # postal city ('N Berwick', 'No Berwick' for North Berwick). Typing one is an
+    # error, so the parser should normalize it away.
+    #
+    # `acceptable_cities` are legitimate alternate place names USPS will deliver
+    # to under that zip -- and they are frequently a DIFFERENT municipality, not
+    # a variant spelling. Newington NH has no zip of its own and mails as
+    # Portsmouth 03801, so it appears as an acceptable city of 03801. Rewriting a
+    # typed "Newington" to "Portsmouth" would erase the town the work is actually
+    # in, which is the unit territory reporting cares about. These are preserved
+    # as typed, with the postal city recorded so the parser can still reach the
+    # county (for the conflict check) and the zip (for tier B derivation).
+    #
+    # An alias that is itself a real city in the same state is dropped from both
+    # tables: the real city's own registry entry already resolves it exactly, and
+    # 28 acceptable-city entries are of that kind (Londonderry is listed under
+    # Derry's zip but has its own 03053).
     real_cities = {(r["city"].strip().lower(), r["state"]) for r in usps.values()}
-    aliases = {}
+
+    normalizing = {}   # typed misspelling -> canonical postal city
+    preserving = {}    # typed place name  -> {name, postalCity}
+
     for r in usps.values():
-        variants = set(r.get("acceptable_cities") or [])
-        variants |= set(r.get("unacceptable_cities") or [])
-        variants |= set(alias_forms(r["city"]))
-        for v in variants:
+        state = r["state"]
+
+        for v in set(r.get("unacceptable_cities") or []) | set(alias_forms(r["city"])):
             v = v.strip()
-            key = v.lower()
-            if not v or (key, r["state"]) in real_cities:
+            if not v or (v.lower(), state) in real_cities:
                 continue
-            aliases.setdefault(r["state"], {}).setdefault(key, r["city"])
+            normalizing.setdefault(state, {}).setdefault(v.lower(), r["city"])
+
+        # Group the acceptable variants of one place by their expanded form, so
+        # 'N Shapleigh' and 'North Shapleigh' both resolve to the fuller spelling
+        # rather than preserving an abbreviation.
+        for v in set(r.get("acceptable_cities") or []):
+            v = v.strip()
+            if not v or (v.lower(), state) in real_cities:
+                continue
+            canonical = expand_directional(v)
+            entry = {"name": canonical, "postal_city": r["city"]}
+            for key in {v.lower(), canonical.lower()}:
+                preserving.setdefault(state, {}).setdefault(key, entry)
+
+    # A name that is a legitimate place somewhere wins over being treated as a
+    # misspelling; drop it from the normalizing table so the two cannot disagree.
+    for state, table in preserving.items():
+        for key in table:
+            normalizing.get(state, {}).pop(key, None)
 
     # --- emit ----------------------------------------------------------------
     out = []
@@ -214,19 +266,46 @@ def main():
     w("};")
     w("")
     w("/**")
-    w(" * Written variants mapped to the canonical place name, keyed by state then by")
-    w(" * lower-cased alias. Sourced from the USPS acceptable/unacceptable city lists")
-    w(" * (the unacceptable ones are known misspellings -- exactly what shows up in")
-    w(" * hand-typed addresses) plus common directional abbreviations.")
+    w(" * Misspellings and abbreviations of a postal city, mapped to the canonical")
+    w(" * name. Keyed by state, then by lower-cased typed form. Sourced from the USPS")
+    w(" * *unacceptable* city list -- names USPS knows are wrong -- plus common")
+    w(" * directional abbreviations.")
     w(" *")
-    w(" * An alias that is itself a real city in the same state is omitted: ambiguous")
-    w(" * is worse than unresolved.")
+    w(" * Typing one of these is an error, so the parser replaces it: 'N Berwick'")
+    w(" * becomes 'North Berwick'.")
     w(" */")
     w("export const NH_ME_CITY_ALIASES: Record<'ME' | 'NH', Record<string, string>> = {")
     for state in ("ME", "NH"):
         w(f"  {state}: {{")
-        for alias in sorted(aliases.get(state, {})):
-            w(f"    {ts_string(alias)}: {ts_string(aliases[state][alias])},")
+        for alias in sorted(normalizing.get(state, {})):
+            w(f"    {ts_string(alias)}: {ts_string(normalizing[state][alias])},")
+        w("  },")
+    w("};")
+    w("")
+    w("/**")
+    w(" * A real place that has no ZIP of its own and mails under another town's.")
+    w(" * `name` is the place as it should be recorded; `postalCity` is the registry")
+    w(" * city whose ZIP serves it.")
+    w(" *")
+    w(" * These are NOT misspellings -- they are usually a different municipality.")
+    w(" * Newington NH mails as Portsmouth 03801, but the work is in Newington, and")
+    w(" * that is the unit territory reporting counts. So the parser keeps the typed")
+    w(" * name and uses `postalCity` only to reach the county (for the ZIP-conflict")
+    w(" * check) and the ZIP (when deriving one from a town with no ZIP given).")
+    w(" *")
+    w(" * Sourced from the USPS *acceptable* city list. Entries that are themselves a")
+    w(" * registry city in the same state are omitted -- that city's own record")
+    w(" * already resolves them exactly.")
+    w(" */")
+    w("export type PlaceName = { name: string; postalCity: string };")
+    w("")
+    w("export const NH_ME_PLACE_NAMES: Record<'ME' | 'NH', Record<string, PlaceName>> = {")
+    for state in ("ME", "NH"):
+        w(f"  {state}: {{")
+        for alias in sorted(preserving.get(state, {})):
+            e = preserving[state][alias]
+            w(f"    {ts_string(alias)}: {{ name: {ts_string(e['name'])}, "
+              f"postalCity: {ts_string(e['postal_city'])} }},")
         w("  },")
     w("};")
     w("")
@@ -241,7 +320,10 @@ def main():
     print(f"  records          : {len(enriched)}")
     print(f"  zip types        : {dict(types)}")
     print(f"  counties         : {len({r['county'] for r in enriched.values() if r['county']})}")
-    print(f"  aliases          : ME={len(aliases.get('ME', {}))} NH={len(aliases.get('NH', {}))}")
+    print(f"  normalizing alias: ME={len(normalizing.get('ME', {}))} "
+          f"NH={len(normalizing.get('NH', {}))}  (misspellings -> canonical)")
+    print(f"  preserved places : ME={len(preserving.get('ME', {}))} "
+          f"NH={len(preserving.get('NH', {}))}  (kept as typed)")
     print(f"  retired excluded : {len(retired)} {retired}")
     if unknown_active:
         print(f"  NOTE: {len(unknown_active)} active USPS zips are not in the registry "

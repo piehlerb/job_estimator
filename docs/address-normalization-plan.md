@@ -205,6 +205,42 @@ New file `src/lib/addressParse.ts`. Direct port of `parse_address()` and
 `match_city_tail()` — the backward-tail-matching algorithm, longest-match-wins,
 and the tier semantics all carry over unchanged.
 
+> **Status: done.** 17 tests, all asserted against the real checked-in registry
+> rather than fixtures, so a regeneration that moves the data surfaces here.
+>
+> **Validated against the SQL implementation on all 252 real address strings**
+> (`dryrun_report_sample.csv`): **247 of 252 tiers identical**. Every one of the 5
+> differences is an out-of-region Massachusetts address that the ME/NH-only
+> registry deliberately no longer resolves (3 `A→D`, 1 `A!→D`, 1 `B→D`) — they
+> land in the cleanup worklist, which is the intended trade from the Phase 1
+> scope cut. Tier counts otherwise match: A 199, A! 3, B 34, C 3.
+>
+> Three places the port is **better** than the SQL proposal it came from:
+>
+> - 18 addresses now record the town instead of the postal district (see the
+>   county bullet below).
+> - Newington resolves to the live ZIP **03801**; the SQL proposal offered
+>   **03805**, which is retired. Phase 1's exclusion of inactive ZIPs is what
+>   makes that impossible to get wrong.
+> - A bare "Dayton" resolves to Dayton **ME 04005**; the SQL proposal offered
+>   **14041**, which is in New York.
+>
+> One regression the narrower registry introduced, and its fix: a place unique
+> within ME/NH need not be unique nationally. "New Kensington" (Pennsylvania)
+> resolved to Kensington NH with `"New"` left over as the street — and tier C is
+> applied automatically, so that would have landed silently. Tier C now requires
+> the leftover head to be empty or contain a house number; anything else is not a
+> street line and the match is refused. That closed the only false positive in the
+> 252-row corpus.
+>
+> **Deviation from the plan below:** the registry is imported directly rather than
+> injected. Injection was for swapping an eager and a lazy dataset; with one eager
+> module that indirection buys nothing, and tests exercising the real data are
+> stronger than tests against a stub.
+>
+> The parser is not yet wired into any UI, so it adds **zero** bundle weight today
+> — it is tree-shaken out until Phase 4/6 calls it.
+
 ```ts
 export type AddressTier = 'A' | 'A!' | 'B' | 'C' | 'D' | 'M';
 
@@ -231,16 +267,26 @@ Behaviour to preserve exactly:
   municipality (that's the territory you work in), record the postal city in
   `note`. Different county ⇒ tier `A!`, resolve nothing.
 
-  Caveat found while building Phase 1: this only preserves the typed town for
-  towns that are registry cities in their own right, like Cape Neddick (03902,
-  York County). Some real municipalities exist **only as aliases** — Newington NH
-  has no ZIP of its own, mails as Portsmouth 03801, and so appears in
-  `NH_ME_CITY_ALIASES` pointing at `Portsmouth` and not in the registry at all.
-  Resolving "Newington NH" through the alias table therefore yields `Portsmouth`,
-  and the typed municipality is lost. If preserving it matters for territory
-  reporting, the parser needs to carry the typed form separately rather than
-  overwriting it with the canonical name — decide that deliberately in Phase 2,
-  because the alias table cannot express it.
+  **Decided: the typed town is kept, and never rewritten from the ZIP.** Some real
+  municipalities exist only as aliases — Newington NH has no ZIP of its own and
+  mails as Portsmouth 03801. Rewriting it to "Portsmouth" would erase the town
+  the work is actually in, which is the unit territory reporting counts.
+
+  This required splitting Phase 1's single alias table in two, because the USPS
+  lists mean different things:
+
+  - `unacceptable_cities` are **misspellings and abbreviations** of the postal
+    city ("N Berwick", "No Berwick"). Typing one is an error →
+    `NH_ME_CITY_ALIASES` normalizes it to the canonical name.
+  - `acceptable_cities` are **legitimate alternate place names**, frequently a
+    different municipality → `NH_ME_PLACE_NAMES` maps the typed form to
+    `{ name, postalCity }`. The parser records `name` and uses `postalCity` only
+    to reach the county (for the conflict check) and the ZIP (for tier B).
+
+  On real data this changed 18 addresses from the postal district to the actual
+  town — Brentwood and Kensington instead of Exeter, Lyman instead of Alfred,
+  Arundel instead of Kennebunkport, Middleton instead of Union. The SQL proposal
+  had this flaw for all of them, not just Newington.
 - **Never auto-resolve a contradiction.** A blank field beats a confidently
   wrong one; `03528` vs `03258` is the case that matters.
 - **Only `STANDARD` zips are candidates** when deriving a zip from a town.

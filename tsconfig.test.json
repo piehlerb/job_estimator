@@ -27,6 +27,8 @@
     "src/lib/customerPersistence.test.ts",
     "src/lib/zipGeography.ts",
     "src/lib/zipGeography.test.ts",
+    "src/lib/addressParse.ts",
+    "src/lib/addressParse.test.ts",
     "src/lib/nhMeZipRegistry.ts",
     "src/lib/dateUtils.ts",
     "src/types/index.ts"

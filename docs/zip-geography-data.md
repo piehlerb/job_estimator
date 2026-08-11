@@ -2,7 +2,12 @@
 
 `src/lib/nhMeZipRegistry.ts` is a checked-in, runtime-local registry of 766 exact five-digit ZIP records for Maine and New Hampshire. It is a generated file — do not hand-edit it. Each entry carries a postal place name, state, ZIP centroid, county, and ZIP type. It is not a ZIP boundary map or a municipal-boundary dataset.
 
-The same module also exports `NH_ME_CITY_ALIASES`, mapping written variants to canonical place names (486 for ME, 206 for NH).
+The same module exports **two** alias tables, because the two USPS city lists mean different things and must not be merged:
+
+- `NH_ME_CITY_ALIASES` (ME 123, NH 126) — misspellings and abbreviations of a postal city, from the USPS *unacceptable* list plus directional abbreviations. Typing one is an error, so the parser **replaces** it: "N Berwick" becomes "North Berwick".
+- `NH_ME_PLACE_NAMES` (ME 387, NH 97) — real places with no ZIP of their own, from the USPS *acceptable* list. Each maps to `{ name, postalCity }`. The parser **keeps** `name` and uses `postalCity` only to reach the county and the ZIP. Newington NH mails as Portsmouth 03801, but the work is in Newington, and that is what territory reporting counts.
+
+Collapsing these into one table silently rewrites 18 real addresses in the current data to their postal district — Brentwood and Kensington to Exeter, Lyman to Alfred, Arundel to Kennebunkport, Middleton to Union.
 
 ## Two sources, and which one wins
 
@@ -59,6 +64,6 @@ Adds `county` and `zipType` and rebuilds the alias table, copying city/state/lat
 
 The six multi-ZIP towns are Manchester NH (5), Nashua NH (4), Portland ME (4), Rochester NH (3), Concord NH (2), Lebanon NH (2). Everywhere else, a town name determines a ZIP unambiguously — which is what makes bulk-filling missing ZIPs by town safe.
 
-## Known limitation
+## A place unique here is not unique nationally
 
-Some real municipalities exist only as aliases, not as registry cities. Newington NH is the clearest case: it has no ZIP of its own (it mails as Portsmouth 03801), so it appears in `NH_ME_CITY_ALIASES` pointing at `Portsmouth` and not in `NH_ME_ZIP_CENTROIDS` at all. A parser that resolves a typed town through the alias table therefore yields `Portsmouth`, not `Newington` — the typed municipality is not preserved for alias-only towns. Towns that do have their own ZIP (Cape Neddick, 03902) are unaffected. See `docs/address-normalization-plan.md`.
+Because the registry stops at ME and NH, a town name can be unambiguous *within it* while being a real place elsewhere. "New Kensington" is in Pennsylvania, but matching backward from the end of the string finds "Kensington" (NH). The parser guards against this — see the tier C rule in `src/lib/addressParse.ts` — but it is the standing cost of the narrow scope, and worth remembering before widening or narrowing `STATES`.
