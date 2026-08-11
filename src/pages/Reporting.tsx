@@ -7,6 +7,7 @@ import { loadAllHistoricalJobsFromSupabase } from '../lib/sync';
 import ZipGeographyReport from '../components/ZipGeographyReport';
 import LeadCreatedDateReport from '../components/LeadCreatedDateReport';
 import { applyZipToAddress } from '../lib/zipGeography';
+import { withJobAddressFields } from '../lib/addressFields';
 import { localToday, toLocalDateString } from '../lib/dateUtils';
 
 interface JobWithCalc {
@@ -270,12 +271,17 @@ export default function Reporting({ onEditJob }: ReportingProps) {
     const updates = jobsWithCalc
       .map(({ job }) => job)
       .filter((job) => requestedIds.has(job.id))
-      .map((job) => ({
-        ...job,
-        customerAddress: applyZipToAddress(job.customerAddress, zip),
-        updatedAt: now,
-        synced: false,
-      }));
+      .map((job) => {
+        const rewritten = {
+          ...job,
+          customerAddress: applyZipToAddress(job.customerAddress, zip),
+          updatedAt: now,
+          synced: false,
+        };
+        // The raw address is the source of the structured fields, so rewriting it
+        // here has to re-derive them or they silently keep the old ZIP's town.
+        return withJobAddressFields(rewritten, job);
+      });
 
     if (updates.length !== requestedIds.size) {
       throw new Error('Some matching jobs are no longer loaded. Refresh the report and try again.');

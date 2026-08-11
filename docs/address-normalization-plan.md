@@ -341,6 +341,43 @@ the object level with no code change, per `.claude/CLAUDE.md`.
 
 ## Phase 4 — Write path
 
+> **Status: done.** `src/lib/addressFields.ts` is the single write path; 13 tests.
+>
+> **Job-site vs customer address decided:** the job carries its own address
+> because a customer can own two properties, and `Customer.address` is the
+> billing address. Both are documented on the types so the distinction does not
+> erode. The "same as customer" toggle is Phase 6 UI work.
+>
+> **A rule the plan did not anticipate — raw changing beats the ratchet.** The
+> ratchet protects a human's correction from automated passes, but it must not
+> protect a *stale projection of a different address*. So when the raw text
+> changes, the whole group is rebuilt and `addressVerifiedAt` is cleared; when the
+> raw text is unchanged, gaps are filled and a confirmed row is untouchable. The
+> group is replaced atomically for the same reason as the webhook merge: field-by-
+> field merging welds one address's street onto another's town.
+>
+> **Casing canonicalization, found from real production data.** The first three
+> live leads arrived as `PORTLAND`, `JACKMAN` and `Hampton Falls` — GHL passes
+> through whatever the lead typed. Left alone, "PORTLAND" and "Portland" count as
+> two towns in any territory report, which is the exact dirt this project exists
+> to remove. `canonicalizeTown` in the parser folds a known town to its registry
+> spelling (and applies the alias rules, so "N Berwick" → "North Berwick" while
+> "Newington" stays "Newington"). An unrecognized town keeps the value it came
+> with — out of scope is not the same as wrong.
+>
+> **Call sites wired:** JobForm save, `applyLeadEdit`, `ensureCustomerPersistence`
+> (which previously copied only the raw string), and — not in the original list —
+> `Reporting.handleApplyZip`. That bulk ZIP repair rewrites the raw address, so
+> without re-deriving it would have left every structured field pointing at the
+> old town. Any writer of raw has to re-derive.
+>
+> **Verified in the running app**, not just in tests: the registry builds its
+> indexes at module load (a fault there would white-screen the app), and a job
+> saved through the real IndexedDB layer came back with
+> `customerCity: 'Newington'`, `customerZip: '03801'`, tier `A`, raw untouched.
+>
+> Bundle cost is now real rather than tree-shaken: **+9.9 KB gzipped**.
+
 One helper, `src/lib/addressFields.ts`, used by every writer:
 
 ```ts
@@ -496,14 +533,20 @@ Neither is caused by this work; both affect it.
   pre-existing library-generic errors at `index.ts:125` and `:329` that are
   unrelated to this work.
 
-## Open decisions
+## Decisions made
 
-1. **Registry scope** — northeast only (recommended) or national?
-2. **Existing ZIP-review panel** — replace (recommended) or keep both?
-3. **Backfill trigger** — gated review (recommended) or silent at startup like
-   the other migrations?
-4. **`street2`** — leave unpopulated for now (recommended) or add unit/suite
-   extraction in Phase 2?
+1. **Registry scope** — ME/NH only. Measured: the full northeast is 4,418 records
+   and NY alone is 2,151 of them, against six real non-ME/NH addresses.
+2. **Existing ZIP-review panel** — **replace** it in Phase 6; the new cleanup
+   panel is a strict superset covering jobs, leads and customers.
+3. **Backfill trigger** — **gated review**. Phase 5 shows the tier breakdown and
+   the proposals, and applies only on an explicit action. ~250 records is too many
+   to write silently at startup.
+4. **`street2`** — left unpopulated. Unit/suite extraction stays a separate pass.
+5. **Alias-only towns** — the typed town is kept, never rewritten from the ZIP.
+   This is why there are two alias tables; see Phase 2.
+6. **Job-site vs customer address** — the job owns the job-site address, the
+   customer owns the billing address, with a "same as customer" toggle in Phase 6.
 
 ---
 

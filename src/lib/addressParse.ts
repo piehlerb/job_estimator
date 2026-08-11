@@ -182,6 +182,37 @@ export function matchTownTail(text: string, state?: StateCode): TownMatch | unde
   return undefined;
 }
 
+/**
+ * Put an already-known town into its canonical registry form.
+ *
+ * GHL passes a lead's address through exactly as typed, so towns arrive as
+ * "PORTLAND", "Portland" and "portland" interchangeably. Left alone those count
+ * as different towns in any grouping or territory report, which is precisely the
+ * kind of dirt structured fields are meant to remove. This also folds in the
+ * alias rules, so "N Berwick" becomes "North Berwick" and "Newington" stays
+ * "Newington".
+ *
+ * Returns undefined when the town is not in the registry — a Massachusetts city,
+ * say. The caller should keep whatever it already had rather than discard it:
+ * unrecognized is not the same as wrong.
+ */
+export function canonicalizeTown(
+  city: string | undefined,
+  state?: string
+): { city: string; state: StateCode } | undefined {
+  const candidate = city?.trim();
+  if (!candidate) return undefined;
+
+  const stateCode = state?.trim().toUpperCase();
+  if (stateCode === 'ME' || stateCode === 'NH') {
+    const hit = resolveTown(candidate, stateCode);
+    return hit ? { city: hit.city, state: hit.state } : undefined;
+  }
+
+  const hit = resolveTownWithoutState(candidate);
+  return hit ? { city: hit.city, state: hit.state } : undefined;
+}
+
 function readTrailingState(text: string): { state?: StateCode; rest: string } {
   const match = text.match(TRAILING_STATE);
   if (!match) return { rest: text };

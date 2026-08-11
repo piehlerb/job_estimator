@@ -38,6 +38,7 @@ import { calculateJobOutputs, calculateActualCosts } from '../lib/calculations';
 import InstallDayScheduleComponent from '../components/InstallDaySchedule';
 import ActualDayScheduleComponent from '../components/ActualDaySchedule';
 import { convertLegacyJobToSchedule } from '../lib/jobMigration';
+import { withJobAddressFields } from '../lib/addressFields';
 import { compareSnapshots, SnapshotChanges } from '../lib/snapshotComparison';
 import SnapshotChangeBanner, { SelectedChanges } from '../components/SnapshotChangeBanner';
 import { normalizeChipBlendName } from '../lib/syncHelpers';
@@ -2004,10 +2005,15 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
         synced: false,
       };
 
+      // Derive the structured address from the free text. Passing the previous job
+      // lets the helper tell an edited address (rebuild the projection) from an
+      // unchanged one (fill gaps only, and never override a confirmed row).
+      const jobWithAddress = withJobAddressFields(job, existingJob ?? undefined);
+
       if (jobId) {
-        await updateJob(job);
+        await updateJob(jobWithAddress);
       } else {
-        await addJob(job);
+        await addJob(jobWithAddress);
       }
       if (autoReminders.length > 0) {
         setReminders(allReminders);

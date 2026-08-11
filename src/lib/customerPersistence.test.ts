@@ -36,6 +36,16 @@ describe('ensureCustomerPersistence', () => {
       address: '12 Main Street',
       createdAt: NOW,
       updatedAt: NOW,
+      // A new customer now carries the structured projection of its address. This
+      // one has no town, so nothing resolves and the tier records that the parser
+      // looked — which is what puts it on the cleanup worklist.
+      street: undefined,
+      street2: undefined,
+      city: undefined,
+      state: undefined,
+      zip: undefined,
+      addressParseTier: 'D',
+      addressVerifiedAt: undefined,
     });
     assert.deepEqual(addedCustomers, [customer]);
   });

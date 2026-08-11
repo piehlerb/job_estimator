@@ -1,4 +1,5 @@
 import type { Lead, LeadDispositionReason, LeadStage } from '../types/index.js';
+import { withLeadAddressFields } from './addressFields.js';
 
 export type LeadEditInput = {
   name?: string;
@@ -51,7 +52,10 @@ export function applyLeadEdit(
     next.dispositionNotes = undefined;
   }
 
-  return next;
+  // Re-derive the structured address. Passing the original lead lets the helper
+  // see whether the raw address was edited: if it was, the projection is rebuilt,
+  // otherwise gaps are filled and a confirmed address is left alone.
+  return withLeadAddressFields(next, lead);
 }
 
 export function softDeleteLead(lead: Lead, nowIso = new Date().toISOString()): Lead {
