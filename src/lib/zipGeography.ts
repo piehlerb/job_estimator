@@ -1,5 +1,5 @@
 import { Job, JobStatus } from '../types/index.js';
-import { NH_ME_ZIP_CENTROIDS, ZipCentroid } from './nhMeZipRegistry.js';
+import { NH_ME_ZIP_CENTROIDS, ZipCentroid, ZipRecord } from './nhMeZipRegistry.js';
 import { toLocalDateString } from './dateUtils.js';
 
 export type ZipExclusionReason = 'missing' | 'invalid-format' | 'out-of-scope-or-unrecognized';
@@ -18,8 +18,10 @@ export interface ZipGeographyReport {
   excluded: Record<ZipExclusionReason, number>;
 }
 
+// Resolves to the full registry record, not just the map-facing centroid: the
+// address parser needs `county` to tell a postal-city alias from a real conflict.
 export type ZipAddressResolution =
-  | { zip: string; centroid: ZipCentroid }
+  | { zip: string; centroid: ZipRecord }
   | { reason: ZipExclusionReason };
 
 type ZipDatedJob = Pick<Job, 'estimateDate' | 'installDate' | 'createdAt'>;

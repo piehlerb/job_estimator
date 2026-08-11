@@ -149,28 +149,53 @@ sources wholesale would move map markers and change displayed town names —
 [`zipGeography.test.ts:24`](../src/lib/zipGeography.test.ts#L24) pins Portland's
 centroid, and that test is right to exist.
 
-**Resolution: merge, don't replace.** For ME/NH, keep GeoNames' city name and
-lat/lon and add USPS `county` / `zipType` / aliases alongside. For the newly
-added states, use USPS wholesale. Reporting output is unchanged by construction.
+**Resolution: merge, don't replace.** Keep GeoNames' city name and lat/lon; add
+USPS `county` / `zipType` / aliases alongside. Reporting output is unchanged by
+construction.
+
+> **Status: done.** Two revisions to what was planned, both driven by measurement.
+>
+> **Scope cut to ME/NH only — no extended module, no lazy chunk.** The plan called
+> for the whole northeast in a lazily-loaded second module. Measured, that is
+> 4,418 records / ~532 KB of TypeScript, and **New York alone is 2,151 of them**.
+> Actual non-ME/NH volume in the data is about **six addresses** (5 MA, 1 RI),
+> plus SC/CA/GA that no northeast registry would cover anyway. Building a lazy
+> loader, an offline fallback and a second data module to serve six rows is worse
+> on maintainability than letting them land in the cleanup worklist as tier `D`,
+> where a human fixes them once and the ratchet holds. This also removed the
+> `public/sw.js` precache step entirely — which was not achievable as written,
+> since the service worker deliberately does not precache hashed assets.
+> Widening later is a one-line change to `STATES` in the enrichment script.
+>
+> **An enrichment script, not a rewritten generator.** `scripts/enrich-zip-registry.py`
+> only ever *adds* fields, copying city/state/lat/lon through untouched, so the
+> merge is reviewable: the diff must show added properties and nothing else. It
+> reports rather than applies any USPS disagreement, so future drift surfaces.
+>
+> **The merge was verified, not assumed.** Across all 766 ME/NH ZIPs the two
+> sources agree on **every city name** (0 differences), and the regenerated file
+> has identical membership with **0 changes** to state/city/lat/lon. 22 centroids
+> *would* have moved had USPS been taken wholesale — Mount Washington by 0.41°
+> (~28 miles), China Village by 0.37° — which is what the merge rule prevents.
 
 ### Work
 
-1. Rewrite `scripts/generate-nh-me-zip-registry.mjs` (or add a sibling) to emit
-   **two files from one snapshot**, so there is a single generator and no manual
-   drift:
-   - `src/lib/nhMeZipRegistry.ts` — ME/NH, eager, existing `NH_ME_ZIP_CENTROIDS`
-     shape preserved, plus `county` and `zipType` on each record.
-   - `src/lib/zipRegistryExtended.generated.ts` — the other northeast states
-     (CT, MA, NY, RI, VT) plus the city-alias map, **lazy-loaded**.
-2. Scope: northeast only. The national set is ~42,800 zips — unacceptable in a
-   PWA bundle for the two out-of-region rows you actually have. Fix those by hand.
-3. Bundle cost: ME/NH stays eager (already is, ~40KB). The extended chunk is
-   loaded on demand and only when an ME/NH lookup misses. Add it to the
-   `public/sw.js` precache list so offline still works after first load.
-4. Update [`docs/zip-geography-data.md`](zip-geography-data.md) with the second
-   source, its licence, and the merge rule above.
-5. Run the generator and **review the ME/NH diff** before committing. Any change
-   to a city name or centroid is a bug in the merge, not an improvement.
+1. `scripts/enrich-zip-registry.py` merges USPS `county` / `zipType` onto the
+   existing registry and rebuilds `NH_ME_CITY_ALIASES` (486 ME, 206 NH).
+   `scripts/generate-nh-me-zip-registry.mjs` is unchanged and still owns the
+   GeoNames base; regeneration is base-then-enrich, documented in
+   [`docs/zip-geography-data.md`](zip-geography-data.md).
+2. Retired ZIPs excluded. USPS lists 772 ME/NH ZIPs to the registry's 766; all 6
+   extras are `active: false` and appear nowhere in the data. A retired ZIP
+   resolving to a town that no longer receives mail is worse than no match, and
+   the town-name path still resolves such an address.
+3. Types: `ZipCentroid` keeps its four-field shape for the reporting map;
+   `ZipRecord = ZipCentroid & { county; zipType }` is what the registry holds and
+   what `ZipAddressResolution` now carries, so the parser can reach `county`.
+4. `zipGeography.test.ts` and its dependencies were added to
+   `tsconfig.test.json` — that suite had **never been compiled or run** by the
+   documented path, despite pinning Portland's centroid in a strict `deepEqual`
+   that adding fields would break. It now runs (11 tests).
 
 ---
 
@@ -205,6 +230,17 @@ Behaviour to preserve exactly:
 - **County breaks the postal-city tie.** Same county ⇒ keep the typed
   municipality (that's the territory you work in), record the postal city in
   `note`. Different county ⇒ tier `A!`, resolve nothing.
+
+  Caveat found while building Phase 1: this only preserves the typed town for
+  towns that are registry cities in their own right, like Cape Neddick (03902,
+  York County). Some real municipalities exist **only as aliases** — Newington NH
+  has no ZIP of its own, mails as Portsmouth 03801, and so appears in
+  `NH_ME_CITY_ALIASES` pointing at `Portsmouth` and not in the registry at all.
+  Resolving "Newington NH" through the alias table therefore yields `Portsmouth`,
+  and the typed municipality is lost. If preserving it matters for territory
+  reporting, the parser needs to carry the typed form separately rather than
+  overwriting it with the canonical name — decide that deliberately in Phase 2,
+  because the alias table cannot express it.
 - **Never auto-resolve a contradiction.** A blank field beats a confidently
   wrong one; `03528` vs `03258` is the case that matters.
 - **Only `STANDARD` zips are candidates** when deriving a zip from a town.
