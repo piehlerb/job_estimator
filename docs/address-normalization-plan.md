@@ -405,6 +405,24 @@ separate chore.
 
 ## Phase 5 — Backfill
 
+> **Status: done**, as `src/lib/addressBackfill.ts` plus the review UI in Phase 6;
+> 9 tests. Gated, not run at startup: it computes a preview, shows the tier
+> breakdown, and writes only on an explicit action.
+>
+> **Bulk-fill by town turned out to be a minor path, not the main one.** The plan
+> expected it to "collapse almost the entire worklist into a few clicks". In fact
+> the parser already derives the ZIP whenever the raw text names a town served by
+> one street-delivery ZIP — so those rows never reach the worklist at all. Bulk-fill
+> only helps where a town is known from somewhere *other* than the raw text: GHL
+> sent `city`/`state` as discrete fields while the free-text address has no town in
+> it. Still worth having, but the headline number in the original proposal was
+> measuring work the parser now does for free.
+>
+> Anything resolved through the UI is stamped tier `M` with a confirmation time, so
+> re-running the pass cannot undo it. Verified by test and in the browser: an
+> automatic fill lands as tier `A` unverified, while a person's bulk-fill or
+> conflict choice lands as `M` verified.
+
 `backfillAddressFields()` in [`src/lib/jobMigration.ts`](../src/lib/jobMigration.ts),
 matching the existing pattern (`migrateJobsDisableGasHeater` et al).
 
@@ -421,6 +439,34 @@ tool rather than a migration.
 ---
 
 ## Phase 6 — UI
+
+> **Status: done.** Three pieces, all verified in the running app rather than only
+> in tests.
+>
+> **`AddressFieldsEditor`** — the resolved chip under the free-text input, shared by
+> JobForm and the Leads edit modal. Parses on blur, not per keystroke. Expands to
+> Street / Unit / City / State / ZIP; typing a ZIP fills its town, since a ZIP
+> determines one outright. Every edit routes through one `markAddressVerified` call
+> so the ratchet cannot be forgotten at a call site.
+>
+> **`AddressCleanupPanel`** — replaces the old ZIP-review block, which covered only
+> ME/NH ZIPs on jobs. Four sections: the gated backfill with a before/after table,
+> bulk-fill by town, conflicts with a "use the ZIP's town" choice, and a searchable
+> unresolved list. The ~120 lines of dead repair code left behind in
+> `ZipGeographyReport` (and `handleApplyZip` in `Reporting`) were removed rather
+> than left to rot.
+>
+> **Same as customer** — a checkbox whose state is *derived* from whether the two
+> addresses match, not stored. A stored boolean would drift out of agreement with
+> the addresses it claims to describe. Unchecking clears the job-site address rather
+> than inventing one.
+>
+> **One change the plan missed, without which all of this was invisible.** The
+> geography map resolved ZIPs by re-parsing the raw address, so filling a structured
+> ZIP would not have put a job on the map — the cleanup work would have looked like
+> it did nothing. `resolveJobZip` now prefers `customerZip` and falls back to
+> parsing. Verified: two jobs whose raw address is "PO Box 12" report `missing` from
+> the raw string and resolve to `03874 Seabrook` once filled.
 
 ### Job form — [`JobForm.tsx:2459`](../src/pages/JobForm.tsx#L2459)
 

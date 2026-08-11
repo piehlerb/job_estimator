@@ -31,6 +31,8 @@
     "src/lib/addressParse.test.ts",
     "src/lib/addressFields.ts",
     "src/lib/addressFields.test.ts",
+    "src/lib/addressBackfill.ts",
+    "src/lib/addressBackfill.test.ts",
     "src/lib/nhMeZipRegistry.ts",
     "src/lib/dateUtils.ts",
     "src/types/index.ts"

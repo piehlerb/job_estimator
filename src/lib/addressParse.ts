@@ -183,6 +183,36 @@ export function matchTownTail(text: string, state?: StateCode): TownMatch | unde
 }
 
 /**
+ * The town a ZIP belongs to, or undefined when the ZIP is outside ME/NH.
+ *
+ * A ZIP maps to exactly one city and state, so filling those from a typed ZIP is a
+ * lookup rather than a guess — which is what makes it safe to do as someone types.
+ */
+export function townForZip(zip: string | undefined): { city: string; state: StateCode } | undefined {
+  const key = zip?.trim();
+  if (!key || !/^[0-9]{5}$/.test(key)) return undefined;
+  const record = NH_ME_ZIP_CENTROIDS[key];
+  return record ? { city: record.city, state: record.state } : undefined;
+}
+
+/**
+ * The street-delivery ZIPs serving a town, sorted. Empty when the town has only a
+ * PO Box or UNIQUE ZIP, which is never a job site.
+ *
+ * Exactly one means a missing ZIP can be filled from the town name with no
+ * research — which is what makes bulk-filling the cleanup worklist safe. In ME and
+ * NH that covers 600 of 606 towns; the exceptions are Manchester, Nashua,
+ * Portland, Rochester, Concord and Lebanon.
+ */
+export function standardZipsForTown(state: string | undefined, city: string | undefined): string[] {
+  const town = resolveTownAnyState(city, state);
+  if (!town) return [];
+  // Keyed on registryCity, not the display name: a preserved town like Newington
+  // has no ZIP of its own and must be looked up under the town it mails from.
+  return STANDARD_ZIPS[town.state][town.registryCity.toLowerCase()] ?? [];
+}
+
+/**
  * Put an already-known town into its canonical registry form.
  *
  * GHL passes a lead's address through exactly as typed, so towns arrive as
@@ -200,17 +230,21 @@ export function canonicalizeTown(
   city: string | undefined,
   state?: string
 ): { city: string; state: StateCode } | undefined {
+  const hit = resolveTownAnyState(city, state);
+  return hit ? { city: hit.city, state: hit.state } : undefined;
+}
+
+/** Resolve a town using the given state when it is usable, else across the registry. */
+function resolveTownAnyState(
+  city: string | undefined,
+  state?: string
+): Omit<TownMatch, 'wordsUsed' | 'head'> | undefined {
   const candidate = city?.trim();
   if (!candidate) return undefined;
 
   const stateCode = state?.trim().toUpperCase();
-  if (stateCode === 'ME' || stateCode === 'NH') {
-    const hit = resolveTown(candidate, stateCode);
-    return hit ? { city: hit.city, state: hit.state } : undefined;
-  }
-
-  const hit = resolveTownWithoutState(candidate);
-  return hit ? { city: hit.city, state: hit.state } : undefined;
+  if (stateCode === 'ME' || stateCode === 'NH') return resolveTown(candidate, stateCode);
+  return resolveTownWithoutState(candidate);
 }
 
 function readTrailingState(text: string): { state?: StateCode; rest: string } {

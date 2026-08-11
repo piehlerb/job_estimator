@@ -1,27 +1,24 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CircleMarker, Map as LeafletMap } from 'leaflet';
-import { CalendarDays, CheckCircle2, ExternalLink, Loader2, MapPin, Search, Wrench } from 'lucide-react';
+import { CalendarDays, MapPin } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import type { Job, JobStatus } from '../types';
-import { NH_ME_ZIP_CENTROIDS } from '../lib/nhMeZipRegistry';
+import AddressCleanupPanel from './AddressCleanupPanel';
 import {
   aggregateJobsByZip,
   countZipReportJobs,
   filterJobsByZipDate,
   filterJobsByZipStatus,
-  resolveNhMeZip,
 } from '../lib/zipGeography';
 import type {
   ZipAggregate,
   ZipDateField,
-  ZipExclusionReason,
   ZipGeographyReport,
 } from '../lib/zipGeography';
 
 interface ZipGeographyReportProps {
   jobs: readonly Job[];
   loading?: boolean;
-  onApplyZip: (jobIds: readonly string[], zip: string) => Promise<void>;
   onEditJob: (jobId: string) => void;
 }
 
@@ -35,17 +32,8 @@ const STATUS_STYLES: Record<JobStatus, { active: string; dot: string }> = {
   Lost: { active: 'border-rose-300 bg-rose-50 text-rose-900', dot: 'bg-rose-500' },
 };
 
-interface UnmappedJob {
-  job: Job;
-  reason: ZipExclusionReason;
-}
-
 const OSM_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const OSM_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
-const ZIP_OPTIONS = Object.entries(NH_ME_ZIP_CENTROIDS)
-  .map(([zip, place]) => ({ zip, ...place }))
-  .sort((left, right) => left.state.localeCompare(right.state) || left.city.localeCompare(right.city) || left.zip.localeCompare(right.zip));
-
 function localDateString(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
@@ -148,16 +136,9 @@ function SelectedZipSummary({ row, compact = false }: { row: ZipAggregate | null
   );
 }
 
-function reasonLabel(reason: ZipExclusionReason): string {
-  if (reason === 'missing') return 'No ZIP found';
-  if (reason === 'invalid-format') return 'Malformed ZIP';
-  return 'Outside or unrecognized';
-}
-
 export default function ZipGeographyReport({
   jobs,
   loading = false,
-  onApplyZip,
   onEditJob,
 }: ZipGeographyReportProps) {
   const [datePreset, setDatePreset] = useState<DatePreset>('ytd');
@@ -168,11 +149,6 @@ export default function ZipGeographyReport({
   const [selectedZip, setSelectedZip] = useState<string | null>(null);
   const [mapStatus, setMapStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [tileWarning, setTileWarning] = useState(false);
-  const [repairSearch, setRepairSearch] = useState('');
-  const [repairZip, setRepairZip] = useState('');
-  const [savingRepair, setSavingRepair] = useState(false);
-  const [repairMessage, setRepairMessage] = useState('');
-  const deferredRepairSearch = useDeferredValue(repairSearch.trim().toLowerCase());
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const markersByZipRef = useRef<Map<string, CircleMarker>>(new Map());
@@ -200,27 +176,6 @@ export default function ZipGeographyReport({
   const report = useMemo(() => aggregateJobsByZip(filteredJobs), [filteredJobs]);
   const selectedRow = report.rows.find((row) => row.zip === selectedZip) ?? report.rows[0] ?? null;
   const selectedZipRef = useRef<string | null>(selectedRow?.zip ?? null);
-
-  const unmappedJobs = useMemo<UnmappedJob[]>(() => jobs.flatMap((job) => {
-    const resolution = resolveNhMeZip(job.customerAddress);
-    return 'reason' in resolution ? [{ job, reason: resolution.reason }] : [];
-  }).sort((left, right) => (
-    (left.job.customerAddress || '').localeCompare(right.job.customerAddress || '')
-    || left.job.name.localeCompare(right.job.name)
-  )), [jobs]);
-
-  const matchingUnmappedJobs = useMemo(() => {
-    if (!deferredRepairSearch) return unmappedJobs;
-    return unmappedJobs.filter(({ job }) => (
-      (job.customerAddress || '').toLowerCase().includes(deferredRepairSearch)
-    ));
-  }, [deferredRepairSearch, unmappedJobs]);
-
-  const repairPlace = repairZip.length === 5 ? NH_ME_ZIP_CENTROIDS[repairZip] : undefined;
-  const canApplyRepair = deferredRepairSearch.length >= 2
-    && matchingUnmappedJobs.length > 0
-    && Boolean(repairPlace)
-    && !savingRepair;
 
   const toggleStatus = useCallback((status: JobStatus) => {
     setSelectedStatuses((current) => (
@@ -335,28 +290,6 @@ export default function ZipGeographyReport({
     map.flyTo(marker.getLatLng(), Math.max(map.getZoom(), 9), { duration: 0.55 });
     marker.openPopup();
   }, []);
-
-  const handleApplyRepair = useCallback(async () => {
-    if (!canApplyRepair || !repairPlace) return;
-
-    const count = matchingUnmappedJobs.length;
-    const confirmed = window.confirm(
-      `Apply ${repairZip} (${repairPlace.city}, ${repairPlace.state}) to ${count} ${count === 1 ? 'job' : 'jobs'} matching “${repairSearch.trim()}”? Existing ZIP tokens will be replaced; otherwise the ZIP will be appended.`
-    );
-    if (!confirmed) return;
-
-    setSavingRepair(true);
-    setRepairMessage('');
-    try {
-      await onApplyZip(matchingUnmappedJobs.map(({ job }) => job.id), repairZip);
-      setRepairMessage(`${repairZip} was applied to ${count} ${count === 1 ? 'job' : 'jobs'}.`);
-    } catch (error) {
-      console.error('Unable to apply ZIP repair:', error);
-      setRepairMessage(error instanceof Error ? error.message : 'The ZIP update could not be completed.');
-    } finally {
-      setSavingRepair(false);
-    }
-  }, [canApplyRepair, matchingUnmappedJobs, onApplyZip, repairPlace, repairSearch, repairZip]);
 
   if (loading) {
     return <div className="rounded-lg border border-slate-200 bg-white p-8 text-center text-slate-600 shadow-sm">Loading ZIP geography…</div>;
@@ -477,22 +410,10 @@ export default function ZipGeographyReport({
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-amber-200 bg-white shadow-sm">
-        <div className="border-b border-amber-200 bg-amber-50/70 p-4 sm:p-5">
-          <div className="flex items-start gap-3"><span className="rounded-lg bg-amber-100 p-2 text-amber-800"><Wrench className="h-5 w-5" aria-hidden="true" /></span><div><h3 className="font-semibold text-slate-900">Addresses needing ZIP review <span className="ml-1 rounded-full bg-amber-200 px-2 py-0.5 text-xs text-amber-900">{unmappedJobs.length}</span></h3><p className="mt-1 text-xs text-slate-600 sm:text-sm">This cleanup list always searches all job history. Search the address field, choose one validated NH/ME ZIP, then apply it to every matching result.</p></div></div>
-        </div>
-        <div className="grid gap-3 border-b border-slate-200 p-4 sm:p-5 lg:grid-cols-[minmax(15rem,1fr)_15rem_auto] lg:items-end">
-          <label className="block"><span className="text-xs font-medium text-slate-600">Search address</span><span className="relative mt-1 block"><Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" aria-hidden="true" /><input type="search" value={repairSearch} onChange={(event) => { setRepairSearch(event.target.value); setRepairMessage(''); }} placeholder="e.g. Portsmouth" className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm focus:border-gf-dark-green focus:outline-none focus:ring-2 focus:ring-gf-lime/50" /></span></label>
-          <label className="block"><span className="text-xs font-medium text-slate-600">NH/ME ZIP to apply</span><input type="text" inputMode="numeric" list="nh-me-zip-options" value={repairZip} onChange={(event) => { setRepairZip(event.target.value.replace(/\D/g, '').slice(0, 5)); setRepairMessage(''); }} placeholder="03842" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-gf-dark-green focus:outline-none focus:ring-2 focus:ring-gf-lime/50" /><datalist id="nh-me-zip-options">{ZIP_OPTIONS.map((option) => <option key={option.zip} value={option.zip}>{option.city}, {option.state}</option>)}</datalist><span className={`mt-1 block min-h-4 text-xs ${repairZip.length === 5 && !repairPlace ? 'text-rose-700' : 'text-slate-500'}`}>{repairPlace ? `${repairPlace.city}, ${repairPlace.state}` : repairZip.length === 5 ? 'Not a recognized NH/ME ZIP' : 'Enter a five-digit ZIP'}</span></label>
-          <button type="button" onClick={handleApplyRepair} disabled={!canApplyRepair} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-gf-dark-green px-4 py-2 text-sm font-semibold text-white hover:bg-gf-dark-green/90 disabled:cursor-not-allowed disabled:opacity-45">{savingRepair ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <CheckCircle2 className="h-4 w-4" aria-hidden="true" />}Apply ZIP to {deferredRepairSearch.length >= 2 ? matchingUnmappedJobs.length : 0} results</button>
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-600 sm:px-5"><span>{deferredRepairSearch ? `${matchingUnmappedJobs.length} of ${unmappedJobs.length} unresolved addresses match “${repairSearch.trim()}”` : `${unmappedJobs.length} unresolved addresses · type at least 2 characters to enable bulk apply`}</span>{repairMessage && <span className="font-medium text-gf-dark-green" role="status">{repairMessage}</span>}</div>
-        <div className="max-h-[28rem] overflow-auto">
-          {matchingUnmappedJobs.length > 0 ? <ul className="divide-y divide-slate-200">{matchingUnmappedJobs.map(({ job, reason }) => (
-            <li key={job.id} className="grid gap-2 px-4 py-3 sm:grid-cols-[minmax(11rem,.7fr)_minmax(16rem,1.3fr)_auto] sm:items-center sm:px-5"><div><p className="text-sm font-semibold text-slate-900">{job.customerName || job.name}</p><p className="text-xs text-slate-500">{job.name}</p></div><div><p className="text-sm text-slate-800">{job.customerAddress?.trim() || 'No address entered'}</p><p className="mt-0.5 text-xs text-amber-700">{reasonLabel(reason)}</p></div><button type="button" onClick={() => onEditJob(job.id)} className="inline-flex items-center gap-1 justify-self-start rounded-md px-2 py-1 text-xs font-semibold text-gf-dark-green hover:bg-lime-50 sm:justify-self-end">Open job <ExternalLink className="h-3 w-3" aria-hidden="true" /></button></li>
-          ))}</ul> : <div className="p-8 text-center"><CheckCircle2 className="mx-auto h-6 w-6 text-emerald-600" /><p className="mt-2 text-sm font-medium text-slate-900">No unresolved addresses match this search.</p></div>}
-        </div>
-      </div>
+      {/* The address cleanup worklist replaced the ZIP-only repair list that used to
+          live here: that covered ME/NH ZIPs on jobs, this covers every address field
+          on jobs, leads and customers. See AddressCleanupPanel. */}
+      <AddressCleanupPanel onEditJob={onEditJob} />
     </section>
   );
 }
