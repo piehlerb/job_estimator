@@ -25,6 +25,16 @@
     "src/lib/jobSyncPolicy.test.ts",
     "src/lib/customerPersistence.ts",
     "src/lib/customerPersistence.test.ts",
+    "src/lib/zipGeography.ts",
+    "src/lib/zipGeography.test.ts",
+    "src/lib/addressParse.ts",
+    "src/lib/addressParse.test.ts",
+    "src/lib/addressFields.ts",
+    "src/lib/addressFields.test.ts",
+    "src/lib/addressBackfill.ts",
+    "src/lib/addressBackfill.test.ts",
+    "src/lib/nhMeZipRegistry.ts",
+    "src/lib/dateUtils.ts",
     "src/types/index.ts"
   ]
 }

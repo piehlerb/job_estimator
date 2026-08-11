@@ -149,28 +149,53 @@ sources wholesale would move map markers and change displayed town names —
 [`zipGeography.test.ts:24`](../src/lib/zipGeography.test.ts#L24) pins Portland's
 centroid, and that test is right to exist.
 
-**Resolution: merge, don't replace.** For ME/NH, keep GeoNames' city name and
-lat/lon and add USPS `county` / `zipType` / aliases alongside. For the newly
-added states, use USPS wholesale. Reporting output is unchanged by construction.
+**Resolution: merge, don't replace.** Keep GeoNames' city name and lat/lon; add
+USPS `county` / `zipType` / aliases alongside. Reporting output is unchanged by
+construction.
+
+> **Status: done.** Two revisions to what was planned, both driven by measurement.
+>
+> **Scope cut to ME/NH only — no extended module, no lazy chunk.** The plan called
+> for the whole northeast in a lazily-loaded second module. Measured, that is
+> 4,418 records / ~532 KB of TypeScript, and **New York alone is 2,151 of them**.
+> Actual non-ME/NH volume in the data is about **six addresses** (5 MA, 1 RI),
+> plus SC/CA/GA that no northeast registry would cover anyway. Building a lazy
+> loader, an offline fallback and a second data module to serve six rows is worse
+> on maintainability than letting them land in the cleanup worklist as tier `D`,
+> where a human fixes them once and the ratchet holds. This also removed the
+> `public/sw.js` precache step entirely — which was not achievable as written,
+> since the service worker deliberately does not precache hashed assets.
+> Widening later is a one-line change to `STATES` in the enrichment script.
+>
+> **An enrichment script, not a rewritten generator.** `scripts/enrich-zip-registry.py`
+> only ever *adds* fields, copying city/state/lat/lon through untouched, so the
+> merge is reviewable: the diff must show added properties and nothing else. It
+> reports rather than applies any USPS disagreement, so future drift surfaces.
+>
+> **The merge was verified, not assumed.** Across all 766 ME/NH ZIPs the two
+> sources agree on **every city name** (0 differences), and the regenerated file
+> has identical membership with **0 changes** to state/city/lat/lon. 22 centroids
+> *would* have moved had USPS been taken wholesale — Mount Washington by 0.41°
+> (~28 miles), China Village by 0.37° — which is what the merge rule prevents.
 
 ### Work
 
-1. Rewrite `scripts/generate-nh-me-zip-registry.mjs` (or add a sibling) to emit
-   **two files from one snapshot**, so there is a single generator and no manual
-   drift:
-   - `src/lib/nhMeZipRegistry.ts` — ME/NH, eager, existing `NH_ME_ZIP_CENTROIDS`
-     shape preserved, plus `county` and `zipType` on each record.
-   - `src/lib/zipRegistryExtended.generated.ts` — the other northeast states
-     (CT, MA, NY, RI, VT) plus the city-alias map, **lazy-loaded**.
-2. Scope: northeast only. The national set is ~42,800 zips — unacceptable in a
-   PWA bundle for the two out-of-region rows you actually have. Fix those by hand.
-3. Bundle cost: ME/NH stays eager (already is, ~40KB). The extended chunk is
-   loaded on demand and only when an ME/NH lookup misses. Add it to the
-   `public/sw.js` precache list so offline still works after first load.
-4. Update [`docs/zip-geography-data.md`](zip-geography-data.md) with the second
-   source, its licence, and the merge rule above.
-5. Run the generator and **review the ME/NH diff** before committing. Any change
-   to a city name or centroid is a bug in the merge, not an improvement.
+1. `scripts/enrich-zip-registry.py` merges USPS `county` / `zipType` onto the
+   existing registry and rebuilds `NH_ME_CITY_ALIASES` (486 ME, 206 NH).
+   `scripts/generate-nh-me-zip-registry.mjs` is unchanged and still owns the
+   GeoNames base; regeneration is base-then-enrich, documented in
+   [`docs/zip-geography-data.md`](zip-geography-data.md).
+2. Retired ZIPs excluded. USPS lists 772 ME/NH ZIPs to the registry's 766; all 6
+   extras are `active: false` and appear nowhere in the data. A retired ZIP
+   resolving to a town that no longer receives mail is worse than no match, and
+   the town-name path still resolves such an address.
+3. Types: `ZipCentroid` keeps its four-field shape for the reporting map;
+   `ZipRecord = ZipCentroid & { county; zipType }` is what the registry holds and
+   what `ZipAddressResolution` now carries, so the parser can reach `county`.
+4. `zipGeography.test.ts` and its dependencies were added to
+   `tsconfig.test.json` — that suite had **never been compiled or run** by the
+   documented path, despite pinning Portland's centroid in a strict `deepEqual`
+   that adding fields would break. It now runs (11 tests).
 
 ---
 
@@ -179,6 +204,42 @@ added states, use USPS wholesale. Reporting output is unchanged by construction.
 New file `src/lib/addressParse.ts`. Direct port of `parse_address()` and
 `match_city_tail()` — the backward-tail-matching algorithm, longest-match-wins,
 and the tier semantics all carry over unchanged.
+
+> **Status: done.** 17 tests, all asserted against the real checked-in registry
+> rather than fixtures, so a regeneration that moves the data surfaces here.
+>
+> **Validated against the SQL implementation on all 252 real address strings**
+> (`dryrun_report_sample.csv`): **247 of 252 tiers identical**. Every one of the 5
+> differences is an out-of-region Massachusetts address that the ME/NH-only
+> registry deliberately no longer resolves (3 `A→D`, 1 `A!→D`, 1 `B→D`) — they
+> land in the cleanup worklist, which is the intended trade from the Phase 1
+> scope cut. Tier counts otherwise match: A 199, A! 3, B 34, C 3.
+>
+> Three places the port is **better** than the SQL proposal it came from:
+>
+> - 18 addresses now record the town instead of the postal district (see the
+>   county bullet below).
+> - Newington resolves to the live ZIP **03801**; the SQL proposal offered
+>   **03805**, which is retired. Phase 1's exclusion of inactive ZIPs is what
+>   makes that impossible to get wrong.
+> - A bare "Dayton" resolves to Dayton **ME 04005**; the SQL proposal offered
+>   **14041**, which is in New York.
+>
+> One regression the narrower registry introduced, and its fix: a place unique
+> within ME/NH need not be unique nationally. "New Kensington" (Pennsylvania)
+> resolved to Kensington NH with `"New"` left over as the street — and tier C is
+> applied automatically, so that would have landed silently. Tier C now requires
+> the leftover head to be empty or contain a house number; anything else is not a
+> street line and the match is refused. That closed the only false positive in the
+> 252-row corpus.
+>
+> **Deviation from the plan below:** the registry is imported directly rather than
+> injected. Injection was for swapping an eager and a lazy dataset; with one eager
+> module that indirection buys nothing, and tests exercising the real data are
+> stronger than tests against a stub.
+>
+> The parser is not yet wired into any UI, so it adds **zero** bundle weight today
+> — it is tree-shaken out until Phase 4/6 calls it.
 
 ```ts
 export type AddressTier = 'A' | 'A!' | 'B' | 'C' | 'D' | 'M';
@@ -205,6 +266,27 @@ Behaviour to preserve exactly:
 - **County breaks the postal-city tie.** Same county ⇒ keep the typed
   municipality (that's the territory you work in), record the postal city in
   `note`. Different county ⇒ tier `A!`, resolve nothing.
+
+  **Decided: the typed town is kept, and never rewritten from the ZIP.** Some real
+  municipalities exist only as aliases — Newington NH has no ZIP of its own and
+  mails as Portsmouth 03801. Rewriting it to "Portsmouth" would erase the town
+  the work is actually in, which is the unit territory reporting counts.
+
+  This required splitting Phase 1's single alias table in two, because the USPS
+  lists mean different things:
+
+  - `unacceptable_cities` are **misspellings and abbreviations** of the postal
+    city ("N Berwick", "No Berwick"). Typing one is an error →
+    `NH_ME_CITY_ALIASES` normalizes it to the canonical name.
+  - `acceptable_cities` are **legitimate alternate place names**, frequently a
+    different municipality → `NH_ME_PLACE_NAMES` maps the typed form to
+    `{ name, postalCity }`. The parser records `name` and uses `postalCity` only
+    to reach the county (for the conflict check) and the ZIP (for tier B).
+
+  On real data this changed 18 addresses from the postal district to the actual
+  town — Brentwood and Kensington instead of Exeter, Lyman instead of Alfred,
+  Arundel instead of Kennebunkport, Middleton instead of Union. The SQL proposal
+  had this flaw for all of them, not just Newington.
 - **Never auto-resolve a contradiction.** A blank field beats a confidently
   wrong one; `03528` vs `03258` is the case that matters.
 - **Only `STANDARD` zips are candidates** when deriving a zip from a town.
@@ -259,6 +341,43 @@ the object level with no code change, per `.claude/CLAUDE.md`.
 
 ## Phase 4 — Write path
 
+> **Status: done.** `src/lib/addressFields.ts` is the single write path; 13 tests.
+>
+> **Job-site vs customer address decided:** the job carries its own address
+> because a customer can own two properties, and `Customer.address` is the
+> billing address. Both are documented on the types so the distinction does not
+> erode. The "same as customer" toggle is Phase 6 UI work.
+>
+> **A rule the plan did not anticipate — raw changing beats the ratchet.** The
+> ratchet protects a human's correction from automated passes, but it must not
+> protect a *stale projection of a different address*. So when the raw text
+> changes, the whole group is rebuilt and `addressVerifiedAt` is cleared; when the
+> raw text is unchanged, gaps are filled and a confirmed row is untouchable. The
+> group is replaced atomically for the same reason as the webhook merge: field-by-
+> field merging welds one address's street onto another's town.
+>
+> **Casing canonicalization, found from real production data.** The first three
+> live leads arrived as `PORTLAND`, `JACKMAN` and `Hampton Falls` — GHL passes
+> through whatever the lead typed. Left alone, "PORTLAND" and "Portland" count as
+> two towns in any territory report, which is the exact dirt this project exists
+> to remove. `canonicalizeTown` in the parser folds a known town to its registry
+> spelling (and applies the alias rules, so "N Berwick" → "North Berwick" while
+> "Newington" stays "Newington"). An unrecognized town keeps the value it came
+> with — out of scope is not the same as wrong.
+>
+> **Call sites wired:** JobForm save, `applyLeadEdit`, `ensureCustomerPersistence`
+> (which previously copied only the raw string), and — not in the original list —
+> `Reporting.handleApplyZip`. That bulk ZIP repair rewrites the raw address, so
+> without re-deriving it would have left every structured field pointing at the
+> old town. Any writer of raw has to re-derive.
+>
+> **Verified in the running app**, not just in tests: the registry builds its
+> indexes at module load (a fault there would white-screen the app), and a job
+> saved through the real IndexedDB layer came back with
+> `customerCity: 'Newington'`, `customerZip: '03801'`, tier `A`, raw untouched.
+>
+> Bundle cost is now real rather than tree-shaken: **+9.9 KB gzipped**.
+
 One helper, `src/lib/addressFields.ts`, used by every writer:
 
 ```ts
@@ -286,6 +405,24 @@ separate chore.
 
 ## Phase 5 — Backfill
 
+> **Status: done**, as `src/lib/addressBackfill.ts` plus the review UI in Phase 6;
+> 9 tests. Gated, not run at startup: it computes a preview, shows the tier
+> breakdown, and writes only on an explicit action.
+>
+> **Bulk-fill by town turned out to be a minor path, not the main one.** The plan
+> expected it to "collapse almost the entire worklist into a few clicks". In fact
+> the parser already derives the ZIP whenever the raw text names a town served by
+> one street-delivery ZIP — so those rows never reach the worklist at all. Bulk-fill
+> only helps where a town is known from somewhere *other* than the raw text: GHL
+> sent `city`/`state` as discrete fields while the free-text address has no town in
+> it. Still worth having, but the headline number in the original proposal was
+> measuring work the parser now does for free.
+>
+> Anything resolved through the UI is stamped tier `M` with a confirmation time, so
+> re-running the pass cannot undo it. Verified by test and in the browser: an
+> automatic fill lands as tier `A` unverified, while a person's bulk-fill or
+> conflict choice lands as `M` verified.
+
 `backfillAddressFields()` in [`src/lib/jobMigration.ts`](../src/lib/jobMigration.ts),
 matching the existing pattern (`migrateJobsDisableGasHeater` et al).
 
@@ -302,6 +439,34 @@ tool rather than a migration.
 ---
 
 ## Phase 6 — UI
+
+> **Status: done.** Three pieces, all verified in the running app rather than only
+> in tests.
+>
+> **`AddressFieldsEditor`** — the resolved chip under the free-text input, shared by
+> JobForm and the Leads edit modal. Parses on blur, not per keystroke. Expands to
+> Street / Unit / City / State / ZIP; typing a ZIP fills its town, since a ZIP
+> determines one outright. Every edit routes through one `markAddressVerified` call
+> so the ratchet cannot be forgotten at a call site.
+>
+> **`AddressCleanupPanel`** — replaces the old ZIP-review block, which covered only
+> ME/NH ZIPs on jobs. Four sections: the gated backfill with a before/after table,
+> bulk-fill by town, conflicts with a "use the ZIP's town" choice, and a searchable
+> unresolved list. The ~120 lines of dead repair code left behind in
+> `ZipGeographyReport` (and `handleApplyZip` in `Reporting`) were removed rather
+> than left to rot.
+>
+> **Same as customer** — a checkbox whose state is *derived* from whether the two
+> addresses match, not stored. A stored boolean would drift out of agreement with
+> the addresses it claims to describe. Unchecking clears the job-site address rather
+> than inventing one.
+>
+> **One change the plan missed, without which all of this was invisible.** The
+> geography map resolved ZIPs by re-parsing the raw address, so filling a structured
+> ZIP would not have put a job on the map — the cleanup work would have looked like
+> it did nothing. `resolveJobZip` now prefers `customerZip` and falls back to
+> parsing. Verified: two jobs whose raw address is "PO Box 12" report `missing` from
+> the raw string and resolve to `03874 Seabrook` once filled.
 
 ### Job form — [`JobForm.tsx:2459`](../src/pages/JobForm.tsx#L2459)
 
@@ -414,14 +579,20 @@ Neither is caused by this work; both affect it.
   pre-existing library-generic errors at `index.ts:125` and `:329` that are
   unrelated to this work.
 
-## Open decisions
+## Decisions made
 
-1. **Registry scope** — northeast only (recommended) or national?
-2. **Existing ZIP-review panel** — replace (recommended) or keep both?
-3. **Backfill trigger** — gated review (recommended) or silent at startup like
-   the other migrations?
-4. **`street2`** — leave unpopulated for now (recommended) or add unit/suite
-   extraction in Phase 2?
+1. **Registry scope** — ME/NH only. Measured: the full northeast is 4,418 records
+   and NY alone is 2,151 of them, against six real non-ME/NH addresses.
+2. **Existing ZIP-review panel** — **replace** it in Phase 6; the new cleanup
+   panel is a strict superset covering jobs, leads and customers.
+3. **Backfill trigger** — **gated review**. Phase 5 shows the tier breakdown and
+   the proposals, and applies only on an explicit action. ~250 records is too many
+   to write silently at startup.
+4. **`street2`** — left unpopulated. Unit/suite extraction stays a separate pass.
+5. **Alias-only towns** — the typed town is kept, never rewritten from the ZIP.
+   This is why there are two alias tables; see Phase 2.
+6. **Job-site vs customer address** — the job owns the job-site address, the
+   customer owns the billing address, with a "same as customer" toggle in Phase 6.
 
 ---
 

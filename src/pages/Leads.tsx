@@ -17,6 +17,9 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { deleteLead, getAllJobs, getAllLeadAppointments, getAllLeads, updateLead } from '../lib/db';
 import { LEAD_DISPOSITION_REASONS, LEAD_STAGES } from '../lib/leadPipeline';
 import { applyLeadEdit } from '../lib/leadMutations';
+import type { AddressFieldSet } from '../lib/addressFields';
+import { parseAddress } from '../lib/addressParse';
+import AddressFieldsEditor from '../components/AddressFieldsEditor';
 import type { Job, Lead, LeadAppointment, LeadDispositionReason, LeadStage } from '../types';
 
 interface LeadsProps {
@@ -37,6 +40,7 @@ type LeadEditForm = {
   stage: LeadStage;
   dispositionReason: LeadDispositionReason | '';
   dispositionNotes: string;
+  addressFields: AddressFieldSet;
 };
 
 const EMPTY_LEAD_FORM: LeadEditForm = {
@@ -48,6 +52,7 @@ const EMPTY_LEAD_FORM: LeadEditForm = {
   campaign: '',
   stage: 'New',
   dispositionReason: '',
+  addressFields: {},
   dispositionNotes: '',
 };
 
@@ -66,6 +71,15 @@ function formFromLead(lead: Lead): LeadEditForm {
     stage: lead.stage,
     dispositionReason: lead.dispositionReason || '',
     dispositionNotes: lead.dispositionNotes || '',
+    addressFields: {
+      street: lead.street,
+      street2: lead.street2,
+      city: lead.city,
+      state: lead.state,
+      zip: lead.zip,
+      tier: lead.addressParseTier,
+      verifiedAt: lead.addressVerifiedAt,
+    },
   };
 }
 
@@ -675,6 +689,11 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
                     value={editForm.address}
                     onChange={(event) => setEditForm((current) => ({ ...current, address: event.target.value }))}
                     className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-gf-lime"
+                  />
+                  <AddressFieldsEditor
+                    fields={editForm.addressFields}
+                    onChange={(addressFields) => setEditForm((current) => ({ ...current, addressFields }))}
+                    note={editForm.address.trim() ? parseAddress(editForm.address).note : undefined}
                   />
                 </label>
 

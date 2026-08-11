@@ -21,7 +21,14 @@ describe('NH/ME ZIP geography', () => {
   test('uses the rightmost exact NH/ME registry member deterministically', () => {
     assert.deepEqual(resolveNhMeZip('Old reference 03101; ship to Portland, ME 04101-9999'), {
       zip: '04101',
-      centroid: { state: 'ME', city: 'Portland', lat: 43.6606, lon: -70.2589 },
+      centroid: {
+        state: 'ME',
+        city: 'Portland',
+        lat: 43.6606,
+        lon: -70.2589,
+        county: 'Cumberland County',
+        zipType: 'STANDARD',
+      },
     });
   });
 

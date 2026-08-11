@@ -1,4 +1,5 @@
 import type { Customer } from '../types/index.js';
+import { withCustomerAddressFields } from './addressFields.js';
 
 export interface CustomerPersistenceDependencies {
   getAllCustomers: () => Promise<Customer[]>;
@@ -31,13 +32,16 @@ export async function ensureCustomerPersistence(
   if (existingCustomer) return existingCustomer;
 
   const now = dependencies.now();
-  const customer: Customer = {
+  // A customer created from a job inherits the structured address too, not just
+  // the raw string — otherwise every auto-created customer starts life in the
+  // cleanup worklist despite the address already having been parsed.
+  const customer: Customer = withCustomerAddressFields({
     id: dependencies.generateId(),
     name,
     address: input.address?.trim() || undefined,
     createdAt: now,
     updatedAt: now,
-  };
+  });
 
   await dependencies.addCustomer(customer);
   return customer;

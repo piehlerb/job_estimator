@@ -126,7 +126,25 @@ export interface AutoReminderRule {
 export interface Customer {
   id: string;
   name: string;
+  /**
+   * The customer's primary/billing address as free text. A job site can differ —
+   * a customer may own two properties — so the job carries its own address and
+   * this one is not authoritative for where the work happens.
+   *
+   * Never derived from the structured fields below; it stays the record of what
+   * was actually typed, so a bad parse can be re-derived from the original.
+   */
   address?: string;
+  street?: string;
+  street2?: string;
+  city?: string;
+  /** Two-letter uppercase code, or absent. Enforced by a CHECK constraint. */
+  state?: string;
+  /** Five digits, or absent. Enforced by a CHECK constraint. */
+  zip?: string;
+  addressParseTier?: AddressParseTier;
+  /** Set once a human confirms the address; blocks automated passes. */
+  addressVerifiedAt?: string;
   phone?: string;
   email?: string;
   notes?: string;
@@ -417,7 +435,25 @@ export interface Job {
   id: string;
   name: string;
   customerName?: string;
+  /**
+   * The JOB SITE address as free text — deliberately its own field rather than a
+   * pointer at the customer, because a customer can have two properties and the
+   * work happens at one of them. `Customer.address` is the billing address.
+   *
+   * Never derived from the structured fields below; it stays the record of what
+   * was actually typed, so a bad parse can be re-derived from the original.
+   */
   customerAddress?: string;
+  customerStreet?: string;
+  customerStreet2?: string;
+  customerCity?: string;
+  /** Two-letter uppercase code, or absent. Enforced by a CHECK constraint. */
+  customerState?: string;
+  /** Five digits, or absent. Enforced by a CHECK constraint. */
+  customerZip?: string;
+  addressParseTier?: AddressParseTier;
+  /** Set once a human confirms the address; blocks automated passes. */
+  addressVerifiedAt?: string;
   leadId?: string;
   systemId: string;
   floorFootage: number;

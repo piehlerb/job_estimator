@@ -38,6 +38,9 @@ import { calculateJobOutputs, calculateActualCosts } from '../lib/calculations';
 import InstallDayScheduleComponent from '../components/InstallDaySchedule';
 import ActualDayScheduleComponent from '../components/ActualDaySchedule';
 import { convertLegacyJobToSchedule } from '../lib/jobMigration';
+import { resolveAddressFields, type AddressFieldSet } from '../lib/addressFields';
+import { parseAddress } from '../lib/addressParse';
+import AddressFieldsEditor from '../components/AddressFieldsEditor';
 import { compareSnapshots, SnapshotChanges } from '../lib/snapshotComparison';
 import SnapshotChangeBanner, { SelectedChanges } from '../components/SnapshotChangeBanner';
 import { normalizeChipBlendName } from '../lib/syncHelpers';
@@ -127,6 +130,13 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [showTagDropdown, setShowTagDropdown] = useState(false);
   const [availableCustomers, setAvailableCustomers] = useState<CustomerOption[]>([]);
+  // The structured projection of customerAddress. Held separately from formData
+  // because it is derived on blur rather than per keystroke, and because a hand
+  // correction here has to survive until save.
+  const [addressFields, setAddressFields] = useState<AddressFieldSet>({});
+  // The raw text the current structured fields were derived from, so an edit to the
+  // address can be told from merely tabbing through the field.
+  const [addressSourceRaw, setAddressSourceRaw] = useState<string | undefined>(undefined);
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [linkedLead, setLinkedLead] = useState<Lead | null>(null);
 
@@ -642,6 +652,16 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
         console.log('[JobForm] Job loaded:', !!job);
         if (job) {
           setExistingJob(job);
+          setAddressFields({
+            street: job.customerStreet,
+            street2: job.customerStreet2,
+            city: job.customerCity,
+            state: job.customerState,
+            zip: job.customerZip,
+            tier: job.addressParseTier,
+            verifiedAt: job.addressVerifiedAt,
+          });
+          setAddressSourceRaw(job.customerAddress);
           if (job.leadId) {
             const lead = await getLead(job.leadId);
             setLinkedLead(lead);
@@ -1118,7 +1138,51 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
       customerAddress: customer.address || '',
     });
     setShowCustomerDropdown(false);
+    handleAddressBlur(customer.address || '');
   };
+
+  /**
+   * Derive the structured address from the free text.
+   *
+   * Passing `rawChanged` lets the helper distinguish an edited address — rebuild
+   * the projection, drop any stale confirmation — from merely tabbing through the
+   * field, where a hand correction must survive.
+   */
+  const handleAddressBlur = (raw: string) => {
+    const trimmed = raw.trim() || undefined;
+    setAddressFields((previous) =>
+      resolveAddressFields(trimmed, previous, trimmed !== addressSourceRaw)
+    );
+    setAddressSourceRaw(trimmed);
+  };
+
+  const matchedCustomer = useMemo(
+    () =>
+      availableCustomers.find(
+        (customer) => customer.name.toLowerCase() === formData.customerName.trim().toLowerCase()
+      ),
+    [availableCustomers, formData.customerName]
+  );
+  const matchedCustomerAddress = matchedCustomer?.address?.trim() || undefined;
+
+  // Derived rather than stored: a boolean flag would drift out of agreement with
+  // the two addresses it claims to describe.
+  const addressMatchesCustomer =
+    !!matchedCustomerAddress &&
+    matchedCustomerAddress.toLowerCase() === formData.customerAddress.trim().toLowerCase();
+
+  const handleSameAsCustomer = (checked: boolean) => {
+    // Unchecking clears the job site address rather than inventing one: a job at a
+    // different property needs a real address typed, not a guess.
+    const next = checked ? matchedCustomerAddress ?? '' : '';
+    setFormData({ ...formData, customerAddress: next });
+    handleAddressBlur(next);
+  };
+
+  const addressNote = useMemo(
+    () => (formData.customerAddress.trim() ? parseAddress(formData.customerAddress).note : undefined),
+    [formData.customerAddress]
+  );
 
   const handleTagSelect = (selectedTag: string) => {
     const segments = formData.tags.split(',');
@@ -2004,10 +2068,30 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
         synced: false,
       };
 
+      // The form already holds the structured projection, derived on blur and
+      // possibly corrected by hand. Resolve once more against the final raw text so
+      // a save without blurring still lands, then write whatever that produces —
+      // a hand-corrected set carries tier 'M' and passes through untouched.
+      const finalAddress = resolveAddressFields(
+        customerAddress || undefined,
+        addressFields,
+        (customerAddress || undefined) !== addressSourceRaw
+      );
+      const jobWithAddress: Job = {
+        ...job,
+        customerStreet: finalAddress.street,
+        customerStreet2: finalAddress.street2,
+        customerCity: finalAddress.city,
+        customerState: finalAddress.state,
+        customerZip: finalAddress.zip,
+        addressParseTier: finalAddress.tier,
+        addressVerifiedAt: finalAddress.verifiedAt,
+      };
+
       if (jobId) {
-        await updateJob(job);
+        await updateJob(jobWithAddress);
       } else {
-        await addJob(job);
+        await addJob(jobWithAddress);
       }
       if (autoReminders.length > 0) {
         setReminders(allReminders);
@@ -2456,14 +2540,38 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Customer Address</label>
+                <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Job Site Address</label>
                 <input
                   type="text"
                   placeholder="e.g., 123 Main St, City, State 12345"
                   value={formData.customerAddress}
                   onChange={(e) => setFormData({ ...formData, customerAddress: e.target.value })}
+                  // Parsed on blur rather than per keystroke: the crew pastes whole
+                  // addresses, and half-typed text would only flicker.
+                  onBlur={() => handleAddressBlur(formData.customerAddress)}
                   className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
                 />
+                <AddressFieldsEditor
+                  fields={addressFields}
+                  onChange={setAddressFields}
+                  note={addressNote}
+                />
+                {matchedCustomerAddress && (
+                  <label className="mt-1 flex cursor-pointer items-start gap-2 px-1.5 text-xs text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={addressMatchesCustomer}
+                      onChange={(event) => handleSameAsCustomer(event.target.checked)}
+                      className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-gf-lime focus:ring-gf-lime"
+                    />
+                    <span>
+                      Same as customer address
+                      {!addressMatchesCustomer && (
+                        <span className="text-slate-400"> · customer is at {matchedCustomerAddress}</span>
+                      )}
+                    </span>
+                  </label>
+                )}
               </div>
               <div className="w-28 shrink-0">
                 <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Travel (mi)</label>

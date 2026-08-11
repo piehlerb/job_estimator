@@ -1,12 +1,11 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import { getAllAdSpend, getAllJobs, getAllLaborers, getAllLeadAppointments, getAllLeads, getCosts, getDefaultCosts, getPricing, getDefaultPricing, setAdSpendForMonth, updateJob } from '../lib/db';
+import { getAllAdSpend, getAllJobs, getAllLaborers, getAllLeadAppointments, getAllLeads, getCosts, getDefaultCosts, getPricing, getDefaultPricing, setAdSpendForMonth } from '../lib/db';
 import { calculateJobOutputs, calculateActualCosts, getActualLaborerHours } from '../lib/calculations';
 import { ActualCosts, AdSpend, Costs, Job, JobCalculation, JobStatus, Laborer, Lead, LeadAppointment, LeadStage, Pricing } from '../types';
 import { loadAllHistoricalJobsFromSupabase } from '../lib/sync';
 import ZipGeographyReport from '../components/ZipGeographyReport';
 import LeadCreatedDateReport from '../components/LeadCreatedDateReport';
-import { applyZipToAddress } from '../lib/zipGeography';
 import { localToday, toLocalDateString } from '../lib/dateUtils';
 
 interface JobWithCalc {
@@ -263,31 +262,6 @@ export default function Reporting({ onEditJob }: ReportingProps) {
     () => jobsWithCalc.map(({ job }) => job),
     [jobsWithCalc]
   );
-
-  const handleApplyZip = useCallback(async (jobIds: readonly string[], zip: string) => {
-    const requestedIds = new Set(jobIds);
-    const now = new Date().toISOString();
-    const updates = jobsWithCalc
-      .map(({ job }) => job)
-      .filter((job) => requestedIds.has(job.id))
-      .map((job) => ({
-        ...job,
-        customerAddress: applyZipToAddress(job.customerAddress, zip),
-        updatedAt: now,
-        synced: false,
-      }));
-
-    if (updates.length !== requestedIds.size) {
-      throw new Error('Some matching jobs are no longer loaded. Refresh the report and try again.');
-    }
-
-    const results = await Promise.allSettled(updates.map((job) => updateJob(job)));
-    await loadData();
-    const failed = results.filter((result) => result.status === 'rejected');
-    if (failed.length > 0) {
-      throw new Error(`${failed.length} ${failed.length === 1 ? 'job' : 'jobs'} could not be updated. The report was refreshed to show the saved results.`);
-    }
-  }, [jobsWithCalc, loadData]);
 
   // ==================== TAG REPORT ====================
 
@@ -1458,7 +1432,6 @@ export default function Reporting({ onEditJob }: ReportingProps) {
           {activeView === 'zip-geography' && (
             <ZipGeographyReport
               jobs={zipGeographyJobs}
-              onApplyZip={handleApplyZip}
               onEditJob={onEditJob}
             />
           )}
