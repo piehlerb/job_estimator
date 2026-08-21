@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
   buildDedupeKey,
+  looksLikeRealFirstName,
   normalizeGhlWebhook,
   nextLeadStageForEvent,
   resolveLeadAddressMerge,
+  shouldIgnoreAnonymousLead,
   shouldOverwriteLeadValue,
 } from './leadPipeline.js';
 
@@ -212,6 +214,45 @@ describe('GHL lead pipeline', () => {
   test('does not overwrite existing attribution with blank webhook values', () => {
     assert.equal(shouldOverwriteLeadValue('Facebook', ''), false);
     assert.equal(shouldOverwriteLeadValue(undefined, 'Google Ads'), true);
+  });
+
+  test('takes the first name from the payload, or the leading word of a combined name', () => {
+    assert.equal(normalizeGhlWebhook({ first_name: 'Jane', last_name: 'Doe' }).lead.firstName, 'Jane');
+    assert.equal(normalizeGhlWebhook({ full_name: 'Jane Doe' }).lead.firstName, 'Jane');
+    assert.equal(normalizeGhlWebhook({ phone: '6035550100' }).lead.firstName, undefined);
+    // The stored name is still the whole name.
+    assert.equal(normalizeGhlWebhook({ full_name: 'Jane Doe' }).lead.name, 'Jane Doe');
+  });
+
+  test('treats caller IDs and placeholders as no first name at all', () => {
+    assert.equal(looksLikeRealFirstName('Jane'), true);
+    assert.equal(looksLikeRealFirstName(' jean-luc '), true);
+    assert.equal(looksLikeRealFirstName(''), false);
+    assert.equal(looksLikeRealFirstName(undefined), false);
+    assert.equal(looksLikeRealFirstName('+1 603-555-0100'), false);
+    assert.equal(looksLikeRealFirstName('Unknown'), false);
+    assert.equal(looksLikeRealFirstName('N/A'), false);
+    assert.equal(looksLikeRealFirstName('n.a.'), false);
+    assert.equal(looksLikeRealFirstName('Unknown Caller'), false);
+  });
+
+  test('ignores a nameless first contact but never an appointment or a known lead', () => {
+    const nameless = normalizeGhlWebhook({ contact_id: 'abc', phone: '6035550100' });
+    assert.equal(shouldIgnoreAnonymousLead(nameless, false), true);
+    // A lead already in the list keeps receiving events, named or not.
+    assert.equal(shouldIgnoreAnonymousLead(nameless, true), false);
+
+    const named = normalizeGhlWebhook({ contact_id: 'abc', first_name: 'Jane', phone: '6035550100' });
+    assert.equal(shouldIgnoreAnonymousLead(named, false), false);
+
+    // Booking time on the calendar makes a lead real whatever the contact is called.
+    const booked = normalizeGhlWebhook({
+      event_type: 'appointment.booked',
+      contact_id: 'abc',
+      phone: '6035550100',
+      calendar: { startTime: '2026-08-13T09:00:00' },
+    });
+    assert.equal(shouldIgnoreAnonymousLead(booked, false), false);
   });
 
   // The payload shapes below mirror the real ones stored in ghl_webhook_events:

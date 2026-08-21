@@ -1,8 +1,10 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
 import {
+  IGNORED_ANONYMOUS_LEAD_REASON,
   normalizeGhlWebhook,
   nextLeadStageForEvent,
   resolveLeadAddressMerge,
+  shouldIgnoreAnonymousLead,
   shouldOverwriteLeadValue,
   type NormalizedGhlWebhook,
 } from '../_shared/leadPipeline.ts';
@@ -313,6 +315,22 @@ Deno.serve(async (req) => {
 
     if (leadLookupError) {
       throw leadLookupError;
+    }
+
+    // A nameless first contact is a spam call, not a lead. The event row above
+    // keeps the payload either way, so this filters the leads list without
+    // losing anything.
+    if (shouldIgnoreAnonymousLead(normalized, Boolean(existingLead))) {
+      await supabase
+        .from('ghl_webhook_events')
+        .update({
+          processing_status: 'ignored',
+          processed_at: nowIso,
+          error_message: IGNORED_ANONYMOUS_LEAD_REASON,
+        })
+        .eq('id', eventRow.id);
+
+      return jsonResponse(200, { ok: true, ignored: true, reason: 'missing_first_name' });
     }
 
     const leadRow = mergeLeadRow(existingLead as LeadRow | null, webhookSource, normalized, nowIso);

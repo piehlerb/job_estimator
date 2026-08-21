@@ -32,6 +32,11 @@ export interface DedupeKeyInput {
 export interface NormalizedWebhookLead {
   ghlContactId?: string;
   name?: string;
+  /**
+   * The first name as sent, falling back to the leading word of the full name.
+   * Read only by the anonymous-lead filter — the stored row keeps `name` whole.
+   */
+  firstName?: string;
   phone?: string;
   email?: string;
   /** The flattened address as it arrived. Kept as the record of what GHL sent. */
@@ -376,6 +381,67 @@ export function shouldOverwriteLeadValue(existing: string | undefined, incoming:
   return existing.trim() !== incoming.trim();
 }
 
+/**
+ * Values that arrive in the name field in place of a name. GHL names a contact
+ * from whatever the channel hands it, so an unattended call shows up as the
+ * caller ID or a literal placeholder rather than as an empty field.
+ */
+const PLACEHOLDER_NAMES = new Set([
+  'unknown',
+  'unknown caller',
+  'unknown name',
+  'no name',
+  'noname',
+  'not provided',
+  'na',
+  'n/a',
+  'none',
+  'null',
+  'undefined',
+  'anonymous',
+  'caller',
+  'new lead',
+  'lead',
+]);
+
+/** Whether a first name is a name a person gave, rather than a stand-in for one. */
+export function looksLikeRealFirstName(value?: string): boolean {
+  const candidate = value?.replace(/\s+/g, ' ').trim().toLowerCase();
+  if (!candidate) return false;
+  // A caller ID standing in for a name has no letters in it: '+1 603-555-0100'.
+  if (!/[a-z]/.test(candidate)) return false;
+  return !PLACEHOLDER_NAMES.has(candidate.replace(/\./g, ''));
+}
+
+export const IGNORED_ANONYMOUS_LEAD_REASON =
+  'Ignored: inbound lead has no first name (likely a spam call).';
+
+/**
+ * Whether an event should be recorded but not turned into a lead.
+ *
+ * Every inbound call opens a GHL contact, so without a filter the leads list
+ * fills with robocalls and wrong numbers that never gave a name. Requiring a
+ * first name before a lead row is created removes those, and the rule is narrow
+ * on purpose:
+ *
+ * - only 'lead.created'. An appointment means a person booked time on the
+ *   calendar, whatever their contact record happens to be called.
+ * - only when no lead row exists yet. A lead already being worked must still
+ *   receive later events, even ones carrying no name.
+ *
+ * Nothing is discarded either way: the payload is already stored in
+ * ghl_webhook_events, marked 'ignored', so a lead filtered out by mistake is
+ * still there to be found.
+ */
+export function shouldIgnoreAnonymousLead(
+  normalized: Pick<NormalizedGhlWebhook, 'eventType' | 'lead'>,
+  hasExistingLead: boolean
+): boolean {
+  if (hasExistingLead) return false;
+  if (normalized.eventType !== 'lead.created') return false;
+  return !looksLikeRealFirstName(normalized.lead.firstName);
+}
+
 export function nextLeadStageForEvent(currentStage: LeadStage | undefined, eventType: GhlWebhookEventType): LeadStage {
   if (currentStage === 'Won' || currentStage === 'Lost' || currentStage === 'Disqualified') {
     return currentStage;
@@ -460,6 +526,11 @@ export function normalizeGhlWebhook(payload: Record<string, unknown>): Normalize
     'contact.name',
   ]);
   const joinedName = normalizeWhitespace([firstName, lastName].filter(Boolean).join(' '));
+  const resolvedName = normalizeWhitespace(fullName || joinedName);
+  // Fall back to the leading word of the full name: some workflows send only a
+  // combined name, and dropping those leads would be worse than the odd surname
+  // read as a first name.
+  const resolvedFirstName = normalizeWhitespace(firstName) || resolvedName?.split(' ')[0];
 
   // GHL sends the address both flattened (`full_address`) and as discrete fields.
   // The discrete fields are read directly rather than recovered by parsing the
@@ -492,7 +563,8 @@ export function normalizeGhlWebhook(payload: Record<string, unknown>): Normalize
 
   const lead: NormalizedWebhookLead = {
     ghlContactId,
-    name: normalizeWhitespace(fullName || joinedName),
+    name: resolvedName,
+    firstName: resolvedFirstName,
     phone: normalizePhone(readFirstString(payload, ['phone', 'phone_number', 'phoneNumber', 'contact.phone'])),
     email: normalizeEmail(readFirstString(payload, ['email', 'contact.email'])),
     address: normalizeWhitespace(readFirstString(payload, ['address', 'full_address', 'fullAddress', 'location.fullAddress'])),
