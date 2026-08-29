@@ -5,11 +5,14 @@ import {
   getDefaultPricing,
 } from '../lib/db';
 import { Pricing as PricingType } from '../types';
+import SaveButton from '../components/SaveButton';
+import { useSaveFlash } from '../hooks/useSaveFlash';
 
 export default function Pricing() {
   const [pricing, setPricing] = useState<PricingType>(getDefaultPricing());
   const [loading, setLoading] = useState(true);
   const [pricingSaving, setPricingSaving] = useState(false);
+  const { saved, flashSaved } = useSaveFlash();
 
   const [pricingForm, setPricingForm] = useState({
     antiSlipPricePerSqft: '',
@@ -83,6 +86,7 @@ export default function Pricing() {
       await savePricing(updatedPricing);
       console.log('[Pricing] Pricing saved successfully');
       setPricing(updatedPricing);
+      flashSaved();
     } catch (error) {
       console.error('Error saving pricing:', error);
     } finally {
@@ -201,13 +205,14 @@ export default function Pricing() {
             </div>
           </div>
           <div className="pt-4">
-            <button
+            <SaveButton
               type="submit"
-              disabled={pricingSaving}
-              className="px-6 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors disabled:opacity-50"
-            >
-              {pricingSaving ? 'Saving...' : 'Save Pricing'}
-            </button>
+              saving={pricingSaving}
+              saved={saved}
+              label="Save Pricing"
+              icon={null}
+              className="px-6 py-2 rounded-lg font-semibold disabled:opacity-50"
+            />
           </div>
         </form>
       </div>

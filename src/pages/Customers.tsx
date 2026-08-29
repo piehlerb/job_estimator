@@ -2,6 +2,8 @@ import { Plus, Edit2, Trash2, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { getAllCustomers, addCustomer, updateCustomer, deleteCustomer, getAllJobs } from '../lib/db';
 import { Customer, Job, JobStatus } from '../types';
+import SaveButton from '../components/SaveButton';
+import { useSaveFlash } from '../hooks/useSaveFlash';
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -37,6 +39,7 @@ export default function Customers() {
     notes: '',
   });
   const [saving, setSaving] = useState(false);
+  const { saved, flashSaved } = useSaveFlash();
 
   // Detail panel
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
@@ -165,9 +168,11 @@ export default function Customers() {
       }
 
       await loadData();
-      setShowForm(false);
-      setEditingCustomer(null);
-      setFormData({ name: '', address: '', phone: '', email: '', notes: '' });
+      flashSaved(() => {
+        setShowForm(false);
+        setEditingCustomer(null);
+        setFormData({ name: '', address: '', phone: '', email: '', notes: '' });
+      });
     } catch (error) {
       console.error('Error saving customer:', error);
     } finally {
@@ -516,13 +521,15 @@ export default function Customers() {
                 >
                   Cancel
                 </button>
-                <button
+                <SaveButton
                   type="submit"
-                  disabled={saving || !formData.name.trim()}
-                  className="px-4 py-2 text-sm font-medium text-white bg-gf-lime rounded-lg hover:bg-gf-dark-green transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {saving ? 'Saving...' : editingCustomer ? 'Save Changes' : 'Add Customer'}
-                </button>
+                  saving={saving}
+                  saved={saved}
+                  disabled={!formData.name.trim()}
+                  label={editingCustomer ? 'Save Changes' : 'Add Customer'}
+                  icon={null}
+                  className="px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-50"
+                />
               </div>
             </form>
           </div>

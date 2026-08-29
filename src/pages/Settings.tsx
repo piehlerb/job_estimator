@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Edit2, Trash2, Save, X } from 'lucide-react';
+import { Plus, Edit2, Trash2, X } from 'lucide-react';
 import {
   getPricing,
   savePricing,
@@ -14,6 +14,8 @@ import {
   deleteCommTemplate,
 } from '../lib/db';
 import { Pricing, BaseCoatColor, DiscountConfig, DiscountMode, TagDiscount, CommunicationTemplate, AutoReminderRule } from '../types';
+import SaveButton from '../components/SaveButton';
+import { useSaveFlash } from '../hooks/useSaveFlash';
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -59,7 +61,14 @@ export default function Settings() {
   // Auto-add reminder rules state
   const [autoReminderRules, setAutoReminderRules] = useState<AutoReminderRuleDraft[]>([]);
   const [savingAutoReminders, setSavingAutoReminders] = useState(false);
-  const [autoReminderSaved, setAutoReminderSaved] = useState(false);
+
+  // One flash per save button, so confirming a discount save does not light up
+  // the settings button three sections away.
+  const pricingFlash = useSaveFlash();
+  const discountFlash = useSaveFlash();
+  const colorFlash = useSaveFlash();
+  const templateFlash = useSaveFlash();
+  const autoReminderFlash = useSaveFlash();
 
   const [form, setForm] = useState({
     minimumMarginBuffer: '',
@@ -237,6 +246,7 @@ export default function Settings() {
 
       await savePricing(updatedPricing);
       setPricing(updatedPricing);
+      pricingFlash.flashSaved();
     } catch (error) {
       console.error('Error saving settings:', error);
     } finally {
@@ -263,6 +273,7 @@ export default function Settings() {
 
       await savePricing(updatedPricing);
       setPricing(updatedPricing);
+      discountFlash.flashSaved();
     } catch (error) {
       console.error('Error saving discount settings:', error);
     } finally {
@@ -290,7 +301,6 @@ export default function Settings() {
 
   // Auto-add reminder rule handlers
   const handleAddAutoReminderRule = () => {
-    setAutoReminderSaved(false);
     setAutoReminderRules(rules => [
       ...rules,
       {
@@ -305,12 +315,10 @@ export default function Settings() {
   };
 
   const handleUpdateAutoReminderRule = (id: string, patch: Partial<AutoReminderRuleDraft>) => {
-    setAutoReminderSaved(false);
     setAutoReminderRules(rules => rules.map(rule => (rule.id === id ? { ...rule, ...patch } : rule)));
   };
 
   const handleRemoveAutoReminderRule = (id: string) => {
-    setAutoReminderSaved(false);
     setAutoReminderRules(rules => rules.filter(rule => rule.id !== id));
   };
 
@@ -348,7 +356,7 @@ export default function Settings() {
       await savePricing(updatedPricing);
       setPricing(updatedPricing);
       setAutoReminderRules(cleaned.map(toRuleDraft));
-      setAutoReminderSaved(true);
+      autoReminderFlash.flashSaved();
     } catch (error) {
       console.error('Error saving auto-add reminders:', error);
       alert('Error saving auto-add reminders. Please try again.');
@@ -412,7 +420,7 @@ export default function Settings() {
       }
 
       setBaseCoatColors(await getAllBaseCoatColors());
-      resetColorForm();
+      colorFlash.flashSaved(resetColorForm);
     } catch (error) {
       console.error('Error saving base coat color:', error);
       alert('Error saving base coat color. Please try again.');
@@ -452,9 +460,11 @@ export default function Settings() {
         await addCommTemplate({ id: generateId(), name, body, createdAt: now, updatedAt: now });
       }
       setCommTemplates(await getAllCommTemplates());
-      setShowTemplateForm(false);
-      setEditingTemplateId(null);
-      setTemplateForm({ name: '', body: '' });
+      templateFlash.flashSaved(() => {
+        setShowTemplateForm(false);
+        setEditingTemplateId(null);
+        setTemplateForm({ name: '', body: '' });
+      });
     } catch (error) {
       console.error('Error saving template:', error);
       alert('Error saving template. Please try again.');
@@ -677,13 +687,14 @@ export default function Settings() {
             <p className="text-xs text-slate-500 mt-1">Gas heater cost applies only when install date falls in selected months.</p>
           </div>
           <div className="pt-4">
-            <button
+            <SaveButton
               type="submit"
-              disabled={saving}
-              className="px-6 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors disabled:opacity-50"
-            >
-              {saving ? 'Saving...' : 'Save Settings'}
-            </button>
+              saving={saving}
+              saved={pricingFlash.saved}
+              label="Save Settings"
+              icon={null}
+              className="px-6 py-2 rounded-lg font-semibold disabled:opacity-50"
+            />
           </div>
         </form>
       </div>
@@ -869,14 +880,15 @@ export default function Settings() {
         )}
 
         <div className="pt-5">
-          <button
+          <SaveButton
             type="button"
             onClick={handleSaveDiscount}
-            disabled={savingDiscount}
-            className="px-6 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors disabled:opacity-50"
-          >
-            {savingDiscount ? 'Saving...' : 'Save Discounts'}
-          </button>
+            saving={savingDiscount}
+            saved={discountFlash.saved}
+            label="Save Discounts"
+            icon={null}
+            className="px-6 py-2 rounded-lg font-semibold disabled:opacity-50"
+          />
         </div>
       </div>
 
@@ -909,13 +921,12 @@ export default function Settings() {
               autoFocus
             />
             <div className="flex gap-3 pt-4">
-              <button
+              <SaveButton
                 onClick={handleSaveColor}
-                className="flex items-center gap-2 px-5 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors"
-              >
-                <Save size={16} />
-                <span>Save</span>
-              </button>
+                saved={colorFlash.saved}
+                label="Save"
+                className="px-5 py-2 rounded-lg font-semibold"
+              />
               <button
                 onClick={resetColorForm}
                 className="flex items-center gap-2 px-5 py-2 bg-slate-200 text-slate-900 rounded-lg font-semibold hover:bg-slate-300 transition-colors"
@@ -1013,13 +1024,12 @@ export default function Settings() {
               />
             </div>
             <div className="flex gap-3">
-              <button
+              <SaveButton
                 onClick={handleSaveTemplate}
-                className="flex items-center gap-2 px-5 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors"
-              >
-                <Save size={16} />
-                <span>Save</span>
-              </button>
+                saved={templateFlash.saved}
+                label="Save"
+                className="px-5 py-2 rounded-lg font-semibold"
+              />
               <button
                 onClick={() => { setShowTemplateForm(false); setEditingTemplateId(null); setTemplateForm({ name: '', body: '' }); }}
                 className="flex items-center gap-2 px-5 py-2 bg-slate-200 text-slate-900 rounded-lg font-semibold hover:bg-slate-300 transition-colors"
@@ -1095,14 +1105,15 @@ export default function Settings() {
           </div>
         </div>
         <div className="pt-4">
-          <button
+          <SaveButton
             type="button"
-            disabled={saving}
-            onClick={handleSavePricing}
-            className="px-6 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors disabled:opacity-50"
-          >
-            {saving ? 'Saving...' : 'Save Settings'}
-          </button>
+            saving={saving}
+            saved={pricingFlash.saved}
+            onClick={() => handleSavePricing()}
+            label="Save Settings"
+            icon={null}
+            className="px-6 py-2 rounded-lg font-semibold disabled:opacity-50"
+          />
         </div>
       </div>
 
@@ -1209,15 +1220,15 @@ export default function Settings() {
         )}
 
         <div className="pt-4 flex items-center gap-3">
-          <button
+          <SaveButton
             type="button"
-            disabled={savingAutoReminders}
+            saving={savingAutoReminders}
+            saved={autoReminderFlash.saved}
             onClick={handleSaveAutoReminders}
-            className="px-6 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors disabled:opacity-50"
-          >
-            {savingAutoReminders ? 'Saving...' : 'Save Auto-Add Reminders'}
-          </button>
-          {autoReminderSaved && <span className="text-sm text-gf-dark-green font-medium">Saved</span>}
+            label="Save Auto-Add Reminders"
+            icon={null}
+            className="px-6 py-2 rounded-lg font-semibold disabled:opacity-50"
+          />
         </div>
       </div>
     </div>

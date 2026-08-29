@@ -7,7 +7,6 @@ import {
   Filter,
   Plus,
   RefreshCw,
-  Save,
   Search,
   Trash2,
   X,
@@ -20,6 +19,8 @@ import { applyLeadEdit } from '../lib/leadMutations';
 import type { AddressFieldSet } from '../lib/addressFields';
 import { parseAddress } from '../lib/addressParse';
 import AddressFieldsEditor from '../components/AddressFieldsEditor';
+import SaveButton from '../components/SaveButton';
+import { useSaveFlash } from '../hooks/useSaveFlash';
 import type { Job, Lead, LeadAppointment, LeadDispositionReason, LeadStage } from '../types';
 
 interface LeadsProps {
@@ -159,6 +160,7 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
   const [editForm, setEditForm] = useState<LeadEditForm>(EMPTY_LEAD_FORM);
   const [editError, setEditError] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
+  const { saved: editSaved, flashSaved: flashEditSaved } = useSaveFlash();
   const [deletingLeadId, setDeletingLeadId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -318,8 +320,10 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
     try {
       await updateLead(nextLead);
       setLeads((current) => current.map((item) => (item.id === nextLead.id ? nextLead : item)));
-      setEditingLead(null);
-      setEditForm(EMPTY_LEAD_FORM);
+      flashEditSaved(() => {
+        setEditingLead(null);
+        setEditForm(EMPTY_LEAD_FORM);
+      });
     } catch (error) {
       console.error('Error saving lead:', error);
       setEditError('Unable to save this lead. Please try again.');
@@ -765,14 +769,13 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
                 >
                   Cancel
                 </button>
-                <button
+                <SaveButton
                   type="submit"
-                  disabled={savingEdit}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-gf-lime px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-gf-dark-green disabled:cursor-not-allowed disabled:bg-slate-400"
-                >
-                  {savingEdit ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}
-                  {savingEdit ? 'Saving...' : 'Save Lead'}
-                </button>
+                  saving={savingEdit}
+                  saved={editSaved}
+                  label="Save Lead"
+                  className="rounded-lg px-4 py-2 text-sm font-semibold disabled:bg-slate-400"
+                />
               </div>
             </form>
           </div>

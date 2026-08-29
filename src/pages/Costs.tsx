@@ -5,11 +5,14 @@ import {
   getDefaultCosts,
 } from '../lib/db';
 import { Costs as CostsType } from '../types';
+import SaveButton from '../components/SaveButton';
+import { useSaveFlash } from '../hooks/useSaveFlash';
 
 export default function Costs() {
   const [costs, setCosts] = useState<CostsType>(getDefaultCosts());
   const [loading, setLoading] = useState(true);
   const [costsSaving, setCostsSaving] = useState(false);
+  const { saved, flashSaved } = useSaveFlash();
 
   const [costsForm, setCostsForm] = useState({
     baseCostPerGal: '',
@@ -81,6 +84,7 @@ export default function Costs() {
 
       await saveCosts(updatedCosts);
       setCosts(updatedCosts);
+      flashSaved();
     } catch (error) {
       console.error('Error saving costs:', error);
     } finally {
@@ -238,13 +242,14 @@ export default function Costs() {
             </div>
           </div>
           <div className="pt-4">
-            <button
+            <SaveButton
               type="submit"
-              disabled={costsSaving}
-              className="px-6 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors disabled:opacity-50"
-            >
-              {costsSaving ? 'Saving...' : 'Save Costs'}
-            </button>
+              saving={costsSaving}
+              saved={saved}
+              label="Save Costs"
+              icon={null}
+              className="px-6 py-2 rounded-lg font-semibold disabled:opacity-50"
+            />
           </div>
         </form>
       </div>

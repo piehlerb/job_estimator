@@ -7,6 +7,8 @@ import {
   deleteLaborer,
 } from '../lib/db';
 import { Laborer } from '../types';
+import SaveButton from '../components/SaveButton';
+import { useSaveFlash } from '../hooks/useSaveFlash';
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -18,6 +20,7 @@ export default function Laborers() {
   const [showLaborerForm, setShowLaborerForm] = useState(false);
   const [editingLaborer, setEditingLaborer] = useState<Laborer | null>(null);
   const [saving, setSaving] = useState(false);
+  const { saved, flashSaved } = useSaveFlash();
 
   const [laborerForm, setLaborerForm] = useState({
     name: '',
@@ -70,7 +73,7 @@ export default function Laborers() {
       }
 
       await loadData();
-      resetForm();
+      flashSaved(resetForm);
     } catch (error) {
       console.error('Error saving laborer:', error);
     } finally {
@@ -240,13 +243,15 @@ export default function Laborers() {
                 >
                   Cancel
                 </button>
-                <button
+                <SaveButton
                   type="submit"
-                  disabled={saving || !laborerForm.name.trim()}
-                  className="px-4 py-2 text-sm font-medium text-white bg-gf-lime rounded-lg hover:bg-gf-dark-green transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {saving ? 'Saving...' : editingLaborer ? 'Save Changes' : 'Add Laborer'}
-                </button>
+                  saving={saving}
+                  saved={saved}
+                  disabled={!laborerForm.name.trim()}
+                  label={editingLaborer ? 'Save Changes' : 'Add Laborer'}
+                  icon={null}
+                  className="px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-50"
+                />
               </div>
             </form>
           </div>

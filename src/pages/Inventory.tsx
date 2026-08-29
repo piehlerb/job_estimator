@@ -1,5 +1,5 @@
 import { useState, useEffect, Fragment } from 'react';
-import { Plus, Trash2, Save, ClipboardList } from 'lucide-react';
+import { Plus, Trash2, ClipboardList } from 'lucide-react';
 import JobSummaryModal from '../components/JobSummaryModal';
 import {
   getAllJobs,
@@ -33,6 +33,8 @@ import {
   DEFAULT_COATING_SKUS,
 } from '../lib/coatingSkus';
 import { resolveJobMaterials } from '../lib/materialAllocation';
+import SaveButton from '../components/SaveButton';
+import { useSaveFlash } from '../hooks/useSaveFlash';
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -63,6 +65,8 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
   const [chipInventory, setChipInventory] = useState<ChipInventory[]>([]);
   const [coatingInventory, setCoatingInventory] = useState<CoatingInventory[]>([]);
   const [changedCoatingIds, setChangedCoatingIds] = useState<Set<string>>(new Set());
+  const [savingAll, setSavingAll] = useState(false);
+  const { saved, flashSaved } = useSaveFlash();
   const [miscInventory, setMiscInventory] = useState<MiscInventory>({
     id: 'current',
     crackRepair: 0,
@@ -485,11 +489,17 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
   const handleSaveAll = async () => {
     const now = new Date().toISOString();
     const changedSkus = coatingInventory.filter((inv) => changedCoatingIds.has(inv.id));
-    await Promise.all([
-      ...changedSkus.map((inv) => saveCoatingInventory({ ...inv, updatedAt: now })),
-      saveMiscInventory(miscInventory),
-    ]);
-    setChangedCoatingIds(new Set());
+    setSavingAll(true);
+    try {
+      await Promise.all([
+        ...changedSkus.map((inv) => saveCoatingInventory({ ...inv, updatedAt: now })),
+        saveMiscInventory(miscInventory),
+      ]);
+      setChangedCoatingIds(new Set());
+      flashSaved();
+    } finally {
+      setSavingAll(false);
+    }
   };
 
   const getAvailable = (onHand: number, committed: number) => onHand - committed;
@@ -516,13 +526,14 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-3xl font-bold text-slate-900">Inventory</h1>
         <div className="flex items-center gap-2">
-          <button
+          <SaveButton
             onClick={handleSaveAll}
-            className="flex items-center gap-2 px-4 py-2 bg-gf-lime text-white rounded-lg font-medium hover:bg-gf-dark-green transition-colors"
-          >
-            <Save size={18} />
-            Save
-          </button>
+            saving={savingAll}
+            saved={saved}
+            label="Save"
+            iconSize={18}
+            className="px-4 py-2 rounded-lg font-medium disabled:opacity-50"
+          />
           <button
             onClick={() => setShowJobSummary(true)}
             className="flex items-center gap-2 px-4 py-2 bg-gf-lime text-white rounded-lg font-medium hover:bg-gf-dark-green transition-colors"

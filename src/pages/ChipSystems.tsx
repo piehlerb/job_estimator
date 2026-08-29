@@ -7,6 +7,8 @@ import {
   deleteSystem,
 } from '../lib/db';
 import { ChipSystem } from '../types';
+import SaveButton from '../components/SaveButton';
+import { useSaveFlash } from '../hooks/useSaveFlash';
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -34,6 +36,8 @@ export default function ChipSystems() {
   const [showSystemForm, setShowSystemForm] = useState(false);
   const [editingSystem, setEditingSystem] = useState<ChipSystem | null>(null);
   const [systemForm, setSystemForm] = useState(defaultSystemForm);
+  const [saving, setSaving] = useState(false);
+  const { saved, flashSaved } = useSaveFlash();
 
   useEffect(() => {
     loadData();
@@ -50,6 +54,7 @@ export default function ChipSystems() {
     e.preventDefault();
     if (!systemForm.name.trim()) return;
 
+    setSaving(true);
     try {
       const system: ChipSystem = {
         id: editingSystem?.id || generateId(),
@@ -78,11 +83,15 @@ export default function ChipSystems() {
       }
 
       await loadData();
-      setShowSystemForm(false);
-      setEditingSystem(null);
-      setSystemForm(defaultSystemForm);
+      flashSaved(() => {
+        setShowSystemForm(false);
+        setEditingSystem(null);
+        setSystemForm(defaultSystemForm);
+      });
     } catch (error) {
       console.error('Error saving system:', error);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -406,12 +415,14 @@ export default function ChipSystems() {
                 <p className="text-xs text-slate-500 mt-1">Optional notes or comments about this system</p>
               </div>
               <div className="flex gap-3">
-                <button
+                <SaveButton
                   type="submit"
-                  className="px-4 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors"
-                >
-                  Save
-                </button>
+                  saving={saving}
+                  saved={saved}
+                  label="Save"
+                  icon={null}
+                  className="px-4 py-2 rounded-lg font-semibold disabled:opacity-50"
+                />
                 <button
                   type="button"
                   onClick={() => {

@@ -16,6 +16,8 @@ import {
   type CloudBackupRecord,
 } from '../lib/cloudBackup';
 import { ExportData, ImportPreview, MergeLogEntry } from '../types';
+import SaveButton from '../components/SaveButton';
+import { useSaveFlash } from '../hooks/useSaveFlash';
 
 export default function Backup() {
   const [exporting, setExporting] = useState(false);
@@ -34,6 +36,7 @@ export default function Backup() {
   const [cloudError, setCloudError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [restoreSourceId, setRestoreSourceId] = useState<string | null>(null);
+  const { saved: cloudSaved, flashSaved: flashCloudSaved } = useSaveFlash();
 
   const loadCloudBackups = useCallback(async () => {
     setCloudLoading(true);
@@ -140,6 +143,7 @@ export default function Backup() {
     try {
       await saveCloudBackup('manual');
       await loadCloudBackups();
+      flashCloudSaved();
     } catch (err) {
       setCloudError(err instanceof Error ? err.message : 'Failed to save backup');
     } finally {
@@ -240,14 +244,15 @@ export default function Backup() {
               >
                 <RefreshCw size={15} className={cloudLoading ? 'animate-spin' : ''} />
               </button>
-              <button
+              <SaveButton
                 onClick={handleSaveCloudBackup}
-                disabled={cloudSaving}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-gf-lime text-white rounded-lg text-sm font-semibold hover:bg-gf-dark-green transition-colors disabled:opacity-50"
-              >
-                <Cloud size={14} />
-                {cloudSaving ? 'Saving...' : 'Save Now'}
-              </button>
+                saving={cloudSaving}
+                saved={cloudSaved}
+                label="Save Now"
+                icon={<Cloud size={14} />}
+                iconSize={14}
+                className="gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold disabled:opacity-50"
+              />
             </div>
           </div>
           <p className="text-sm text-slate-600 mb-4">

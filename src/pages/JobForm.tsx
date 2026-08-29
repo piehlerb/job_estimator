@@ -41,6 +41,8 @@ import { convertLegacyJobToSchedule } from '../lib/jobMigration';
 import { resolveAddressFields, type AddressFieldSet } from '../lib/addressFields';
 import { parseAddress } from '../lib/addressParse';
 import AddressFieldsEditor from '../components/AddressFieldsEditor';
+import SaveButton from '../components/SaveButton';
+import { useSaveFlash } from '../hooks/useSaveFlash';
 import { compareSnapshots, SnapshotChanges } from '../lib/snapshotComparison';
 import SnapshotChangeBanner, { SelectedChanges } from '../components/SnapshotChangeBanner';
 import { normalizeChipBlendName } from '../lib/syncHelpers';
@@ -115,6 +117,9 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
   const [installSchedule, setInstallSchedule] = useState<InstallDaySchedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  // Shared by all four job-save buttons; the reminder modal keeps its own.
+  const jobFlash = useSaveFlash();
+  const reminderFlash = useSaveFlash();
   const [calculation, setCalculation] = useState<JobCalculation | null>(null);
   const [usedPricing, setUsedPricing] = useState<Pricing>(getDefaultPricing());
   const [usedCosts, setUsedCosts] = useState<Costs>(getDefaultCosts());
@@ -137,6 +142,8 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
   // The raw text the current structured fields were derived from, so an edit to the
   // address can be told from merely tabbing through the field.
   const [addressSourceRaw, setAddressSourceRaw] = useState<string | undefined>(undefined);
+  // Flips the copy button to a checkmark for a couple seconds after a copy.
+  const [addressCopied, setAddressCopied] = useState(false);
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [linkedLead, setLinkedLead] = useState<Lead | null>(null);
 
@@ -1156,6 +1163,28 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
     setAddressSourceRaw(trimmed);
   };
 
+  /**
+   * Copy the job site address so it can be pasted straight into a maps app.
+   * navigator.clipboard is unavailable on insecure origins and older mobile
+   * browsers, so fall back to the hidden-textarea trick the invite codes use.
+   */
+  const handleCopyAddress = async () => {
+    const address = formData.customerAddress.trim();
+    if (!address) return;
+    try {
+      await navigator.clipboard.writeText(address);
+    } catch {
+      const el = document.createElement('textarea');
+      el.value = address;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+    }
+    setAddressCopied(true);
+    setTimeout(() => setAddressCopied(false), 2000);
+  };
+
   const matchedCustomer = useMemo(
     () =>
       availableCustomers.find(
@@ -1305,7 +1334,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
     try {
       await persistReminderChanges(nextReminders);
       await requestReminderNotificationPermission();
-      closeReminderModal();
+      reminderFlash.flashSaved(closeReminderModal);
     } catch (error) {
       console.error('Error saving reminder:', error);
       alert('Error saving reminder. Please try again.');
@@ -2113,6 +2142,9 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
               setInventoryUpdateError('');
               setShowInventoryUpdateModal(true);
               setSaving(false);
+              // The job is already written; the modal only reconciles inventory,
+              // so confirm the save in place rather than on the way out.
+              jobFlash.flashSaved();
               return;
             }
           } catch (inventoryError) {
@@ -2124,7 +2156,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
         }
       }
 
-      onBack();
+      jobFlash.flashSaved(onBack);
     } catch (error) {
       console.error('Error saving job:', error);
       alert('Error saving job. Please try again.');
@@ -2361,15 +2393,15 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
               <Plus size={16} className="sm:w-[18px] sm:h-[18px]" />
               Add Reminder
             </button>
-            <button
+            <SaveButton
               type="submit"
               form="job-form"
-              disabled={saving}
-              className="flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-2.5 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green active:bg-gf-dark-green transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed text-sm sm:text-base"
-            >
-              <Save size={16} className="sm:w-[18px] sm:h-[18px]" />
-              {saving ? 'Saving...' : jobId ? 'Update Job' : 'Create Job'}
-            </button>
+              saving={saving}
+              saved={jobFlash.saved}
+              label={jobId ? 'Update Job' : 'Create Job'}
+              icon={<Save size={16} className="sm:w-[18px] sm:h-[18px]" />}
+              className="px-4 sm:px-6 py-2 sm:py-2.5 rounded-lg font-semibold disabled:bg-slate-400 text-sm sm:text-base"
+            />
           </div>
         </div>
 
@@ -2541,16 +2573,28 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
               </div>
               <div className="flex-1 min-w-0">
                 <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Job Site Address</label>
-                <input
-                  type="text"
-                  placeholder="e.g., 123 Main St, City, State 12345"
-                  value={formData.customerAddress}
-                  onChange={(e) => setFormData({ ...formData, customerAddress: e.target.value })}
-                  // Parsed on blur rather than per keystroke: the crew pastes whole
-                  // addresses, and half-typed text would only flicker.
-                  onBlur={() => handleAddressBlur(formData.customerAddress)}
-                  className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="e.g., 123 Main St, City, State 12345"
+                    value={formData.customerAddress}
+                    onChange={(e) => setFormData({ ...formData, customerAddress: e.target.value })}
+                    // Parsed on blur rather than per keystroke: the crew pastes whole
+                    // addresses, and half-typed text would only flicker.
+                    onBlur={() => handleAddressBlur(formData.customerAddress)}
+                    className="flex-1 min-w-0 px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleCopyAddress}
+                    disabled={!formData.customerAddress.trim()}
+                    className="shrink-0 px-3 py-2 border border-slate-300 rounded-lg text-slate-500 transition-colors hover:text-gf-dark-green hover:bg-green-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-500"
+                    title={addressCopied ? 'Address copied' : 'Copy address'}
+                    aria-label="Copy address"
+                  >
+                    {addressCopied ? <Check size={16} className="text-green-600" /> : <Copy size={16} />}
+                  </button>
+                </div>
                 <AddressFieldsEditor
                   fields={addressFields}
                   onChange={setAddressFields}
@@ -4387,14 +4431,15 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
 
           {/* Desktop save/cancel */}
           <div className="hidden md:flex flex-col sm:flex-row gap-2 sm:gap-3">
-            <button
+            <SaveButton
               type="submit"
-              disabled={saving}
-              className="flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green active:bg-gf-dark-green transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed text-sm sm:text-base"
-            >
-              <Save size={18} className="sm:w-5 sm:h-5" />
-              {saving ? 'Saving...' : jobId ? 'Update Job' : 'Create Job'}
-            </button>
+              saving={saving}
+              saved={jobFlash.saved}
+              label={jobId ? 'Update Job' : 'Create Job'}
+              icon={<Save size={18} className="sm:w-5 sm:h-5" />}
+              iconSize={18}
+              className="px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg font-semibold disabled:bg-slate-400 text-sm sm:text-base"
+            />
             <button
               type="button"
               onClick={onBack}
@@ -4419,14 +4464,15 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
             )}
             {activeTab === 'details' && currentStep < 3 ? (
               <>
-                <button
+                <SaveButton
                   type="submit"
-                  disabled={saving}
-                  className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-semibold text-sm disabled:bg-slate-200 disabled:text-slate-400"
-                >
-                  <Save size={14} />
-                  {saving ? 'Saving...' : 'Save'}
-                </button>
+                  tone="subtle"
+                  saving={saving}
+                  saved={jobFlash.saved}
+                  label="Save"
+                  iconSize={14}
+                  className="gap-1.5 px-4 py-2.5 rounded-xl font-semibold text-sm disabled:bg-slate-200 disabled:text-slate-400"
+                />
                 <button
                   type="button"
                   onClick={() => setCurrentStep(currentStep + 1)}
@@ -4437,14 +4483,13 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
                 </button>
               </>
             ) : (
-              <button
+              <SaveButton
                 type="submit"
-                disabled={saving}
-                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gf-lime text-white font-bold text-sm disabled:bg-slate-400"
-              >
-                <Save size={16} />
-                {saving ? 'Saving...' : jobId ? 'Update' : 'Save Estimate'}
-              </button>
+                saving={saving}
+                saved={jobFlash.saved}
+                label={jobId ? 'Update' : 'Save Estimate'}
+                className="flex-1 py-2.5 rounded-xl font-bold text-sm disabled:bg-slate-400"
+              />
             )}
           </div>
         </form>
@@ -4537,14 +4582,15 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
                 >
                   Cancel
                 </button>
-                <button
+                <SaveButton
                   type="button"
                   onClick={handleSaveReminder}
-                  disabled={savingReminder}
-                  className="px-4 py-2 text-sm font-medium text-white bg-gf-lime rounded-lg hover:bg-gf-dark-green transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed"
-                >
-                  {savingReminder ? 'Saving...' : editingReminderId ? 'Save Reminder' : 'Add Reminder'}
-                </button>
+                  saving={savingReminder}
+                  saved={reminderFlash.saved}
+                  label={editingReminderId ? 'Save Reminder' : 'Add Reminder'}
+                  icon={null}
+                  className="px-4 py-2 text-sm font-medium rounded-lg disabled:bg-slate-400"
+                />
               </div>
             </div>
           </div>
