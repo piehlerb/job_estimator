@@ -1,5 +1,5 @@
 import { Plus, Edit2, Trash2, X, ChevronDown, ChevronUp } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { getAllCustomers, addCustomer, updateCustomer, deleteCustomer, getAllJobs } from '../lib/db';
 import { Customer, Job, JobStatus } from '../types';
 import SaveButton from '../components/SaveButton';
@@ -305,9 +305,11 @@ export default function Customers() {
               </thead>
               <tbody>
                 {filteredCustomers.map((customer) => (
-                  <>
+                  // Keyed on the Fragment, not the rows: a customer contributes
+                  // two sibling <tr>s when expanded, and React needs the key on
+                  // whatever the map actually returns.
+                  <Fragment key={customer.id}>
                     <tr
-                      key={customer.id}
                       className={`border-b border-slate-200 hover:bg-slate-50 ${
                         selectedCustomerId === customer.id ? 'bg-green-50' : ''
                       }`}
@@ -385,7 +387,7 @@ export default function Customers() {
                     </tr>
                     {/* Inline job list */}
                     {selectedCustomerId === customer.id && (
-                      <tr key={`${customer.id}-jobs`} className="bg-green-50">
+                      <tr className="bg-green-50">
                         <td colSpan={8} className="px-4 lg:px-6 py-0">
                           {selectedCustomerJobs.length === 0 ? (
                             <p className="py-4 text-sm text-slate-500">
@@ -433,7 +435,7 @@ export default function Customers() {
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 ))}
               </tbody>
             </table>
