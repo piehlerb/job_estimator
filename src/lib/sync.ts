@@ -9,6 +9,7 @@ import {
   objectToSnakeCase,
   objectToCamelCase,
   resolveConflict,
+  resolveRemoteWrite,
   getSupabaseTableName,
   getIndexedDBStoreName,
   batchArray,
@@ -164,7 +165,7 @@ async function storeRemoteRecords(
             const { winner, source } = resolveConflict(existing, record);
 
             if (source === 'remote') {
-              const putRequest = store.put(winner);
+              const putRequest = store.put(resolveRemoteWrite(tableName, existing, winner));
               putRequest.onerror = () => reject(putRequest.error);
               putRequest.onsuccess = () => resolve({ wasConflict: true });
             } else {

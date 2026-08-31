@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Plus, Edit2, Trash2, X } from 'lucide-react';
 import {
   getPricing,
-  savePricing,
+  updatePricing,
   getDefaultPricing,
   getAllBaseCoatColors,
   addBaseCoatColor,
@@ -13,7 +13,7 @@ import {
   updateCommTemplate,
   deleteCommTemplate,
 } from '../lib/db';
-import { Pricing, BaseCoatColor, DiscountConfig, DiscountMode, TagDiscount, CommunicationTemplate, AutoReminderRule } from '../types';
+import { BaseCoatColor, DiscountConfig, DiscountMode, TagDiscount, CommunicationTemplate, AutoReminderRule } from '../types';
 import SaveButton from '../components/SaveButton';
 import { useSaveFlash } from '../hooks/useSaveFlash';
 
@@ -43,7 +43,8 @@ function toRuleDraft(rule: AutoReminderRule): AutoReminderRuleDraft {
 }
 
 export default function Settings() {
-  const [pricing, setPricing] = useState<Pricing>(getDefaultPricing());
+  // The stored record is deliberately not held in state: saves go through
+  // updatePricing, which re-reads it, so there is no snapshot to go stale.
   const [baseCoatColors, setBaseCoatColors] = useState<BaseCoatColor[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -115,7 +116,6 @@ export default function Settings() {
         ...getDefaultPricing(),
         ...storedPricing,
       };
-      setPricing(mergedPricing);
       setForm({
         minimumMarginBuffer: (mergedPricing.minimumMarginBuffer ?? 2000).toString(),
         minimumJobPrice: (mergedPricing.minimumJobPrice ?? 2500).toString(),
@@ -226,8 +226,8 @@ export default function Settings() {
     setSaving(true);
 
     try {
-      const updatedPricing: Pricing = {
-        ...pricing,
+      // Only the fields this form owns — see updatePricing.
+      await updatePricing({
         minimumMarginBuffer: parseFloat(form.minimumMarginBuffer) || 2000,
         minimumJobPrice: parseFloat(form.minimumJobPrice) || 2500,
         chipVerticalUsageFactor: parseFloat(form.chipVerticalUsageFactor) || 1.1,
@@ -241,11 +241,8 @@ export default function Settings() {
         staleContactDays: parseFloat(form.staleContactDays) || 30,
         defaultReminderDays: parseInt(form.defaultReminderDays) || 7,
         defaultReminderTime: form.defaultReminderTime || '05:00',
-        updatedAt: new Date().toISOString(),
-      };
+      });
 
-      await savePricing(updatedPricing);
-      setPricing(updatedPricing);
       pricingFlash.flashSaved();
     } catch (error) {
       console.error('Error saving settings:', error);
@@ -265,14 +262,8 @@ export default function Settings() {
         tagAggregation,
       };
 
-      const updatedPricing: Pricing = {
-        ...pricing,
-        discountConfig,
-        updatedAt: new Date().toISOString(),
-      };
+      await updatePricing({ discountConfig });
 
-      await savePricing(updatedPricing);
-      setPricing(updatedPricing);
       discountFlash.flashSaved();
     } catch (error) {
       console.error('Error saving discount settings:', error);
@@ -348,13 +339,7 @@ export default function Settings() {
 
     setSavingAutoReminders(true);
     try {
-      const updatedPricing: Pricing = {
-        ...pricing,
-        autoReminderRules: cleaned,
-        updatedAt: new Date().toISOString(),
-      };
-      await savePricing(updatedPricing);
-      setPricing(updatedPricing);
+      await updatePricing({ autoReminderRules: cleaned });
       setAutoReminderRules(cleaned.map(toRuleDraft));
       autoReminderFlash.flashSaved();
     } catch (error) {

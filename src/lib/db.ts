@@ -596,6 +596,24 @@ export async function saveCosts(costs: Costs): Promise<void> {
   await triggerBackgroundSync();
 }
 
+/**
+ * Apply a partial update to the stored costs record.
+ *
+ * See updatePricing for why saves go through a fresh read rather than a
+ * snapshot held in component state.
+ */
+export async function updateCosts(patch: Partial<Costs>): Promise<Costs> {
+  const stored = await getCosts();
+  const next: Costs = {
+    ...(stored ?? getDefaultCosts()),
+    ...patch,
+    id: 'current',
+    updatedAt: new Date().toISOString(),
+  };
+  await saveCosts(next);
+  return next;
+}
+
 export function getDefaultCosts(): Costs {
   return {
     id: 'current',
@@ -650,6 +668,32 @@ export async function savePricing(pricing: Pricing): Promise<void> {
   console.log('[DB] Triggering background sync...');
   await triggerBackgroundSync();
   console.log('[DB] Background sync completed');
+}
+
+/**
+ * Apply a partial update to the stored pricing record.
+ *
+ * One pricing record holds fields owned by four separate forms — the Pricing
+ * page plus three sections of Settings. A form that saves a snapshot it took
+ * on load writes back every field, including ones it never displayed, so
+ * saving a price could revert auto-reminder rules created in another tab, and
+ * defaults merged in for display (autoReminderRules: []) got persisted as
+ * though the user had chosen them. Pushed to Supabase that blanked field is a
+ * legitimately newer row, so every other device pulls the loss.
+ *
+ * Reading the stored record here means a save carries only the caller's own
+ * fields. Pass just what the form owns.
+ */
+export async function updatePricing(patch: Partial<Pricing>): Promise<Pricing> {
+  const stored = await getPricing();
+  const next: Pricing = {
+    ...(stored ?? getDefaultPricing()),
+    ...patch,
+    id: 'current',
+    updatedAt: new Date().toISOString(),
+  };
+  await savePricing(next);
+  return next;
 }
 
 export function getDefaultPricing(): Pricing {

@@ -123,6 +123,33 @@ export function getSingletonRemoteId(
 }
 
 /**
+ * Decide what to write locally when a pulled record beats the local one.
+ *
+ * For most tables the remote record replaces the local one outright, because
+ * clearing an optional field (a job losing its install date, say) is a real
+ * edit that has to survive the trip.
+ *
+ * The singleton settings records are different. They are one row holding
+ * fields owned by several unrelated forms, and their columns are only ever
+ * changed, never removed — so a key that is missing from the remote row means
+ * the server could not supply it (a column added in a release that has not been
+ * migrated yet, or an older client), not that someone cleared it. Replacing
+ * wholesale there silently drops the field on every device that pulls. Merging
+ * over the local record keeps it.
+ *
+ * Note this only protects keys *absent* from the remote record. A settings
+ * field the user genuinely emptied arrives as an explicit null or [], which is
+ * present and therefore still wins.
+ */
+export function resolveRemoteWrite<T extends Record<string, any>>(
+  tableName: string,
+  local: T,
+  remote: T
+): T {
+  return isSingletonTable(tableName) ? { ...local, ...remote } : remote;
+}
+
+/**
  * Get table name mapping (IndexedDB store name -> Supabase table name)
  */
 export function getSupabaseTableName(storeName: string): string {

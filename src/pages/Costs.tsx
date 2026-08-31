@@ -1,15 +1,14 @@
 import { useState, useEffect } from 'react';
 import {
   getCosts,
-  saveCosts,
-  getDefaultCosts,
+  updateCosts,
 } from '../lib/db';
-import { Costs as CostsType } from '../types';
 import SaveButton from '../components/SaveButton';
 import { useSaveFlash } from '../hooks/useSaveFlash';
 
 export default function Costs() {
-  const [costs, setCosts] = useState<CostsType>(getDefaultCosts());
+  // The stored record is deliberately not held in state: saves go through
+  // updateCosts, which re-reads it, so there is no snapshot to go stale.
   const [loading, setLoading] = useState(true);
   const [costsSaving, setCostsSaving] = useState(false);
   const { saved, flashSaved } = useSaveFlash();
@@ -37,12 +36,6 @@ export default function Costs() {
     const storedCosts = await getCosts();
 
     if (storedCosts) {
-      // Merge with defaults to ensure new fields have values
-      const mergedCosts = {
-        ...getDefaultCosts(),
-        ...storedCosts,
-      };
-      setCosts(mergedCosts);
       setCostsForm({
         baseCostPerGal: storedCosts.baseCostPerGal.toString(),
         topCostPerGal: storedCosts.topCostPerGal.toString(),
@@ -66,8 +59,8 @@ export default function Costs() {
     setCostsSaving(true);
 
     try {
-      const updatedCosts: CostsType = {
-        ...costs,
+      // Only the fields this form owns — see updateCosts.
+      await updateCosts({
         baseCostPerGal: parseFloat(costsForm.baseCostPerGal) || 0,
         topCostPerGal: parseFloat(costsForm.topCostPerGal) || 0,
         crackFillCost: parseFloat(costsForm.crackFillCost) || 0,
@@ -79,11 +72,8 @@ export default function Costs() {
         abrasionResistanceCostPerGal: parseFloat(costsForm.abrasionResistanceCostPerGal) || 0,
         moistureMitigationCostPerGal: parseFloat(costsForm.moistureMitigationCostPerGal) || 0,
         moistureMitigationSpreadRate: parseFloat(costsForm.moistureMitigationSpreadRate) || 200,
-        updatedAt: new Date().toISOString(),
-      };
+      });
 
-      await saveCosts(updatedCosts);
-      setCosts(updatedCosts);
       flashSaved();
     } catch (error) {
       console.error('Error saving costs:', error);
