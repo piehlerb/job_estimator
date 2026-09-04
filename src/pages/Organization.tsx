@@ -18,6 +18,8 @@ import {
   removeMember,
 } from '../lib/organizationService';
 import type { OrganizationMember, OrganizationInvitation, MemberPermissions } from '../types';
+import SaveButton from '../components/SaveButton';
+import { useSaveFlash } from '../hooks/useSaveFlash';
 import { FULL_PERMISSIONS, INVENTORY_ONLY_PERMISSIONS, permissionsFromAccessLevel } from '../lib/permissions';
 
 export default function Organization() {
@@ -50,6 +52,7 @@ export default function Organization() {
   const [editingPermsMember, setEditingPermsMember] = useState<OrganizationMember | null>(null);
   const [draftPermissions, setDraftPermissions] = useState<MemberPermissions>(FULL_PERMISSIONS);
   const [savingPerms, setSavingPerms] = useState(false);
+  const { saved: permsSaved, flashSaved: flashPermsSaved } = useSaveFlash();
 
   // =====================================================
   // Load members + invitations when org is available
@@ -219,7 +222,7 @@ export default function Organization() {
     try {
       await updateMemberPermissions(organization.id, editingPermsMember.userId, draftPermissions);
       await loadOrgData();
-      setEditingPermsMember(null);
+      flashPermsSaved(() => setEditingPermsMember(null));
     } catch (err: any) {
       setMgmtError(err.message ?? 'Failed to update permissions.');
     } finally {
@@ -897,13 +900,15 @@ export default function Organization() {
               >
                 Cancel
               </button>
-              <button
+              <SaveButton
                 onClick={savePermissions}
-                disabled={savingPerms}
-                className="px-4 py-2 text-sm font-medium bg-gf-lime text-white rounded-lg hover:bg-gf-dark-green disabled:opacity-50"
-              >
-                {savingPerms ? 'Saving…' : 'Save'}
-              </button>
+                saving={savingPerms}
+                saved={permsSaved}
+                savingLabel="Saving…"
+                label="Save"
+                icon={null}
+                className="px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-50"
+              />
             </div>
           </div>
         </div>

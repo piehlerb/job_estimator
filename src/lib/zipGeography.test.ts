@@ -21,7 +21,14 @@ describe('NH/ME ZIP geography', () => {
   test('uses the rightmost exact NH/ME registry member deterministically', () => {
     assert.deepEqual(resolveNhMeZip('Old reference 03101; ship to Portland, ME 04101-9999'), {
       zip: '04101',
-      centroid: { state: 'ME', city: 'Portland', lat: 43.6606, lon: -70.2589 },
+      centroid: {
+        state: 'ME',
+        city: 'Portland',
+        lat: 43.6606,
+        lon: -70.2589,
+        county: 'Cumberland County',
+        zipType: 'STANDARD',
+      },
     });
   });
 
@@ -107,6 +114,19 @@ describe('NH/ME ZIP geography', () => {
     assert.deepEqual(
       filterJobsByZipDate(jobs, 'install', '2026-07-15', '2026-07-31').map(({ id }) => id),
       ['created']
+    );
+  });
+
+  test('buckets a created-date fallback by the local day, not the UTC day', () => {
+    // 11:30 PM local: behind UTC this instant already reads as the next day,
+    // which used to push evening estimates into the following report bucket.
+    const lateEvening = new Date(2026, 6, 24, 23, 30);
+    const job = { id: 'evening', estimateDate: undefined, installDate: '', createdAt: lateEvening.toISOString() };
+
+    assert.equal(zipReportJobDate(job, 'estimate'), '2026-07-24');
+    assert.deepEqual(
+      filterJobsByZipDate([job], 'estimate', '2026-07-24', '2026-07-24').map(({ id }) => id),
+      ['evening']
     );
   });
 

@@ -1,10 +1,11 @@
-import { ArrowLeft, Save, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, X, Plus, Trash2, Link, Shuffle, Check, Copy, FileText, Search, Package } from 'lucide-react';
+import { ArrowLeft, Save, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, X, Plus, Trash2, Link, Shuffle, Check, Copy, FileText, Package } from 'lucide-react';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   getAllSystems,
   getJob,
   getAllJobs,
   getAllCustomers,
+  addCustomer,
   addJob,
   updateJob,
   getCosts,
@@ -35,7 +36,13 @@ import { coatingSkuId, findCoatingSku, DEFAULT_COATING_SKUS } from '../lib/coati
 import { resolveJobMaterials, defaultBaseComponents, sharesValid } from '../lib/materialAllocation';
 import { calculateJobOutputs, calculateActualCosts } from '../lib/calculations';
 import InstallDayScheduleComponent from '../components/InstallDaySchedule';
+import ActualDayScheduleComponent from '../components/ActualDaySchedule';
 import { convertLegacyJobToSchedule } from '../lib/jobMigration';
+import { resolveAddressFields, type AddressFieldSet } from '../lib/addressFields';
+import { parseAddress } from '../lib/addressParse';
+import AddressFieldsEditor from '../components/AddressFieldsEditor';
+import SaveButton from '../components/SaveButton';
+import { useSaveFlash } from '../hooks/useSaveFlash';
 import { compareSnapshots, SnapshotChanges } from '../lib/snapshotComparison';
 import SnapshotChangeBanner, { SelectedChanges } from '../components/SnapshotChangeBanner';
 import { normalizeChipBlendName } from '../lib/syncHelpers';
@@ -45,6 +52,9 @@ import {
   type InventoryReviewRow,
 } from '../lib/inventoryActuals';
 import { stageForLinkedJobStatus } from '../lib/leadPipeline';
+import { ensureCustomerPersistence } from '../lib/customerPersistence';
+import { localToday, toLocalDateString, timestampToLocalDateString } from '../lib/dateUtils';
+import { buildAutoReminders } from '../lib/autoReminders';
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -62,6 +72,15 @@ function parseJobTags(input: string): string[] {
       seen.add(normalized);
       return true;
     });
+}
+
+/** Copy `fields` from `source` onto a shallow clone of `base`, leaving all other fields alone. */
+function copySelectedFields<T extends object>(base: T, source: T, fields: Array<keyof T>): T {
+  const merged = { ...base };
+  for (const field of fields) {
+    merged[field] = source[field];
+  }
+  return merged;
 }
 
 interface JobFormProps {
@@ -98,6 +117,9 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
   const [installSchedule, setInstallSchedule] = useState<InstallDaySchedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  // Shared by all four job-save buttons; the reminder modal keeps its own.
+  const jobFlash = useSaveFlash();
+  const reminderFlash = useSaveFlash();
   const [calculation, setCalculation] = useState<JobCalculation | null>(null);
   const [usedPricing, setUsedPricing] = useState<Pricing>(getDefaultPricing());
   const [usedCosts, setUsedCosts] = useState<Costs>(getDefaultCosts());
@@ -113,6 +135,15 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [showTagDropdown, setShowTagDropdown] = useState(false);
   const [availableCustomers, setAvailableCustomers] = useState<CustomerOption[]>([]);
+  // The structured projection of customerAddress. Held separately from formData
+  // because it is derived on blur rather than per keystroke, and because a hand
+  // correction here has to survive until save.
+  const [addressFields, setAddressFields] = useState<AddressFieldSet>({});
+  // The raw text the current structured fields were derived from, so an edit to the
+  // address can be told from merely tabbing through the field.
+  const [addressSourceRaw, setAddressSourceRaw] = useState<string | undefined>(undefined);
+  // Flips the copy button to a checkmark for a couple seconds after a copy.
+  const [addressCopied, setAddressCopied] = useState(false);
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [linkedLead, setLinkedLead] = useState<Lead | null>(null);
 
@@ -175,7 +206,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
   const [commTemplates, setCommTemplates] = useState<CommunicationTemplate[]>([]);
   const [copiedReminderId, setCopiedReminderId] = useState<string | null>(null);
   const [followUpForm, setFollowUpForm] = useState({
-    date: new Date().toISOString().slice(0, 10),
+    date: localToday(),
     notes: '',
   });
 
@@ -186,7 +217,6 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
   // Snapshot comparison state
   const [snapshotChanges, setSnapshotChanges] = useState<SnapshotChanges | null>(null);
   const [showSnapshotBanner, setShowSnapshotBanner] = useState(false);
-  const [acceptedChanges, setAcceptedChanges] = useState<SelectedChanges | null>(null);
 
   // Estimate group state
   const [groupJobs, setGroupJobs] = useState<Job[]>([]);
@@ -217,7 +247,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
     baseColor: '' as BaseColor | '',
     status: 'Pending' as JobStatus,
     probability: '20',
-    estimateDate: new Date().toISOString().split('T')[0],
+    estimateDate: localToday(),
     decisionDate: '',
     notes: '',
     includeBasecoatTint: false,
@@ -630,6 +660,16 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
         console.log('[JobForm] Job loaded:', !!job);
         if (job) {
           setExistingJob(job);
+          setAddressFields({
+            street: job.customerStreet,
+            street2: job.customerStreet2,
+            city: job.customerCity,
+            state: job.customerState,
+            zip: job.customerZip,
+            tier: job.addressParseTier,
+            verifiedAt: job.addressVerifiedAt,
+          });
+          setAddressSourceRaw(job.customerAddress);
           if (job.leadId) {
             const lead = await getLead(job.leadId);
             setLinkedLead(lead);
@@ -653,7 +693,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
             baseColor: job.baseColor || '',
             status: job.status || 'Pending',
             probability: (job.probability?.toString()) ?? (job.status === 'Won' ? '100' : job.status === 'Lost' ? '0' : job.status === 'Verbal' ? '80' : '20'),
-            estimateDate: job.estimateDate || job.createdAt.split('T')[0],
+            estimateDate: job.estimateDate || timestampToLocalDateString(job.createdAt),
             decisionDate: job.decisionDate || '',
             notes: job.notes || '',
             includeBasecoatTint: job.includeBasecoatTint || false,
@@ -694,7 +734,16 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
             actualsInitialized.current = true;
           } else if (schedule) {
             // Pre-populate from estimated schedule as starting point
-            setActualInstallSchedule(schedule.map(d => ({ ...d })));
+            setActualInstallSchedule(schedule.map(d => ({ ...d, laborerIds: [...d.laborerIds] })));
+          } else if (job.installDays >= 1) {
+            // No estimated schedule to copy — seed empty days matching the plan
+            setActualInstallSchedule(
+              Array.from({ length: Math.round(job.installDays) }, (_, i) => ({
+                day: i + 1,
+                hours: job.installDays > 0 ? job.jobHours / job.installDays : 0,
+                laborerIds: [],
+              }))
+            );
           }
           if (
             job.actualBaseCoatGallons != null ||
@@ -1098,7 +1147,73 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
       customerAddress: customer.address || '',
     });
     setShowCustomerDropdown(false);
+    handleAddressBlur(customer.address || '');
   };
+
+  /**
+   * Derive the structured address from the free text.
+   *
+   * Passing `rawChanged` lets the helper distinguish an edited address — rebuild
+   * the projection, drop any stale confirmation — from merely tabbing through the
+   * field, where a hand correction must survive.
+   */
+  const handleAddressBlur = (raw: string) => {
+    const trimmed = raw.trim() || undefined;
+    setAddressFields((previous) =>
+      resolveAddressFields(trimmed, previous, trimmed !== addressSourceRaw)
+    );
+    setAddressSourceRaw(trimmed);
+  };
+
+  /**
+   * Copy the job site address so it can be pasted straight into a maps app.
+   * navigator.clipboard is unavailable on insecure origins and older mobile
+   * browsers, so fall back to the hidden-textarea trick the invite codes use.
+   */
+  const handleCopyAddress = async () => {
+    const address = formData.customerAddress.trim();
+    if (!address) return;
+    try {
+      await navigator.clipboard.writeText(address);
+    } catch {
+      const el = document.createElement('textarea');
+      el.value = address;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+    }
+    setAddressCopied(true);
+    setTimeout(() => setAddressCopied(false), 2000);
+  };
+
+  const matchedCustomer = useMemo(
+    () =>
+      availableCustomers.find(
+        (customer) => customer.name.toLowerCase() === formData.customerName.trim().toLowerCase()
+      ),
+    [availableCustomers, formData.customerName]
+  );
+  const matchedCustomerAddress = matchedCustomer?.address?.trim() || undefined;
+
+  // Derived rather than stored: a boolean flag would drift out of agreement with
+  // the two addresses it claims to describe.
+  const addressMatchesCustomer =
+    !!matchedCustomerAddress &&
+    matchedCustomerAddress.toLowerCase() === formData.customerAddress.trim().toLowerCase();
+
+  const handleSameAsCustomer = (checked: boolean) => {
+    // Unchecking clears the job site address rather than inventing one: a job at a
+    // different property needs a real address typed, not a guess.
+    const next = checked ? matchedCustomerAddress ?? '' : '';
+    setFormData({ ...formData, customerAddress: next });
+    handleAddressBlur(next);
+  };
+
+  const addressNote = useMemo(
+    () => (formData.customerAddress.trim() ? parseAddress(formData.customerAddress).note : undefined),
+    [formData.customerAddress]
+  );
 
   const handleTagSelect = (selectedTag: string) => {
     const segments = formData.tags.split(',');
@@ -1126,7 +1241,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
     setReminderForm({
       subject: '',
       details: '',
-      dueDate: defaultDate.toISOString().split('T')[0],
+      dueDate: toLocalDateString(defaultDate),
       dueTime: pricing.defaultReminderTime ?? '05:00',
     });
     setShowReminderModal(true);
@@ -1221,7 +1336,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
     try {
       await persistReminderChanges(nextReminders);
       await requestReminderNotificationPermission();
-      closeReminderModal();
+      reminderFlash.flashSaved(closeReminderModal);
     } catch (error) {
       console.error('Error saving reminder:', error);
       alert('Error saving reminder. Please try again.');
@@ -1252,7 +1367,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
       nextDefaultDate.setDate(nextDefaultDate.getDate() + nextDefaultDays);
       setNextReminderForm({
         subject: '',
-        dueDate: nextDefaultDate.toISOString().split('T')[0],
+        dueDate: toLocalDateString(nextDefaultDate),
         dueTime: pricing.defaultReminderTime ?? '05:00',
         details: '',
       });
@@ -1328,7 +1443,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
       console.error('Error saving follow-up:', error);
       alert('Error saving follow-up. Please try again.');
     }
-    setFollowUpForm({ date: new Date().toISOString().slice(0, 10), notes: '' });
+    setFollowUpForm({ date: localToday(), notes: '' });
     setShowFollowUpForm(false);
   };
 
@@ -1566,26 +1681,18 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
   };
 
   const handleUpdateToCurrentValues = async (selected: SelectedChanges) => {
-    setAcceptedChanges(selected);
     setShowSnapshotBanner(false);
 
     if (existingJob) {
       const selectedSystem = systems.find((s) => s.id === formData.system);
 
       // Selectively merge: only update fields the user accepted
-      const mergedCosts = { ...existingJob.costsSnapshot };
-      for (const field of selected.costFields) {
-        (mergedCosts as Record<string, unknown>)[field] = (costs as Record<string, unknown>)[field];
-      }
+      const mergedCosts = copySelectedFields(existingJob.costsSnapshot, costs, selected.costFields);
 
-      const mergedSystem = existingJob.systemSnapshot
-        ? { ...existingJob.systemSnapshot }
-        : selectedSystem || existingJob.systemSnapshot;
-      if (selectedSystem && selected.systemFields.length > 0) {
-        for (const field of selected.systemFields) {
-          (mergedSystem as Record<string, unknown>)[field] = (selectedSystem as Record<string, unknown>)[field];
-        }
-      }
+      const systemBase = existingJob.systemSnapshot || selectedSystem;
+      const mergedSystem = systemBase && selectedSystem
+        ? copySelectedFields(systemBase, selectedSystem, selected.systemFields)
+        : systemBase;
 
       const updatedJob: Job = {
         ...existingJob,
@@ -1600,7 +1707,6 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
   };
 
   const handleKeepOriginalValues = () => {
-    setAcceptedChanges(null);
     setShowSnapshotBanner(false);
   };
 
@@ -1874,6 +1980,8 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
       // Normalize chip blend name before saving (trim whitespace, title case)
       const normalizedChipBlend = normalizeChipBlendName(formData.chipBlend);
       const normalizedTags = parseJobTags(formData.tags);
+      const customerName = formData.customerName.trim();
+      const customerAddress = formData.customerAddress.trim();
       const savedAt = new Date().toISOString();
 
       // If chip blend is entered and not in the list, add it
@@ -1886,12 +1994,38 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
         setChipBlends([...chipBlends, newBlend]);
       }
 
+      await ensureCustomerPersistence(
+        { name: customerName, address: customerAddress },
+        {
+          getAllCustomers,
+          addCustomer,
+          generateId,
+          now: () => savedAt,
+        }
+      );
+
+      // New jobs pick up the auto-add reminders configured in Settings, timed
+      // off the estimate date. Existing jobs are left alone so rule changes
+      // never backfill reminders onto older jobs.
+      const autoReminders = jobId
+        ? []
+        : buildAutoReminders({
+            rules: pricing.autoReminderRules,
+            templates: commTemplates,
+            estimateDate: formData.estimateDate,
+            customerName,
+            defaultTime: pricing.defaultReminderTime,
+            existingReminders: reminders,
+            generateId,
+          });
+      const allReminders = [...reminders, ...autoReminders];
+
       const job: Job = {
         id: jobId || generateId(),
         name: formData.name,
         leadId: formData.leadId || undefined,
-        customerName: formData.customerName || undefined,
-        customerAddress: formData.customerAddress || undefined,
+        customerName: customerName || undefined,
+        customerAddress: customerAddress || undefined,
         systemId: formData.system,
         floorFootage: parseFloat(formData.floorFootage) || 0,
         verticalFootage: parseFloat(formData.verticalFootage) || 0,
@@ -1947,8 +2081,8 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
         actualExpenseAdjustment: parseFloat(actualMaterials.actualExpenseAdjustment) || undefined,
         actualExpenseAdjustmentNotes: actualMaterials.actualExpenseAdjustmentNotes.trim() || undefined,
         products: jobProducts.length > 0 ? jobProducts : undefined,
-        reminders: reminders.length > 0
-          ? [...reminders].sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime())
+        reminders: allReminders.length > 0
+          ? [...allReminders].sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime())
           : undefined,
         followUps: followUps.length > 0
           ? [...followUps].sort((a, b) => a.date.localeCompare(b.date))
@@ -1966,10 +2100,34 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
         synced: false,
       };
 
+      // The form already holds the structured projection, derived on blur and
+      // possibly corrected by hand. Resolve once more against the final raw text so
+      // a save without blurring still lands, then write whatever that produces —
+      // a hand-corrected set carries tier 'M' and passes through untouched.
+      const finalAddress = resolveAddressFields(
+        customerAddress || undefined,
+        addressFields,
+        (customerAddress || undefined) !== addressSourceRaw
+      );
+      const jobWithAddress: Job = {
+        ...job,
+        customerStreet: finalAddress.street,
+        customerStreet2: finalAddress.street2,
+        customerCity: finalAddress.city,
+        customerState: finalAddress.state,
+        customerZip: finalAddress.zip,
+        addressParseTier: finalAddress.tier,
+        addressVerifiedAt: finalAddress.verifiedAt,
+      };
+
       if (jobId) {
-        await updateJob(job);
+        await updateJob(jobWithAddress);
       } else {
-        await addJob(job);
+        await addJob(jobWithAddress);
+      }
+      if (autoReminders.length > 0) {
+        setReminders(allReminders);
+        await requestReminderNotificationPermission();
       }
       await syncLinkedLeadFromJob(job);
 
@@ -1987,6 +2145,9 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
               setInventoryUpdateError('');
               setShowInventoryUpdateModal(true);
               setSaving(false);
+              // The job is already written; the modal only reconciles inventory,
+              // so confirm the save in place rather than on the way out.
+              jobFlash.flashSaved();
               return;
             }
           } catch (inventoryError) {
@@ -1998,7 +2159,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
         }
       }
 
-      onBack();
+      jobFlash.flashSaved(onBack);
     } catch (error) {
       console.error('Error saving job:', error);
       alert('Error saving job. Please try again.');
@@ -2235,15 +2396,15 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
               <Plus size={16} className="sm:w-[18px] sm:h-[18px]" />
               Add Reminder
             </button>
-            <button
+            <SaveButton
               type="submit"
               form="job-form"
-              disabled={saving}
-              className="flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-2.5 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green active:bg-gf-dark-green transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed text-sm sm:text-base"
-            >
-              <Save size={16} className="sm:w-[18px] sm:h-[18px]" />
-              {saving ? 'Saving...' : jobId ? 'Update Job' : 'Create Job'}
-            </button>
+              saving={saving}
+              saved={jobFlash.saved}
+              label={jobId ? 'Update Job' : 'Create Job'}
+              icon={<Save size={16} className="sm:w-[18px] sm:h-[18px]" />}
+              className="px-4 sm:px-6 py-2 sm:py-2.5 rounded-lg font-semibold disabled:bg-slate-400 text-sm sm:text-base"
+            />
           </div>
         </div>
 
@@ -2414,14 +2575,50 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Customer Address</label>
-                <input
-                  type="text"
-                  placeholder="e.g., 123 Main St, City, State 12345"
-                  value={formData.customerAddress}
-                  onChange={(e) => setFormData({ ...formData, customerAddress: e.target.value })}
-                  className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
+                <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Job Site Address</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="e.g., 123 Main St, City, State 12345"
+                    value={formData.customerAddress}
+                    onChange={(e) => setFormData({ ...formData, customerAddress: e.target.value })}
+                    // Parsed on blur rather than per keystroke: the crew pastes whole
+                    // addresses, and half-typed text would only flicker.
+                    onBlur={() => handleAddressBlur(formData.customerAddress)}
+                    className="flex-1 min-w-0 px-3 sm:px-4 py-2 text-sm sm:text-base border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleCopyAddress}
+                    disabled={!formData.customerAddress.trim()}
+                    className="shrink-0 px-3 py-2 border border-slate-300 rounded-lg text-slate-500 transition-colors hover:text-gf-dark-green hover:bg-green-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-500"
+                    title={addressCopied ? 'Address copied' : 'Copy address'}
+                    aria-label="Copy address"
+                  >
+                    {addressCopied ? <Check size={16} className="text-green-600" /> : <Copy size={16} />}
+                  </button>
+                </div>
+                <AddressFieldsEditor
+                  fields={addressFields}
+                  onChange={setAddressFields}
+                  note={addressNote}
                 />
+                {matchedCustomerAddress && (
+                  <label className="mt-1 flex cursor-pointer items-start gap-2 px-1.5 text-xs text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={addressMatchesCustomer}
+                      onChange={(event) => handleSameAsCustomer(event.target.checked)}
+                      className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-gf-lime focus:ring-gf-lime"
+                    />
+                    <span>
+                      Same as customer address
+                      {!addressMatchesCustomer && (
+                        <span className="text-slate-400"> · customer is at {matchedCustomerAddress}</span>
+                      )}
+                    </span>
+                  </label>
+                )}
               </div>
               <div className="w-28 shrink-0">
                 <label className="block text-xs sm:text-sm font-semibold text-slate-900 mb-1.5 sm:mb-2">Travel (mi)</label>
@@ -3794,16 +3991,16 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
               {/* Section A: Actual Labor */}
               <div className="rounded-lg border border-slate-200 p-4 sm:p-5 bg-slate-50">
                 <h3 className="text-sm sm:text-base font-semibold text-slate-900 mb-1">Actual Labor</h3>
-                <p className="text-xs text-slate-500 mb-4">Record actual hours and crew for each install day.</p>
-                <InstallDayScheduleComponent
-                  installDays={parseFloat(formData.installDays) || 1}
+                <p className="text-xs text-slate-500 mb-4">Record actual hours and crew for each install day. Add or remove days if the job ran long or finished early.</p>
+                <ActualDayScheduleComponent
                   schedule={actualInstallSchedule}
                   availableLaborers={existingJob
                     ? [...activeLaborers, ...existingJob.laborersSnapshot.filter(sl => !activeLaborers.some(al => al.id === sl.id))]
                     : activeLaborers
                   }
-                  onChange={(s) => setActualInstallSchedule(s as ActualDaySchedule[])}
+                  onChange={setActualInstallSchedule}
                   defaultDayHours={pricing.defaultDayHours ?? 8}
+                  plannedDays={parseFloat(formData.installDays) || 1}
                 />
               </div>
 
@@ -4080,7 +4277,12 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
                           className="text-left flex-1"
                           disabled={reminder.completed}
                         >
-                          <p className={`text-sm font-semibold ${reminder.completed ? 'line-through text-slate-400' : 'text-slate-900'}`}>{reminder.subject}</p>
+                          <p className={`text-sm font-semibold ${reminder.completed ? 'line-through text-slate-400' : 'text-slate-900'}`}>
+                            {reminder.subject}
+                            {reminder.autoRuleId && (
+                              <span className="ml-2 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-slate-100 text-slate-600 rounded align-middle">Auto</span>
+                            )}
+                          </p>
                           <p className="text-xs text-slate-600">Due {new Date(reminder.dueAt).toLocaleString()}</p>
                           {reminder.details && (
                             <p className="text-xs text-slate-500 mt-1 whitespace-pre-wrap">{reminder.details}</p>
@@ -4136,7 +4338,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
                   <button
                     type="button"
                     onClick={() => {
-                      setFollowUpForm({ date: new Date().toISOString().slice(0, 10), notes: '' });
+                      setFollowUpForm({ date: localToday(), notes: '' });
                       setShowFollowUpForm(true);
                     }}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-medium bg-gf-lime text-white rounded-lg hover:bg-gf-dark-green transition-colors"
@@ -4245,14 +4447,15 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
 
           {/* Desktop save/cancel */}
           <div className="hidden md:flex flex-col sm:flex-row gap-2 sm:gap-3">
-            <button
+            <SaveButton
               type="submit"
-              disabled={saving}
-              className="flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green active:bg-gf-dark-green transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed text-sm sm:text-base"
-            >
-              <Save size={18} className="sm:w-5 sm:h-5" />
-              {saving ? 'Saving...' : jobId ? 'Update Job' : 'Create Job'}
-            </button>
+              saving={saving}
+              saved={jobFlash.saved}
+              label={jobId ? 'Update Job' : 'Create Job'}
+              icon={<Save size={18} className="sm:w-5 sm:h-5" />}
+              iconSize={18}
+              className="px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg font-semibold disabled:bg-slate-400 text-sm sm:text-base"
+            />
             <button
               type="button"
               onClick={onBack}
@@ -4277,14 +4480,15 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
             )}
             {activeTab === 'details' && currentStep < 3 ? (
               <>
-                <button
+                <SaveButton
                   type="submit"
-                  disabled={saving}
-                  className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-semibold text-sm disabled:bg-slate-200 disabled:text-slate-400"
-                >
-                  <Save size={14} />
-                  {saving ? 'Saving...' : 'Save'}
-                </button>
+                  tone="subtle"
+                  saving={saving}
+                  saved={jobFlash.saved}
+                  label="Save"
+                  iconSize={14}
+                  className="gap-1.5 px-4 py-2.5 rounded-xl font-semibold text-sm disabled:bg-slate-200 disabled:text-slate-400"
+                />
                 <button
                   type="button"
                   onClick={() => setCurrentStep(currentStep + 1)}
@@ -4295,14 +4499,13 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
                 </button>
               </>
             ) : (
-              <button
+              <SaveButton
                 type="submit"
-                disabled={saving}
-                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gf-lime text-white font-bold text-sm disabled:bg-slate-400"
-              >
-                <Save size={16} />
-                {saving ? 'Saving...' : jobId ? 'Update' : 'Save Estimate'}
-              </button>
+                saving={saving}
+                saved={jobFlash.saved}
+                label={jobId ? 'Update' : 'Save Estimate'}
+                className="flex-1 py-2.5 rounded-xl font-bold text-sm disabled:bg-slate-400"
+              />
             )}
           </div>
         </form>
@@ -4395,14 +4598,15 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
                 >
                   Cancel
                 </button>
-                <button
+                <SaveButton
                   type="button"
                   onClick={handleSaveReminder}
-                  disabled={savingReminder}
-                  className="px-4 py-2 text-sm font-medium text-white bg-gf-lime rounded-lg hover:bg-gf-dark-green transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed"
-                >
-                  {savingReminder ? 'Saving...' : editingReminderId ? 'Save Reminder' : 'Add Reminder'}
-                </button>
+                  saving={savingReminder}
+                  saved={reminderFlash.saved}
+                  label={editingReminderId ? 'Save Reminder' : 'Add Reminder'}
+                  icon={null}
+                  className="px-4 py-2 text-sm font-medium rounded-lg disabled:bg-slate-400"
+                />
               </div>
             </div>
           </div>

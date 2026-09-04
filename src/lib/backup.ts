@@ -2,10 +2,13 @@ import {
   ExportData,
   ExportMetadata,
   ImportPreview,
+  Lead,
+  LeadAppointment,
   MergeLogEntry,
   EXPORT_VERSION,
 } from '../types';
 import { coatingSkuLabel } from './coatingSkus';
+import { localToday } from './dateUtils';
 import {
   getAllSystems,
   getCosts,
@@ -52,13 +55,57 @@ import {
   addCommTemplate,
   updateCommTemplate,
   deleteCommTemplate,
+  getAllLeads,
+  updateLead,
+  deleteLead,
+  getAllLeadAppointments,
+  updateLeadAppointment,
+  deleteLeadAppointment,
+  addBaseCoatColor,
+  updateBaseCoatColor,
+  deleteBaseCoatColor,
+  getPricing,
+  savePricing,
+  getAllPricingVariables,
+  addPricingVariable,
+  updatePricingVariable,
+  deletePricingVariable,
+  getAllShoppingItems,
+  addShoppingItem,
+  updateShoppingItem,
+  deleteShoppingItem,
+  getAllReferralServices,
+  addReferralService,
+  updateReferralService,
+  deleteReferralService,
+  getAllReferralAssociates,
+  addReferralAssociate,
+  updateReferralAssociate,
+  deleteReferralAssociate,
+  getAllAdSpend,
+  updateAdSpend,
+  deleteAdSpend,
 } from './db';
+
+// Leads have no required display field, so fall back through the identifying
+// fields we do have before landing on the raw id
+function leadLabel(lead: Lead): string {
+  return lead.name || lead.phone || lead.email || lead.id;
+}
+
+function leadAppointmentLabel(appointment: LeadAppointment): string {
+  return appointment.scheduledStartAt
+    ? `${appointment.scheduledStartAt} (${appointment.status})`
+    : appointment.id;
+}
 
 // Export all data from the database
 export async function exportAllData(): Promise<ExportData> {
   const [
     systems,
     costs,
+    pricing,
+    pricingVariables,
     laborers,
     customers,
     products,
@@ -72,9 +119,17 @@ export async function exportAllData(): Promise<ExportData> {
     baseCoatInventory,
     miscInventory,
     commTemplates,
+    shoppingItems,
+    referralServices,
+    referralAssociates,
+    adSpend,
+    leads,
+    leadAppointments,
   ] = await Promise.all([
     getAllSystems(),
     getCosts(),
+    getPricing(),
+    getAllPricingVariables(),
     getAllLaborers(),
     getAllCustomers(),
     getAllProducts(),
@@ -88,6 +143,12 @@ export async function exportAllData(): Promise<ExportData> {
     getBaseCoatInventory(),
     getMiscInventory(),
     getAllCommTemplates(),
+    getAllShoppingItems(),
+    getAllReferralServices(),
+    getAllReferralAssociates(),
+    getAllAdSpend(),
+    getAllLeads(),
+    getAllLeadAppointments(),
   ]);
 
   const metadata: ExportMetadata = {
@@ -100,6 +161,8 @@ export async function exportAllData(): Promise<ExportData> {
     metadata,
     systems,
     costs,
+    pricing,
+    pricingVariables,
     laborers,
     customers,
     products,
@@ -113,6 +176,12 @@ export async function exportAllData(): Promise<ExportData> {
     baseCoatInventory,
     miscInventory,
     commTemplates,
+    shoppingItems,
+    referralServices,
+    referralAssociates,
+    adSpend,
+    leads,
+    leadAppointments,
   };
 }
 
@@ -122,7 +191,7 @@ export function downloadExport(data: ExportData): void {
   const blob = new Blob([json], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
 
-  const date = new Date().toISOString().split('T')[0];
+  const date = localToday();
   const filename = `job-estimator-backup-${date}.json`;
 
   const a = document.createElement('a');
@@ -473,9 +542,12 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
   const [
     localSystems,
     localCosts,
+    localPricing,
+    localPricingVariables,
     localLaborers,
     localCustomers,
     localProducts,
+    localBaseCoatColors,
     localJobs,
     localChipBlends,
     localChipInventory,
@@ -485,12 +557,21 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
     localBaseCoatInventory,
     localMiscInventory,
     localCommTemplates,
+    localShoppingItems,
+    localReferralServices,
+    localReferralAssociates,
+    localAdSpend,
+    localLeads,
+    localLeadAppointments,
   ] = await Promise.all([
     getAllSystems(),
     getCosts(),
+    getPricing(),
+    getAllPricingVariables(),
     getAllLaborers(),
     getAllCustomers(),
     getAllProducts(),
+    getAllBaseCoatColors(),
     getAllJobs(),
     getAllChipBlends(),
     getAllChipInventory(),
@@ -500,31 +581,53 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
     getBaseCoatInventory(),
     getMiscInventory(),
     getAllCommTemplates(),
+    getAllShoppingItems(),
+    getAllReferralServices(),
+    getAllReferralAssociates(),
+    getAllAdSpend(),
+    getAllLeads(),
+    getAllLeadAppointments(),
   ]);
 
   // Create lookup maps
   const localSystemsMap = new Map(localSystems.map(s => [s.id, s]));
+  const localPricingVariablesMap = new Map(localPricingVariables.map(v => [v.id, v]));
   const localLaborersMap = new Map(localLaborers.map(l => [l.id, l]));
   const localCustomersMap = new Map(localCustomers.map(c => [c.id, c]));
   const localProductsMap = new Map(localProducts.map(p => [p.id, p]));
+  const localBaseCoatColorsMap = new Map(localBaseCoatColors.map(c => [c.id, c]));
   const localJobsMap = new Map(localJobs.map(j => [j.id, j]));
   const localChipBlendsMap = new Map(localChipBlends.map(b => [b.id, b]));
   const localChipInventoryMap = new Map(localChipInventory.map(i => [i.id, i]));
   const localTintInventoryMap = new Map(localTintInventory.map(i => [i.id, i]));
   const localCoatingInventoryMap = new Map(localCoatingInventory.map(i => [i.id, i]));
   const localCommTemplatesMap = new Map(localCommTemplates.map(t => [t.id, t]));
+  const localShoppingItemsMap = new Map(localShoppingItems.map(i => [i.id, i]));
+  const localReferralServicesMap = new Map(localReferralServices.map(s => [s.id, s]));
+  const localReferralAssociatesMap = new Map(localReferralAssociates.map(a => [a.id, a]));
+  const localAdSpendMap = new Map(localAdSpend.map(r => [r.id, r]));
+  const localLeadsMap = new Map(localLeads.map(l => [l.id, l]));
+  const localLeadAppointmentsMap = new Map(localLeadAppointments.map(a => [a.id, a]));
 
   // Track which IDs are in import for delete detection
   const importSystemIds = new Set(importData.systems.map(s => s.id));
+  const importPricingVariableIds = new Set((importData.pricingVariables || []).map(v => v.id));
   const importLaborerIds = new Set(importData.laborers.map(l => l.id));
   const importCustomerIds = new Set((importData.customers || []).map(c => c.id));
   const importProductIds = new Set((importData.products || []).map(p => p.id));
+  const importBaseCoatColorIds = new Set((importData.baseCoatColors || []).map(c => c.id));
   const importJobIds = new Set(importData.jobs.map(j => j.id));
   const importChipBlendIds = new Set(importData.chipBlends.map(b => b.id));
   const importChipInventoryIds = new Set(importData.chipInventory.map(i => i.id));
   const importTintInventoryIds = new Set((importData.tintInventory || []).map(i => i.id));
   const importCoatingInventoryIds = new Set((importData.coatingInventory || []).map(i => i.id));
   const importCommTemplateIds = new Set((importData.commTemplates || []).map(t => t.id));
+  const importShoppingItemIds = new Set((importData.shoppingItems || []).map(i => i.id));
+  const importReferralServiceIds = new Set((importData.referralServices || []).map(s => s.id));
+  const importReferralAssociateIds = new Set((importData.referralAssociates || []).map(a => a.id));
+  const importAdSpendIds = new Set((importData.adSpend || []).map(r => r.id));
+  const importLeadIds = new Set((importData.leads || []).map(l => l.id));
+  const importLeadAppointmentIds = new Set((importData.leadAppointments || []).map(a => a.id));
 
   // Compare systems
   for (const importSystem of importData.systems) {
@@ -562,6 +665,47 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
       preview.toSkip.push({
         entityType: 'Costs',
         entityName: 'Cost Settings',
+        reason: 'Local version is same or newer',
+      });
+    }
+  }
+
+  // Compare pricing (singleton)
+  if (importData.pricing) {
+    if (!localPricing) {
+      preview.toAdd.push({ entityType: 'Pricing', entityName: 'Pricing Settings' });
+    } else if (isNewer(importData.pricing.updatedAt, localPricing.updatedAt)) {
+      preview.toUpdate.push({
+        entityType: 'Pricing',
+        entityName: 'Pricing Settings',
+        localUpdatedAt: localPricing.updatedAt,
+        importUpdatedAt: importData.pricing.updatedAt,
+      });
+    } else {
+      preview.toSkip.push({
+        entityType: 'Pricing',
+        entityName: 'Pricing Settings',
+        reason: 'Local version is same or newer',
+      });
+    }
+  }
+
+  // Compare pricing variables
+  for (const importVariable of (importData.pricingVariables || [])) {
+    const local = localPricingVariablesMap.get(importVariable.id);
+    if (!local) {
+      preview.toAdd.push({ entityType: 'PricingVariable', entityName: importVariable.name });
+    } else if (isNewer(importVariable.updatedAt, local.updatedAt)) {
+      preview.toUpdate.push({
+        entityType: 'PricingVariable',
+        entityName: importVariable.name,
+        localUpdatedAt: local.updatedAt,
+        importUpdatedAt: importVariable.updatedAt,
+      });
+    } else {
+      preview.toSkip.push({
+        entityType: 'PricingVariable',
+        entityName: importVariable.name,
         reason: 'Local version is same or newer',
       });
     }
@@ -625,6 +769,27 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
       preview.toSkip.push({
         entityType: 'Product',
         entityName: importProduct.name,
+        reason: 'Local version is same or newer',
+      });
+    }
+  }
+
+  // Compare base coat colors
+  for (const importColor of (importData.baseCoatColors || [])) {
+    const local = localBaseCoatColorsMap.get(importColor.id);
+    if (!local) {
+      preview.toAdd.push({ entityType: 'BaseCoatColor', entityName: importColor.name });
+    } else if (isNewer(importColor.updatedAt, local.updatedAt)) {
+      preview.toUpdate.push({
+        entityType: 'BaseCoatColor',
+        entityName: importColor.name,
+        localUpdatedAt: local.updatedAt,
+        importUpdatedAt: importColor.updatedAt,
+      });
+    } else {
+      preview.toSkip.push({
+        entityType: 'BaseCoatColor',
+        entityName: importColor.name,
         reason: 'Local version is same or newer',
       });
     }
@@ -809,6 +974,132 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
     }
   }
 
+  // Compare shopping items
+  for (const importItem of (importData.shoppingItems || [])) {
+    const local = localShoppingItemsMap.get(importItem.id);
+    if (!local) {
+      preview.toAdd.push({ entityType: 'ShoppingItem', entityName: importItem.name });
+    } else if (isNewer(importItem.updatedAt, local.updatedAt)) {
+      preview.toUpdate.push({
+        entityType: 'ShoppingItem',
+        entityName: importItem.name,
+        localUpdatedAt: local.updatedAt,
+        importUpdatedAt: importItem.updatedAt,
+      });
+    } else {
+      preview.toSkip.push({
+        entityType: 'ShoppingItem',
+        entityName: importItem.name,
+        reason: 'Local version is same or newer',
+      });
+    }
+  }
+
+  // Compare referral services
+  for (const importService of (importData.referralServices || [])) {
+    const local = localReferralServicesMap.get(importService.id);
+    if (!local) {
+      preview.toAdd.push({ entityType: 'ReferralService', entityName: importService.name });
+    } else if (isNewer(importService.updatedAt, local.updatedAt)) {
+      preview.toUpdate.push({
+        entityType: 'ReferralService',
+        entityName: importService.name,
+        localUpdatedAt: local.updatedAt,
+        importUpdatedAt: importService.updatedAt,
+      });
+    } else {
+      preview.toSkip.push({
+        entityType: 'ReferralService',
+        entityName: importService.name,
+        reason: 'Local version is same or newer',
+      });
+    }
+  }
+
+  // Compare referral associates
+  for (const importAssociate of (importData.referralAssociates || [])) {
+    const local = localReferralAssociatesMap.get(importAssociate.id);
+    if (!local) {
+      preview.toAdd.push({ entityType: 'ReferralAssociate', entityName: importAssociate.name });
+    } else if (isNewer(importAssociate.updatedAt, local.updatedAt)) {
+      preview.toUpdate.push({
+        entityType: 'ReferralAssociate',
+        entityName: importAssociate.name,
+        localUpdatedAt: local.updatedAt,
+        importUpdatedAt: importAssociate.updatedAt,
+      });
+    } else {
+      preview.toSkip.push({
+        entityType: 'ReferralAssociate',
+        entityName: importAssociate.name,
+        reason: 'Local version is same or newer',
+      });
+    }
+  }
+
+  // Compare ad spend
+  for (const importRecord of (importData.adSpend || [])) {
+    const local = localAdSpendMap.get(importRecord.id);
+    if (!local) {
+      preview.toAdd.push({ entityType: 'AdSpend', entityName: importRecord.month });
+    } else if (isNewer(importRecord.updatedAt, local.updatedAt)) {
+      preview.toUpdate.push({
+        entityType: 'AdSpend',
+        entityName: importRecord.month,
+        localUpdatedAt: local.updatedAt,
+        importUpdatedAt: importRecord.updatedAt,
+      });
+    } else {
+      preview.toSkip.push({
+        entityType: 'AdSpend',
+        entityName: importRecord.month,
+        reason: 'Local version is same or newer',
+      });
+    }
+  }
+
+  // Compare leads
+  for (const importLead of (importData.leads || [])) {
+    const local = localLeadsMap.get(importLead.id);
+    if (!local) {
+      preview.toAdd.push({ entityType: 'Lead', entityName: leadLabel(importLead) });
+    } else if (isNewer(importLead.updatedAt, local.updatedAt)) {
+      preview.toUpdate.push({
+        entityType: 'Lead',
+        entityName: leadLabel(importLead),
+        localUpdatedAt: local.updatedAt,
+        importUpdatedAt: importLead.updatedAt,
+      });
+    } else {
+      preview.toSkip.push({
+        entityType: 'Lead',
+        entityName: leadLabel(importLead),
+        reason: 'Local version is same or newer',
+      });
+    }
+  }
+
+  // Compare lead appointments
+  for (const importAppointment of (importData.leadAppointments || [])) {
+    const local = localLeadAppointmentsMap.get(importAppointment.id);
+    if (!local) {
+      preview.toAdd.push({ entityType: 'LeadAppointment', entityName: leadAppointmentLabel(importAppointment) });
+    } else if (isNewer(importAppointment.updatedAt, local.updatedAt)) {
+      preview.toUpdate.push({
+        entityType: 'LeadAppointment',
+        entityName: leadAppointmentLabel(importAppointment),
+        localUpdatedAt: local.updatedAt,
+        importUpdatedAt: importAppointment.updatedAt,
+      });
+    } else {
+      preview.toSkip.push({
+        entityType: 'LeadAppointment',
+        entityName: leadAppointmentLabel(importAppointment),
+        reason: 'Local version is same or newer',
+      });
+    }
+  }
+
   // Find orphans to delete (if option enabled)
   if (deleteOrphans) {
     for (const local of localSystems) {
@@ -829,6 +1120,24 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
     for (const local of localProducts) {
       if (!importProductIds.has(local.id)) {
         preview.toDelete.push({ entityType: 'Product', entityName: local.name });
+      }
+    }
+    // Only treat local pricing variables as orphans if the backup actually has
+    // them (old backups predate them and must not wipe the store)
+    if (importData.pricingVariables) {
+      for (const local of localPricingVariables) {
+        if (!importPricingVariableIds.has(local.id)) {
+          preview.toDelete.push({ entityType: 'PricingVariable', entityName: local.name });
+        }
+      }
+    }
+    // Only treat local base coat colors as orphans if the backup actually has
+    // them (old backups predate them and must not wipe the store)
+    if (importData.baseCoatColors) {
+      for (const local of localBaseCoatColors) {
+        if (!importBaseCoatColorIds.has(local.id)) {
+          preview.toDelete.push({ entityType: 'BaseCoatColor', entityName: local.name });
+        }
       }
     }
     for (const local of localJobs) {
@@ -865,6 +1174,58 @@ export async function generateImportPreview(importData: ExportData, deleteOrphan
         preview.toDelete.push({ entityType: 'CommTemplate', entityName: local.name });
       }
     }
+    // Only treat local shopping items as orphans if the backup actually has
+    // them (old backups predate the shopping list and must not wipe the store)
+    if (importData.shoppingItems) {
+      for (const local of localShoppingItems) {
+        if (!importShoppingItemIds.has(local.id)) {
+          preview.toDelete.push({ entityType: 'ShoppingItem', entityName: local.name });
+        }
+      }
+    }
+    // Only treat local referral services as orphans if the backup actually has
+    // them (old backups predate referral tracking and must not wipe the store)
+    if (importData.referralServices) {
+      for (const local of localReferralServices) {
+        if (!importReferralServiceIds.has(local.id)) {
+          preview.toDelete.push({ entityType: 'ReferralService', entityName: local.name });
+        }
+      }
+    }
+    // Only treat local referral associates as orphans if the backup actually has
+    // them (old backups predate referral tracking and must not wipe the store)
+    if (importData.referralAssociates) {
+      for (const local of localReferralAssociates) {
+        if (!importReferralAssociateIds.has(local.id)) {
+          preview.toDelete.push({ entityType: 'ReferralAssociate', entityName: local.name });
+        }
+      }
+    }
+    // Only treat local ad spend as orphans if the backup actually has it (old
+    // backups predate it and must not wipe cost-per-lead history)
+    if (importData.adSpend) {
+      for (const local of localAdSpend) {
+        if (!importAdSpendIds.has(local.id)) {
+          preview.toDelete.push({ entityType: 'AdSpend', entityName: local.month });
+        }
+      }
+    }
+    // Only treat local leads as orphans if the backup actually has leads
+    // (old backups predate lead tracking and must not wipe the store)
+    if (importData.leads) {
+      for (const local of localLeads) {
+        if (!importLeadIds.has(local.id)) {
+          preview.toDelete.push({ entityType: 'Lead', entityName: leadLabel(local) });
+        }
+      }
+    }
+    if (importData.leadAppointments) {
+      for (const local of localLeadAppointments) {
+        if (!importLeadAppointmentIds.has(local.id)) {
+          preview.toDelete.push({ entityType: 'LeadAppointment', entityName: leadAppointmentLabel(local) });
+        }
+      }
+    }
   }
 
   return preview;
@@ -878,9 +1239,12 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
   const [
     localSystems,
     localCosts,
+    localPricing,
+    localPricingVariables,
     localLaborers,
     localCustomers,
     localProducts,
+    localBaseCoatColors,
     localJobs,
     localChipBlends,
     localChipInventory,
@@ -890,12 +1254,21 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
     localBaseCoatInventory,
     localMiscInventory,
     localCommTemplates,
+    localShoppingItems,
+    localReferralServices,
+    localReferralAssociates,
+    localAdSpend,
+    localLeads,
+    localLeadAppointments,
   ] = await Promise.all([
     getAllSystems(),
     getCosts(),
+    getPricing(),
+    getAllPricingVariables(),
     getAllLaborers(),
     getAllCustomers(),
     getAllProducts(),
+    getAllBaseCoatColors(),
     getAllJobs(),
     getAllChipBlends(),
     getAllChipInventory(),
@@ -905,30 +1278,52 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
     getBaseCoatInventory(),
     getMiscInventory(),
     getAllCommTemplates(),
+    getAllShoppingItems(),
+    getAllReferralServices(),
+    getAllReferralAssociates(),
+    getAllAdSpend(),
+    getAllLeads(),
+    getAllLeadAppointments(),
   ]);
 
   // Create lookup maps
   const localSystemsMap = new Map(localSystems.map(s => [s.id, s]));
+  const localPricingVariablesMap = new Map(localPricingVariables.map(v => [v.id, v]));
   const localLaborersMap = new Map(localLaborers.map(l => [l.id, l]));
   const localCustomersMap = new Map(localCustomers.map(c => [c.id, c]));
   const localProductsMap = new Map(localProducts.map(p => [p.id, p]));
+  const localBaseCoatColorsMap = new Map(localBaseCoatColors.map(c => [c.id, c]));
   const localJobsMap = new Map(localJobs.map(j => [j.id, j]));
   const localChipBlendsMap = new Map(localChipBlends.map(b => [b.id, b]));
   const localChipInventoryMap = new Map(localChipInventory.map(i => [i.id, i]));
   const localTintInventoryMap = new Map(localTintInventory.map(i => [i.id, i]));
   const localCoatingInventoryMap = new Map(localCoatingInventory.map(i => [i.id, i]));
   const localCommTemplatesMap = new Map(localCommTemplates.map(t => [t.id, t]));
+  const localShoppingItemsMap = new Map(localShoppingItems.map(i => [i.id, i]));
+  const localReferralServicesMap = new Map(localReferralServices.map(s => [s.id, s]));
+  const localReferralAssociatesMap = new Map(localReferralAssociates.map(a => [a.id, a]));
+  const localAdSpendMap = new Map(localAdSpend.map(r => [r.id, r]));
+  const localLeadsMap = new Map(localLeads.map(l => [l.id, l]));
+  const localLeadAppointmentsMap = new Map(localLeadAppointments.map(a => [a.id, a]));
 
   // Track import IDs for deletion
   const importSystemIds = new Set(importData.systems.map(s => s.id));
+  const importPricingVariableIds = new Set((importData.pricingVariables || []).map(v => v.id));
   const importLaborerIds = new Set(importData.laborers.map(l => l.id));
   const importCustomerIds = new Set((importData.customers || []).map(c => c.id));
   const importProductIds = new Set((importData.products || []).map(p => p.id));
+  const importBaseCoatColorIds = new Set((importData.baseCoatColors || []).map(c => c.id));
   const importJobIds = new Set(importData.jobs.map(j => j.id));
   const importChipInventoryIds = new Set(importData.chipInventory.map(i => i.id));
   const importTintInventoryIds = new Set((importData.tintInventory || []).map(i => i.id));
   const importCoatingInventoryIds = new Set((importData.coatingInventory || []).map(i => i.id));
   const importCommTemplateIds = new Set((importData.commTemplates || []).map(t => t.id));
+  const importShoppingItemIds = new Set((importData.shoppingItems || []).map(i => i.id));
+  const importReferralServiceIds = new Set((importData.referralServices || []).map(s => s.id));
+  const importReferralAssociateIds = new Set((importData.referralAssociates || []).map(a => a.id));
+  const importAdSpendIds = new Set((importData.adSpend || []).map(r => r.id));
+  const importLeadIds = new Set((importData.leads || []).map(l => l.id));
+  const importLeadAppointmentIds = new Set((importData.leadAppointments || []).map(a => a.id));
 
   // Import systems
   for (const importSystem of importData.systems) {
@@ -954,6 +1349,33 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
       log.push({ entityType: 'Costs', entityName: 'Cost Settings', action: 'update', reason: 'Import is newer' });
     } else {
       log.push({ entityType: 'Costs', entityName: 'Cost Settings', action: 'skip', reason: 'Local is same or newer' });
+    }
+  }
+
+  // Import pricing
+  if (importData.pricing) {
+    if (!localPricing) {
+      await savePricing(importData.pricing);
+      log.push({ entityType: 'Pricing', entityName: 'Pricing Settings', action: 'add', reason: 'New record' });
+    } else if (isNewer(importData.pricing.updatedAt, localPricing.updatedAt)) {
+      await savePricing(importData.pricing);
+      log.push({ entityType: 'Pricing', entityName: 'Pricing Settings', action: 'update', reason: 'Import is newer' });
+    } else {
+      log.push({ entityType: 'Pricing', entityName: 'Pricing Settings', action: 'skip', reason: 'Local is same or newer' });
+    }
+  }
+
+  // Import pricing variables
+  for (const importVariable of (importData.pricingVariables || [])) {
+    const local = localPricingVariablesMap.get(importVariable.id);
+    if (!local) {
+      await addPricingVariable(importVariable);
+      log.push({ entityType: 'PricingVariable', entityName: importVariable.name, action: 'add', reason: 'New record' });
+    } else if (isNewer(importVariable.updatedAt, local.updatedAt)) {
+      await updatePricingVariable(importVariable);
+      log.push({ entityType: 'PricingVariable', entityName: importVariable.name, action: 'update', reason: 'Import is newer' });
+    } else {
+      log.push({ entityType: 'PricingVariable', entityName: importVariable.name, action: 'skip', reason: 'Local is same or newer' });
     }
   }
 
@@ -996,6 +1418,20 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
       log.push({ entityType: 'Product', entityName: importProduct.name, action: 'update', reason: 'Import is newer' });
     } else {
       log.push({ entityType: 'Product', entityName: importProduct.name, action: 'skip', reason: 'Local is same or newer' });
+    }
+  }
+
+  // Import base coat colors
+  for (const importColor of (importData.baseCoatColors || [])) {
+    const local = localBaseCoatColorsMap.get(importColor.id);
+    if (!local) {
+      await addBaseCoatColor(importColor);
+      log.push({ entityType: 'BaseCoatColor', entityName: importColor.name, action: 'add', reason: 'New record' });
+    } else if (isNewer(importColor.updatedAt, local.updatedAt)) {
+      await updateBaseCoatColor(importColor);
+      log.push({ entityType: 'BaseCoatColor', entityName: importColor.name, action: 'update', reason: 'Import is newer' });
+    } else {
+      log.push({ entityType: 'BaseCoatColor', entityName: importColor.name, action: 'skip', reason: 'Local is same or newer' });
     }
   }
 
@@ -1143,6 +1579,90 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
     }
   }
 
+  // Import shopping items
+  for (const importItem of (importData.shoppingItems || [])) {
+    const local = localShoppingItemsMap.get(importItem.id);
+    if (!local) {
+      await addShoppingItem(importItem);
+      log.push({ entityType: 'ShoppingItem', entityName: importItem.name, action: 'add', reason: 'New record' });
+    } else if (isNewer(importItem.updatedAt, local.updatedAt)) {
+      await updateShoppingItem(importItem);
+      log.push({ entityType: 'ShoppingItem', entityName: importItem.name, action: 'update', reason: 'Import is newer' });
+    } else {
+      log.push({ entityType: 'ShoppingItem', entityName: importItem.name, action: 'skip', reason: 'Local is same or newer' });
+    }
+  }
+
+  // Import referral services
+  for (const importService of (importData.referralServices || [])) {
+    const local = localReferralServicesMap.get(importService.id);
+    if (!local) {
+      await addReferralService(importService);
+      log.push({ entityType: 'ReferralService', entityName: importService.name, action: 'add', reason: 'New record' });
+    } else if (isNewer(importService.updatedAt, local.updatedAt)) {
+      await updateReferralService(importService);
+      log.push({ entityType: 'ReferralService', entityName: importService.name, action: 'update', reason: 'Import is newer' });
+    } else {
+      log.push({ entityType: 'ReferralService', entityName: importService.name, action: 'skip', reason: 'Local is same or newer' });
+    }
+  }
+
+  // Import referral associates
+  for (const importAssociate of (importData.referralAssociates || [])) {
+    const local = localReferralAssociatesMap.get(importAssociate.id);
+    if (!local) {
+      await addReferralAssociate(importAssociate);
+      log.push({ entityType: 'ReferralAssociate', entityName: importAssociate.name, action: 'add', reason: 'New record' });
+    } else if (isNewer(importAssociate.updatedAt, local.updatedAt)) {
+      await updateReferralAssociate(importAssociate);
+      log.push({ entityType: 'ReferralAssociate', entityName: importAssociate.name, action: 'update', reason: 'Import is newer' });
+    } else {
+      log.push({ entityType: 'ReferralAssociate', entityName: importAssociate.name, action: 'skip', reason: 'Local is same or newer' });
+    }
+  }
+
+  // Import ad spend (updateAdSpend is a put, so it covers both add and update)
+  for (const importRecord of (importData.adSpend || [])) {
+    const local = localAdSpendMap.get(importRecord.id);
+    if (!local) {
+      await updateAdSpend(importRecord);
+      log.push({ entityType: 'AdSpend', entityName: importRecord.month, action: 'add', reason: 'New record' });
+    } else if (isNewer(importRecord.updatedAt, local.updatedAt)) {
+      await updateAdSpend(importRecord);
+      log.push({ entityType: 'AdSpend', entityName: importRecord.month, action: 'update', reason: 'Import is newer' });
+    } else {
+      log.push({ entityType: 'AdSpend', entityName: importRecord.month, action: 'skip', reason: 'Local is same or newer' });
+    }
+  }
+
+  // Import leads (updateLead is a put, so it covers both add and update)
+  for (const importLead of (importData.leads || [])) {
+    const local = localLeadsMap.get(importLead.id);
+    if (!local) {
+      await updateLead(importLead);
+      log.push({ entityType: 'Lead', entityName: leadLabel(importLead), action: 'add', reason: 'New record' });
+    } else if (isNewer(importLead.updatedAt, local.updatedAt)) {
+      await updateLead(importLead);
+      log.push({ entityType: 'Lead', entityName: leadLabel(importLead), action: 'update', reason: 'Import is newer' });
+    } else {
+      log.push({ entityType: 'Lead', entityName: leadLabel(importLead), action: 'skip', reason: 'Local is same or newer' });
+    }
+  }
+
+  // Import lead appointments
+  for (const importAppointment of (importData.leadAppointments || [])) {
+    const local = localLeadAppointmentsMap.get(importAppointment.id);
+    if (!local) {
+      await updateLeadAppointment(importAppointment);
+      log.push({ entityType: 'LeadAppointment', entityName: leadAppointmentLabel(importAppointment), action: 'add', reason: 'New record' });
+    } else if (isNewer(importAppointment.updatedAt, local.updatedAt)) {
+      await updateLeadAppointment(importAppointment);
+      log.push({ entityType: 'LeadAppointment', entityName: leadAppointmentLabel(importAppointment), action: 'update', reason: 'Import is newer' });
+    } else {
+      log.push({ entityType: 'LeadAppointment', entityName: leadAppointmentLabel(importAppointment), action: 'skip', reason: 'Local is same or newer' });
+    }
+  }
+
   // Delete orphans if enabled
   if (deleteOrphans) {
     for (const local of localSystems) {
@@ -1167,6 +1687,26 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
       if (!importProductIds.has(local.id)) {
         await deleteProduct(local.id);
         log.push({ entityType: 'Product', entityName: local.name, action: 'delete', reason: 'Not in import file' });
+      }
+    }
+    // Only delete pricing variable orphans if the backup actually has them
+    // (old backups predate them and must not wipe the store)
+    if (importData.pricingVariables) {
+      for (const local of localPricingVariables) {
+        if (!importPricingVariableIds.has(local.id)) {
+          await deletePricingVariable(local.id);
+          log.push({ entityType: 'PricingVariable', entityName: local.name, action: 'delete', reason: 'Not in import file' });
+        }
+      }
+    }
+    // Only delete base coat color orphans if the backup actually has them
+    // (old backups predate them and must not wipe the store)
+    if (importData.baseCoatColors) {
+      for (const local of localBaseCoatColors) {
+        if (!importBaseCoatColorIds.has(local.id)) {
+          await deleteBaseCoatColor(local.id);
+          log.push({ entityType: 'BaseCoatColor', entityName: local.name, action: 'delete', reason: 'Not in import file' });
+        }
       }
     }
     for (const local of localJobs) {
@@ -1202,6 +1742,64 @@ export async function executeImport(importData: ExportData, deleteOrphans: boole
       if (!importCommTemplateIds.has(local.id)) {
         await deleteCommTemplate(local.id);
         log.push({ entityType: 'CommTemplate', entityName: local.name, action: 'delete', reason: 'Not in import file' });
+      }
+    }
+    // Only delete shopping item orphans if the backup actually has them
+    // (old backups predate the shopping list and must not wipe the store)
+    if (importData.shoppingItems) {
+      for (const local of localShoppingItems) {
+        if (!importShoppingItemIds.has(local.id)) {
+          await deleteShoppingItem(local.id);
+          log.push({ entityType: 'ShoppingItem', entityName: local.name, action: 'delete', reason: 'Not in import file' });
+        }
+      }
+    }
+    // Only delete referral service orphans if the backup actually has them
+    // (old backups predate referral tracking and must not wipe the store)
+    if (importData.referralServices) {
+      for (const local of localReferralServices) {
+        if (!importReferralServiceIds.has(local.id)) {
+          await deleteReferralService(local.id);
+          log.push({ entityType: 'ReferralService', entityName: local.name, action: 'delete', reason: 'Not in import file' });
+        }
+      }
+    }
+    // Only delete referral associate orphans if the backup actually has them
+    // (old backups predate referral tracking and must not wipe the store)
+    if (importData.referralAssociates) {
+      for (const local of localReferralAssociates) {
+        if (!importReferralAssociateIds.has(local.id)) {
+          await deleteReferralAssociate(local.id);
+          log.push({ entityType: 'ReferralAssociate', entityName: local.name, action: 'delete', reason: 'Not in import file' });
+        }
+      }
+    }
+    // Only delete ad spend orphans if the backup actually has ad spend (old
+    // backups predate it and must not wipe cost-per-lead history)
+    if (importData.adSpend) {
+      for (const local of localAdSpend) {
+        if (!importAdSpendIds.has(local.id)) {
+          await deleteAdSpend(local.id);
+          log.push({ entityType: 'AdSpend', entityName: local.month, action: 'delete', reason: 'Not in import file' });
+        }
+      }
+    }
+    // Only delete lead orphans if the backup actually has leads (old backups
+    // predate lead tracking and must not wipe the store)
+    if (importData.leads) {
+      for (const local of localLeads) {
+        if (!importLeadIds.has(local.id)) {
+          await deleteLead(local.id);
+          log.push({ entityType: 'Lead', entityName: leadLabel(local), action: 'delete', reason: 'Not in import file' });
+        }
+      }
+    }
+    if (importData.leadAppointments) {
+      for (const local of localLeadAppointments) {
+        if (!importLeadAppointmentIds.has(local.id)) {
+          await deleteLeadAppointment(local.id);
+          log.push({ entityType: 'LeadAppointment', entityName: leadAppointmentLabel(local), action: 'delete', reason: 'Not in import file' });
+        }
       }
     }
   }

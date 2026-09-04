@@ -105,14 +105,46 @@ export interface Pricing {
   staleContactDays?: number; // Days without contact before a job appears in "Needs Contact" (default 30)
   defaultReminderDays?: number; // Days from today for default reminder date (default 7)
   defaultReminderTime?: string; // Default reminder time in HH:mm format (default "05:00")
+  autoReminderRules?: AutoReminderRule[]; // Reminders added automatically to new jobs
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * A rule that automatically adds a reminder to a newly created job.
+ * Timing is relative to the job's estimate date.
+ */
+export interface AutoReminderRule {
+  id: string;
+  subject: string;             // Reminder subject
+  templateId?: string;         // CommunicationTemplate used to prefill reminder details
+  daysAfterEstimate: number;   // Days added to the job's estimate date (0 = day of estimate)
+  time?: string;               // HH:mm; falls back to Pricing.defaultReminderTime
+  enabled: boolean;
 }
 
 export interface Customer {
   id: string;
   name: string;
+  /**
+   * The customer's primary/billing address as free text. A job site can differ —
+   * a customer may own two properties — so the job carries its own address and
+   * this one is not authoritative for where the work happens.
+   *
+   * Never derived from the structured fields below; it stays the record of what
+   * was actually typed, so a bad parse can be re-derived from the original.
+   */
   address?: string;
+  street?: string;
+  street2?: string;
+  city?: string;
+  /** Two-letter uppercase code, or absent. Enforced by a CHECK constraint. */
+  state?: string;
+  /** Five digits, or absent. Enforced by a CHECK constraint. */
+  zip?: string;
+  addressParseTier?: AddressParseTier;
+  /** Set once a human confirms the address; blocks automated passes. */
+  addressVerifiedAt?: string;
   phone?: string;
   email?: string;
   notes?: string;
@@ -179,13 +211,42 @@ export interface GhlWebhookEvent {
   deleted?: boolean;
 }
 
+/**
+ * How a structured address was derived.
+ *   A  = anchored on a known ZIP, or supplied as discrete fields by GHL
+ *   A! = ZIP contradicts the typed town, in a different county — needs a human
+ *   B  = city + state matched, ZIP derived from a single-ZIP town
+ *   C  = city matched without a state, unique across reference data
+ *   D  = nothing resolvable
+ *   M  = entered or corrected by hand; never overwritten
+ */
+export type AddressParseTier = 'A' | 'A!' | 'B' | 'C' | 'D' | 'M';
+
 export interface Lead {
   id: string;
   ghlContactId?: string;
   name?: string;
   phone?: string;
   email?: string;
+  /**
+   * Free-text address as typed or as received from GHL. Never derived from the
+   * structured fields below — it stays the record of what actually arrived, so a
+   * bad parse can always be re-derived from the original.
+   */
   address?: string;
+  street?: string;
+  street2?: string;
+  city?: string;
+  /** Two-letter uppercase code, or absent. Enforced by a CHECK constraint. */
+  state?: string;
+  /** Five digits, or absent. Enforced by a CHECK constraint. */
+  zip?: string;
+  addressParseTier?: AddressParseTier;
+  /**
+   * Set once a human confirms the address. Any row carrying this is off-limits
+   * to automated passes and to webhook overwrites — see the ghl-webhook merge.
+   */
+  addressVerifiedAt?: string;
   source?: string;
   campaign?: string;
   utmSource?: string;
@@ -274,6 +335,7 @@ export interface JobReminder {
   dueAt: string; // ISO timestamp
   notifiedAt?: string;
   completed?: boolean;
+  autoRuleId?: string; // Set when created by an AutoReminderRule (see Pricing.autoReminderRules)
   createdAt: string;
   updatedAt: string;
 }
@@ -299,10 +361,22 @@ export interface InstallDaySchedule {
   laborerIds: string[];
 }
 
+/** Hours one laborer worked on a day, when they differ from the day's default hours. */
+export interface ActualLaborerHours {
+  laborerId: string;
+  hours: number;
+}
+
 export interface ActualDaySchedule {
   day: number;
-  hours: number;
+  hours: number; // default hours worked on this day; applies to every laborer without an override
   laborerIds: string[];
+  /**
+   * Per-laborer hour overrides for this day. Laborers without an entry worked `hours`.
+   * Stored as a list rather than a keyed map so sync's recursive case conversion
+   * never rewrites laborer ids.
+   */
+  laborerHours?: ActualLaborerHours[];
 }
 
 export interface ActualCosts {
@@ -361,7 +435,25 @@ export interface Job {
   id: string;
   name: string;
   customerName?: string;
+  /**
+   * The JOB SITE address as free text — deliberately its own field rather than a
+   * pointer at the customer, because a customer can have two properties and the
+   * work happens at one of them. `Customer.address` is the billing address.
+   *
+   * Never derived from the structured fields below; it stays the record of what
+   * was actually typed, so a bad parse can be re-derived from the original.
+   */
   customerAddress?: string;
+  customerStreet?: string;
+  customerStreet2?: string;
+  customerCity?: string;
+  /** Two-letter uppercase code, or absent. Enforced by a CHECK constraint. */
+  customerState?: string;
+  /** Five digits, or absent. Enforced by a CHECK constraint. */
+  customerZip?: string;
+  addressParseTier?: AddressParseTier;
+  /** Set once a human confirms the address; blocks automated passes. */
+  addressVerifiedAt?: string;
   leadId?: string;
   systemId: string;
   floorFootage: number;
@@ -616,19 +708,27 @@ export interface ExportData {
   metadata: ExportMetadata;
   systems: ChipSystem[];
   costs: Costs | null;
+  pricing?: Pricing | null; // Optional: older backups predate pricing settings
+  pricingVariables?: PricingVariable[]; // Optional: older backups predate pricing variables
   laborers: Laborer[];
   customers: Customer[];
   products: Product[];
-  baseCoatColors: BaseCoatColor[];
+  baseCoatColors?: BaseCoatColor[]; // Optional: older backups predate base coat colors
   jobs: Job[];
   chipBlends: ChipBlend[];
   chipInventory: ChipInventory[];
   tintInventory: TintInventory[];
   coatingInventory?: CoatingInventory[]; // Optional: older backups predate SKU-level coating inventory
+  leads?: Lead[]; // Optional: older backups predate lead tracking
+  leadAppointments?: LeadAppointment[]; // Optional: older backups predate lead tracking
   topCoatInventory: TopCoatInventory | null;
   baseCoatInventory: BaseCoatInventory | null;
   miscInventory: MiscInventory | null;
   commTemplates?: CommunicationTemplate[];
+  shoppingItems?: ShoppingItem[]; // Optional: older backups predate the shopping list
+  referralServices?: ReferralService[]; // Optional: older backups predate referral tracking
+  referralAssociates?: ReferralAssociate[]; // Optional: older backups predate referral tracking
+  adSpend?: AdSpend[]; // Optional: older backups predate lead tracking ad spend
 }
 
 export type MergeAction = 'add' | 'update' | 'skip' | 'delete';

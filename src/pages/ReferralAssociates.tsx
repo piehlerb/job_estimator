@@ -9,6 +9,8 @@ import {
   addReferralService,
 } from '../lib/db';
 import { ReferralAssociate, ReferralService } from '../types';
+import SaveButton from '../components/SaveButton';
+import { useSaveFlash } from '../hooks/useSaveFlash';
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -50,6 +52,7 @@ export default function ReferralAssociates() {
   const [formData, setFormData] = useState<FormState>(EMPTY_FORM);
   const [serviceInput, setServiceInput] = useState('');
   const [saving, setSaving] = useState(false);
+  const { saved, flashSaved } = useSaveFlash();
   const serviceInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -247,7 +250,7 @@ export default function ReferralAssociates() {
       }
 
       await loadData();
-      closeForm();
+      flashSaved(closeForm);
     } catch (error) {
       console.error('Error saving referral associate:', error);
     } finally {
@@ -608,13 +611,15 @@ export default function ReferralAssociates() {
                 >
                   Cancel
                 </button>
-                <button
+                <SaveButton
                   type="submit"
-                  disabled={saving || !formData.name.trim()}
-                  className="px-4 py-2 text-sm font-medium text-white bg-gf-lime rounded-lg hover:bg-gf-dark-green transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {saving ? 'Saving...' : editingAssociate ? 'Save Changes' : 'Add Associate'}
-                </button>
+                  saving={saving}
+                  saved={saved}
+                  disabled={!formData.name.trim()}
+                  label={editingAssociate ? 'Save Changes' : 'Add Associate'}
+                  icon={null}
+                  className="px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-50"
+                />
               </div>
             </form>
           </div>

@@ -1,7 +1,9 @@
 import { Plus, Edit2, Trash2, X, ChevronDown, ChevronUp } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { getAllCustomers, addCustomer, updateCustomer, deleteCustomer, getAllJobs } from '../lib/db';
 import { Customer, Job, JobStatus } from '../types';
+import SaveButton from '../components/SaveButton';
+import { useSaveFlash } from '../hooks/useSaveFlash';
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -37,6 +39,7 @@ export default function Customers() {
     notes: '',
   });
   const [saving, setSaving] = useState(false);
+  const { saved, flashSaved } = useSaveFlash();
 
   // Detail panel
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
@@ -165,9 +168,11 @@ export default function Customers() {
       }
 
       await loadData();
-      setShowForm(false);
-      setEditingCustomer(null);
-      setFormData({ name: '', address: '', phone: '', email: '', notes: '' });
+      flashSaved(() => {
+        setShowForm(false);
+        setEditingCustomer(null);
+        setFormData({ name: '', address: '', phone: '', email: '', notes: '' });
+      });
     } catch (error) {
       console.error('Error saving customer:', error);
     } finally {
@@ -300,9 +305,11 @@ export default function Customers() {
               </thead>
               <tbody>
                 {filteredCustomers.map((customer) => (
-                  <>
+                  // Keyed on the Fragment, not the rows: a customer contributes
+                  // two sibling <tr>s when expanded, and React needs the key on
+                  // whatever the map actually returns.
+                  <Fragment key={customer.id}>
                     <tr
-                      key={customer.id}
                       className={`border-b border-slate-200 hover:bg-slate-50 ${
                         selectedCustomerId === customer.id ? 'bg-green-50' : ''
                       }`}
@@ -338,7 +345,7 @@ export default function Customers() {
                       </td>
                       <td className="px-4 lg:px-6 py-4 text-sm text-right text-slate-700">
                         {customer.lastInstallDate
-                          ? new Date(customer.lastInstallDate).toLocaleDateString()
+                          ? new Date(customer.lastInstallDate + 'T12:00:00').toLocaleDateString()
                           : '-'}
                       </td>
                       <td className="px-4 lg:px-6 py-4 text-right">
@@ -380,7 +387,7 @@ export default function Customers() {
                     </tr>
                     {/* Inline job list */}
                     {selectedCustomerId === customer.id && (
-                      <tr key={`${customer.id}-jobs`} className="bg-green-50">
+                      <tr className="bg-green-50">
                         <td colSpan={8} className="px-4 lg:px-6 py-0">
                           {selectedCustomerJobs.length === 0 ? (
                             <p className="py-4 text-sm text-slate-500">
@@ -428,7 +435,7 @@ export default function Customers() {
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 ))}
               </tbody>
             </table>
@@ -516,13 +523,15 @@ export default function Customers() {
                 >
                   Cancel
                 </button>
-                <button
+                <SaveButton
                   type="submit"
-                  disabled={saving || !formData.name.trim()}
-                  className="px-4 py-2 text-sm font-medium text-white bg-gf-lime rounded-lg hover:bg-gf-dark-green transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {saving ? 'Saving...' : editingCustomer ? 'Save Changes' : 'Add Customer'}
-                </button>
+                  saving={saving}
+                  saved={saved}
+                  disabled={!formData.name.trim()}
+                  label={editingCustomer ? 'Save Changes' : 'Add Customer'}
+                  icon={null}
+                  className="px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-50"
+                />
               </div>
             </form>
           </div>

@@ -12,6 +12,8 @@ dist-ssr
 .tmp-tests/
 *.local
 .superpowers/
+.agents/
+Job Estimator Mobile Redesign.zip
 
 .vscode/*
 !.vscode/extensions.json

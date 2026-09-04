@@ -41,6 +41,16 @@ describe('job sync working set policy', () => {
     assert.equal(cutoff.timestamp, '2024-12-23T12:00:00.000Z');
   });
 
+  test('derives the cutoff date from the local day while keeping the timestamp in UTC', () => {
+    // 9 PM local: in any timezone behind UTC this instant is already the next
+    // day in UTC, which used to move the install-date cutoff a day forward.
+    const evening = new Date(2026, 5, 23, 21, 0);
+    const cutoff = getJobWorkingSetCutoff(evening);
+
+    assert.equal(cutoff.date, '2024-12-23');
+    assert.equal(cutoff.timestamp, new Date(cutoff.timestamp).toISOString());
+  });
+
   test('keeps active jobs in the initial cache even when they are old', () => {
     const cutoff = getJobWorkingSetCutoff(now);
 

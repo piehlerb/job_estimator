@@ -1,4 +1,4 @@
-import { Plus, Trash2, FileText, Search, Bell, Check, X, ChevronDown, ChevronRight, Link, Shuffle, PhoneCall, SlidersHorizontal, Calendar, Clock, Wrench, FileSearch, AlertTriangle } from 'lucide-react';
+import { Plus, Trash2, FileText, Search, Bell, Check, X, ChevronDown, ChevronLeft, ChevronRight, Link, Shuffle, PhoneCall, SlidersHorizontal, Calendar, Clock, Wrench, FileSearch, AlertTriangle } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { getAllJobs, deleteJob, updateJob, getDefaultCosts, getCosts, getPricing, getDefaultPricing, getAllCommTemplates } from '../lib/db';
 import { Job, JobCalculation, Costs, Pricing, JobStatus, JobReminder, CommunicationTemplate } from '../types';
@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { loadOlderJobsFromSupabase } from '../lib/sync';
 import { getJobWorkingSetCutoff } from '../lib/jobSyncPolicy';
 import { findPendingJobsWithoutActiveReminders } from '../lib/reminderCoverage';
+import { localToday, timestampToLocalDateString, addDaysToLocalDate } from '../lib/dateUtils';
 
 interface DashboardProps {
   onViewJobSheet: (id: string) => void;
@@ -59,6 +60,8 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
   const [viewMode, setViewMode] = useState<'jobs' | 'needs-contact' | 'today' | 'reminders'>(_saved.viewMode ?? 'jobs');
   const [showFilters, setShowFilters] = useState<boolean>(_saved.showFilters ?? false);
   const [showInactive, setShowInactive] = useState<boolean>(_saved.showInactive ?? false);
+  // Day shown on the Today tab — resets to today whenever the tab is opened
+  const [selectedDay, setSelectedDay] = useState<string>(localToday());
 
   const [showReminders, setShowReminders] = useState(false);
   const [selectedReminder, setSelectedReminder] = useState<ReminderItem | null>(null);
@@ -405,7 +408,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
   };
 
   const overdueReminders = useMemo(() => {
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = localToday();
     const items: (ReminderItem & { customerName?: string })[] = [];
 
     jobsWithCalc.forEach(({ job }) => {
@@ -495,9 +498,8 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
       .sort((a, b) => b.daysSince - a.daysSince);
   }, [jobsWithCalc, dashboardPricing]);
 
-  const todayItems = useMemo(() => {
-    const todayStr = new Date().toISOString().split('T')[0];
-    const todayMs = new Date(todayStr + 'T12:00:00').getTime();
+  const dayItems = useMemo(() => {
+    const dayMs = new Date(selectedDay + 'T12:00:00').getTime();
     const msPerDay = 24 * 60 * 60 * 1000;
 
     const installs: { job: Job; dayNumber: number; totalDays: number }[] = [];
@@ -509,18 +511,18 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
         const startMs = new Date(job.installDate + 'T12:00:00').getTime();
         const days = job.installDays || 1;
         const endMs = startMs + (days - 1) * msPerDay;
-        if (todayMs >= startMs && todayMs <= endMs) {
-          const dayNumber = Math.round((todayMs - startMs) / msPerDay) + 1;
+        if (dayMs >= startMs && dayMs <= endMs) {
+          const dayNumber = Math.round((dayMs - startMs) / msPerDay) + 1;
           installs.push({ job, dayNumber, totalDays: days });
         }
       }
 
-      if ((job.estimateDate || job.createdAt.split('T')[0]) === todayStr) {
+      if ((job.estimateDate || timestampToLocalDateString(job.createdAt)) === selectedDay) {
         estimates.push({ job });
       }
 
       (job.reminders || []).forEach(r => {
-        if (!r.completed && r.dueDate === todayStr) {
+        if (!r.completed && r.dueDate === selectedDay) {
           reminders.push({ job, reminder: r });
         }
       });
@@ -529,9 +531,15 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
     reminders.sort((a, b) => a.reminder.dueTime.localeCompare(b.reminder.dueTime));
 
     return { installs, estimates, reminders };
-  }, [jobsWithCalc]);
+  }, [jobsWithCalc, selectedDay]);
 
-  const todayTotalCount = todayItems.installs.length + todayItems.estimates.length + todayItems.reminders.length;
+  const dayTotalCount = dayItems.installs.length + dayItems.estimates.length + dayItems.reminders.length;
+
+  const isSelectedDayToday = selectedDay === localToday();
+  const selectedDayLabel = useMemo(() => {
+    const d = new Date(selectedDay + 'T12:00:00');
+    return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  }, [selectedDay]);
 
   const selectedReminderDetails = useMemo(() => {
     if (!selectedReminder) return null;
@@ -811,7 +819,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
             )}
           </button>
           <button
-            onClick={() => setViewMode('today')}
+            onClick={() => { setViewMode('today'); setSelectedDay(localToday()); }}
             className={`flex-1 min-w-[78px] flex items-center justify-center gap-1.5 py-3 text-[13.5px] font-bold whitespace-nowrap transition-colors border-b-[2.5px] ${
               viewMode === 'today'
                 ? 'text-blue-600 border-blue-400'
@@ -819,10 +827,10 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
             }`}
           >
             Today
-            {todayTotalCount > 0 && (
+            {dayTotalCount > 0 && (
               <span className={`num px-1.5 py-0.5 rounded-full text-[11px] font-extrabold ${
                 viewMode === 'today' ? 'bg-blue-100 text-blue-700' : 'bg-blue-50 text-blue-500'
-              }`}>{todayTotalCount}</span>
+              }`}>{dayTotalCount}</span>
             )}
           </button>
           <button
@@ -1047,7 +1055,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
             <div className="divide-y divide-red-100">
               {overdueReminders.map((reminder) => {
                 const daysOverdue = Math.floor(
-                  (new Date(new Date().toISOString().split('T')[0] + 'T00:00:00').getTime() -
+                  (new Date(localToday() + 'T00:00:00').getTime() -
                    new Date(reminder.dueAt).getTime()) / (24 * 60 * 60 * 1000)
                 );
                 return (
@@ -1111,23 +1119,61 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
       {/* Today tab */}
       {viewMode === 'today' && (
         <div className="md:bg-white">
-          {todayTotalCount === 0 ? (
+          {/* Day navigation */}
+          <div className="flex items-center gap-2 px-3.5 md:px-6 py-2.5 bg-white border-b border-slate-200">
+            <button
+              type="button"
+              onClick={() => setSelectedDay(d => addDaysToLocalDate(d, -1))}
+              aria-label="Previous day"
+              className="flex items-center justify-center w-9 h-9 rounded-[10px] border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+            >
+              <ChevronLeft size={17} />
+            </button>
+            <div className="flex-1 text-center min-w-0">
+              <div className="text-[14px] font-bold text-slate-900 truncate">
+                {isSelectedDayToday ? 'Today' : selectedDayLabel}
+              </div>
+              {!isSelectedDayToday && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedDay(localToday())}
+                  className="text-[11px] font-bold text-blue-600 hover:text-blue-800 transition-colors"
+                >
+                  Back to today
+                </button>
+              )}
+              {isSelectedDayToday && (
+                <div className="text-[11px] font-medium text-slate-400">{selectedDayLabel}</div>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setSelectedDay(d => addDaysToLocalDate(d, 1))}
+              aria-label="Next day"
+              className="flex items-center justify-center w-9 h-9 rounded-[10px] border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+            >
+              <ChevronRight size={17} />
+            </button>
+          </div>
+          {dayTotalCount === 0 ? (
             <div className="p-12 text-center">
               <Calendar size={24} className="mx-auto mb-2 text-slate-300" />
-              <p className="text-sm text-slate-500">Nothing scheduled for today.</p>
+              <p className="text-sm text-slate-500">
+                Nothing scheduled for {isSelectedDayToday ? 'today' : selectedDayLabel}.
+              </p>
             </div>
           ) : (
             <div className="px-3.5 md:px-0 py-3 md:py-0 space-y-3.5 md:space-y-0 md:divide-y md:divide-slate-200">
-              {todayItems.installs.length > 0 && (
+              {dayItems.installs.length > 0 && (
                 <div>
-                  <div className="text-[11px] font-extrabold text-[#15803d] tracking-[0.5px] uppercase mb-[7px] pl-1 md:hidden">Installs Today</div>
+                  <div className="text-[11px] font-extrabold text-[#15803d] tracking-[0.5px] uppercase mb-[7px] pl-1 md:hidden">{isSelectedDayToday ? 'Installs Today' : 'Installs'}</div>
                   <div className="hidden md:flex items-center gap-2 px-6 py-2 bg-green-50">
                     <Wrench size={13} className="text-green-600" />
                     <span className="text-xs font-semibold text-green-700 uppercase tracking-wide">Installs</span>
-                    <span className="text-[10px] font-bold text-green-600">({todayItems.installs.length})</span>
+                    <span className="text-[10px] font-bold text-green-600">({dayItems.installs.length})</span>
                   </div>
                   <div className="flex flex-col gap-2 md:gap-0 md:divide-y md:divide-slate-100">
-                    {todayItems.installs.map(({ job, dayNumber, totalDays }) => (
+                    {dayItems.installs.map(({ job, dayNumber, totalDays }) => (
                       <button key={job.id} onClick={() => onEditJob(job.id)}
                         className="w-full bg-white border border-[#bbf7d0] border-l-[3px] border-l-[#22c55e] md:border-0 md:border-b md:border-slate-100 rounded-[13px] md:rounded-none px-[15px] md:px-6 py-[13px] md:py-3 flex items-center gap-3 text-left hover:bg-green-50/60 transition-colors">
                         <div className="flex-1 min-w-0">
@@ -1142,16 +1188,16 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
                   </div>
                 </div>
               )}
-              {todayItems.estimates.length > 0 && (
+              {dayItems.estimates.length > 0 && (
                 <div>
-                  <div className="text-[11px] font-extrabold text-purple-700 tracking-[0.5px] uppercase mb-[7px] pl-1 md:hidden">Estimates Today</div>
+                  <div className="text-[11px] font-extrabold text-purple-700 tracking-[0.5px] uppercase mb-[7px] pl-1 md:hidden">{isSelectedDayToday ? 'Estimates Today' : 'Estimates'}</div>
                   <div className="hidden md:flex items-center gap-2 px-6 py-2 bg-purple-50">
                     <FileSearch size={13} className="text-purple-600" />
                     <span className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Estimates</span>
-                    <span className="text-[10px] font-bold text-purple-600">({todayItems.estimates.length})</span>
+                    <span className="text-[10px] font-bold text-purple-600">({dayItems.estimates.length})</span>
                   </div>
                   <div className="flex flex-col gap-2 md:gap-0 md:divide-y md:divide-slate-100">
-                    {todayItems.estimates.map(({ job }) => (
+                    {dayItems.estimates.map(({ job }) => (
                       <button key={job.id} onClick={() => onEditJob(job.id)}
                         className="w-full bg-white border border-slate-200 md:border-0 md:border-b md:border-slate-100 rounded-[13px] md:rounded-none px-[15px] md:px-6 py-[13px] md:py-3 flex items-center gap-3 text-left hover:bg-purple-50/60 transition-colors">
                         <div className="flex-1 min-w-0">
@@ -1164,16 +1210,16 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
                   </div>
                 </div>
               )}
-              {todayItems.reminders.length > 0 && (
+              {dayItems.reminders.length > 0 && (
                 <div>
-                  <div className="text-[11px] font-extrabold text-[#1d4ed8] tracking-[0.5px] uppercase mb-[7px] pl-1 md:hidden">Reminders Today</div>
+                  <div className="text-[11px] font-extrabold text-[#1d4ed8] tracking-[0.5px] uppercase mb-[7px] pl-1 md:hidden">{isSelectedDayToday ? 'Reminders Today' : 'Reminders'}</div>
                   <div className="hidden md:flex items-center gap-2 px-6 py-2 bg-blue-50">
                     <Bell size={13} className="text-blue-600" />
                     <span className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Reminders</span>
-                    <span className="text-[10px] font-bold text-blue-600">({todayItems.reminders.length})</span>
+                    <span className="text-[10px] font-bold text-blue-600">({dayItems.reminders.length})</span>
                   </div>
                   <div className="flex flex-col gap-2 md:gap-0 md:divide-y md:divide-slate-100">
-                    {todayItems.reminders.map(({ job, reminder }) => (
+                    {dayItems.reminders.map(({ job, reminder }) => (
                       <button key={reminder.id} onClick={() => onEditJob(job.id)}
                         className="w-full bg-white border border-[#bfdbfe] border-l-[3px] border-l-[#3b82f6] md:border-0 md:border-b md:border-slate-100 rounded-[13px] md:rounded-none px-[15px] md:px-6 py-[13px] md:py-3 flex items-center gap-3 text-left hover:bg-blue-50/60 transition-colors">
                         <div className="flex-1 min-w-0">

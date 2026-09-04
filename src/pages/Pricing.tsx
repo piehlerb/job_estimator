@@ -1,15 +1,18 @@
 import { useState, useEffect } from 'react';
 import {
   getPricing,
-  savePricing,
+  updatePricing,
   getDefaultPricing,
 } from '../lib/db';
-import { Pricing as PricingType } from '../types';
+import SaveButton from '../components/SaveButton';
+import { useSaveFlash } from '../hooks/useSaveFlash';
 
 export default function Pricing() {
-  const [pricing, setPricing] = useState<PricingType>(getDefaultPricing());
+  // The stored record is deliberately not held in state: saves go through
+  // updatePricing, which re-reads it, so there is no snapshot to go stale.
   const [loading, setLoading] = useState(true);
   const [pricingSaving, setPricingSaving] = useState(false);
+  const { saved, flashSaved } = useSaveFlash();
 
   const [pricingForm, setPricingForm] = useState({
     antiSlipPricePerSqft: '',
@@ -35,7 +38,6 @@ export default function Pricing() {
         ...getDefaultPricing(),
         ...storedPricing,
       };
-      setPricing(mergedPricing);
       setPricingForm({
         antiSlipPricePerSqft: mergedPricing.antiSlipPricePerSqft.toString(),
         abrasionResistancePricePerSqft: mergedPricing.abrasionResistancePricePerSqft?.toString() || '0',
@@ -47,7 +49,6 @@ export default function Pricing() {
       });
     } else {
       const defaults = getDefaultPricing();
-      setPricing(defaults);
       setPricingForm({
         antiSlipPricePerSqft: defaults.antiSlipPricePerSqft.toString(),
         abrasionResistancePricePerSqft: defaults.abrasionResistancePricePerSqft.toString(),
@@ -67,8 +68,10 @@ export default function Pricing() {
     setPricingSaving(true);
 
     try {
-      const updatedPricing: PricingType = {
-        ...pricing,
+      // Only the fields this page owns. It must not write back the rest of the
+      // record — Settings owns discounts and auto-reminder rules on it, and a
+      // snapshot taken at page load would revert them. See updatePricing.
+      await updatePricing({
         antiSlipPricePerSqft: parseFloat(pricingForm.antiSlipPricePerSqft) || 0,
         abrasionResistancePricePerSqft: parseFloat(pricingForm.abrasionResistancePricePerSqft) || 0,
         crackFillFactorUnitsPerGallon: parseFloat(pricingForm.crackFillFactorUnitsPerGallon) || 5,
@@ -76,13 +79,9 @@ export default function Pricing() {
         coatingRemovalPaintPerSqft: parseFloat(pricingForm.coatingRemovalPaintPerSqft) || 0,
         coatingRemovalEpoxyPerSqft: parseFloat(pricingForm.coatingRemovalEpoxyPerSqft) || 0,
         moistureMitigationPerSqft: parseFloat(pricingForm.moistureMitigationPerSqft) || 0,
-        updatedAt: new Date().toISOString(),
-      };
+      });
 
-      console.log('[Pricing] Saving pricing:', updatedPricing);
-      await savePricing(updatedPricing);
-      console.log('[Pricing] Pricing saved successfully');
-      setPricing(updatedPricing);
+      flashSaved();
     } catch (error) {
       console.error('Error saving pricing:', error);
     } finally {
@@ -201,13 +200,14 @@ export default function Pricing() {
             </div>
           </div>
           <div className="pt-4">
-            <button
+            <SaveButton
               type="submit"
-              disabled={pricingSaving}
-              className="px-6 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors disabled:opacity-50"
-            >
-              {pricingSaving ? 'Saving...' : 'Save Pricing'}
-            </button>
+              saving={pricingSaving}
+              saved={saved}
+              label="Save Pricing"
+              icon={null}
+              className="px-6 py-2 rounded-lg font-semibold disabled:opacity-50"
+            />
           </div>
         </form>
       </div>

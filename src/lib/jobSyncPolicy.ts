@@ -1,4 +1,5 @@
 import type { Job, JobStatus } from '../types/index.js';
+import { toLocalDateString } from './dateUtils.js';
 
 export const JOB_WORKING_SET_MONTHS = 18;
 
@@ -9,10 +10,6 @@ export interface JobWorkingSetCutoff {
 
 const ACTIVE_JOB_STATUSES: JobStatus[] = ['Pending', 'Verbal'];
 
-function toDateOnly(date: Date): string {
-  return date.toISOString().slice(0, 10);
-}
-
 export function getJobWorkingSetCutoff(
   now = new Date(),
   months = JOB_WORKING_SET_MONTHS
@@ -21,7 +18,9 @@ export function getJobWorkingSetCutoff(
   cutoff.setUTCMonth(cutoff.getUTCMonth() - months);
 
   return {
-    date: toDateOnly(cutoff),
+    // Compared against installDate, a local calendar day.
+    date: toLocalDateString(cutoff),
+    // Compared against updatedAt, a real UTC instant.
     timestamp: cutoff.toISOString(),
   };
 }

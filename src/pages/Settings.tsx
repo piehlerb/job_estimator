@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Edit2, Trash2, Save, X } from 'lucide-react';
+import { Plus, Edit2, Trash2, X } from 'lucide-react';
 import {
   getPricing,
-  savePricing,
+  updatePricing,
   getDefaultPricing,
   getAllBaseCoatColors,
   addBaseCoatColor,
@@ -13,14 +13,38 @@ import {
   updateCommTemplate,
   deleteCommTemplate,
 } from '../lib/db';
-import { Pricing, BaseCoatColor, DiscountConfig, DiscountMode, TagDiscount, CommunicationTemplate } from '../types';
+import { BaseCoatColor, DiscountConfig, DiscountMode, TagDiscount, CommunicationTemplate, AutoReminderRule } from '../types';
+import SaveButton from '../components/SaveButton';
+import { useSaveFlash } from '../hooks/useSaveFlash';
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 }
 
+/** Editable form shape for an auto-reminder rule (numeric fields held as strings while typing). */
+type AutoReminderRuleDraft = {
+  id: string;
+  subject: string;
+  templateId: string;
+  daysAfterEstimate: string;
+  time: string;
+  enabled: boolean;
+};
+
+function toRuleDraft(rule: AutoReminderRule): AutoReminderRuleDraft {
+  return {
+    id: rule.id,
+    subject: rule.subject,
+    templateId: rule.templateId || '',
+    daysAfterEstimate: rule.daysAfterEstimate.toString(),
+    time: rule.time || '',
+    enabled: rule.enabled,
+  };
+}
+
 export default function Settings() {
-  const [pricing, setPricing] = useState<Pricing>(getDefaultPricing());
+  // The stored record is deliberately not held in state: saves go through
+  // updatePricing, which re-reads it, so there is no snapshot to go stale.
   const [baseCoatColors, setBaseCoatColors] = useState<BaseCoatColor[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -34,6 +58,18 @@ export default function Settings() {
   const [showTemplateForm, setShowTemplateForm] = useState(false);
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
   const [templateForm, setTemplateForm] = useState({ name: '', body: '' });
+
+  // Auto-add reminder rules state
+  const [autoReminderRules, setAutoReminderRules] = useState<AutoReminderRuleDraft[]>([]);
+  const [savingAutoReminders, setSavingAutoReminders] = useState(false);
+
+  // One flash per save button, so confirming a discount save does not light up
+  // the settings button three sections away.
+  const pricingFlash = useSaveFlash();
+  const discountFlash = useSaveFlash();
+  const colorFlash = useSaveFlash();
+  const templateFlash = useSaveFlash();
+  const autoReminderFlash = useSaveFlash();
 
   const [form, setForm] = useState({
     minimumMarginBuffer: '',
@@ -80,7 +116,6 @@ export default function Settings() {
         ...getDefaultPricing(),
         ...storedPricing,
       };
-      setPricing(mergedPricing);
       setForm({
         minimumMarginBuffer: (mergedPricing.minimumMarginBuffer ?? 2000).toString(),
         minimumJobPrice: (mergedPricing.minimumJobPrice ?? 2500).toString(),
@@ -98,6 +133,7 @@ export default function Settings() {
         defaultReminderDays: (mergedPricing.defaultReminderDays ?? 7).toString(),
         defaultReminderTime: mergedPricing.defaultReminderTime ?? '05:00',
       });
+      setAutoReminderRules((mergedPricing.autoReminderRules ?? []).map(toRuleDraft));
 
       // Load discount config, migrating from legacy fields if needed
       if (mergedPricing.discountConfig) {
@@ -133,6 +169,7 @@ export default function Settings() {
         defaultReminderDays: '7',
         defaultReminderTime: '05:00',
       });
+      setAutoReminderRules([]);
       setDiscountMode('per_sqft');
       setPerSqftAmount('1');
       setPerSqftMaxSqft('500');
@@ -189,8 +226,8 @@ export default function Settings() {
     setSaving(true);
 
     try {
-      const updatedPricing: Pricing = {
-        ...pricing,
+      // Only the fields this form owns — see updatePricing.
+      await updatePricing({
         minimumMarginBuffer: parseFloat(form.minimumMarginBuffer) || 2000,
         minimumJobPrice: parseFloat(form.minimumJobPrice) || 2500,
         chipVerticalUsageFactor: parseFloat(form.chipVerticalUsageFactor) || 1.1,
@@ -204,11 +241,9 @@ export default function Settings() {
         staleContactDays: parseFloat(form.staleContactDays) || 30,
         defaultReminderDays: parseInt(form.defaultReminderDays) || 7,
         defaultReminderTime: form.defaultReminderTime || '05:00',
-        updatedAt: new Date().toISOString(),
-      };
+      });
 
-      await savePricing(updatedPricing);
-      setPricing(updatedPricing);
+      pricingFlash.flashSaved();
     } catch (error) {
       console.error('Error saving settings:', error);
     } finally {
@@ -227,14 +262,9 @@ export default function Settings() {
         tagAggregation,
       };
 
-      const updatedPricing: Pricing = {
-        ...pricing,
-        discountConfig,
-        updatedAt: new Date().toISOString(),
-      };
+      await updatePricing({ discountConfig });
 
-      await savePricing(updatedPricing);
-      setPricing(updatedPricing);
+      discountFlash.flashSaved();
     } catch (error) {
       console.error('Error saving discount settings:', error);
     } finally {
@@ -258,6 +288,66 @@ export default function Settings() {
 
   const handleRemoveTagDiscount = (id: string) => {
     setTagDiscounts(tagDiscounts.filter(td => td.id !== id));
+  };
+
+  // Auto-add reminder rule handlers
+  const handleAddAutoReminderRule = () => {
+    setAutoReminderRules(rules => [
+      ...rules,
+      {
+        id: generateId(),
+        subject: '',
+        templateId: '',
+        daysAfterEstimate: (parseInt(form.defaultReminderDays) || 7).toString(),
+        time: '',
+        enabled: true,
+      },
+    ]);
+  };
+
+  const handleUpdateAutoReminderRule = (id: string, patch: Partial<AutoReminderRuleDraft>) => {
+    setAutoReminderRules(rules => rules.map(rule => (rule.id === id ? { ...rule, ...patch } : rule)));
+  };
+
+  const handleRemoveAutoReminderRule = (id: string) => {
+    setAutoReminderRules(rules => rules.filter(rule => rule.id !== id));
+  };
+
+  const handleSaveAutoReminders = async () => {
+    const cleaned: AutoReminderRule[] = [];
+    for (const draft of autoReminderRules) {
+      const subject = draft.subject.trim();
+      const template = commTemplates.find(t => t.id === draft.templateId);
+      if (!subject && !template) {
+        alert('Each auto-add reminder needs a subject or a template.');
+        return;
+      }
+      const days = parseInt(draft.daysAfterEstimate);
+      if (isNaN(days) || days < 0) {
+        alert(`Enter a valid number of days for "${subject || template?.name}".`);
+        return;
+      }
+      cleaned.push({
+        id: draft.id,
+        subject: subject || template?.name || '',
+        templateId: template ? template.id : undefined,
+        daysAfterEstimate: days,
+        time: draft.time || undefined,
+        enabled: draft.enabled,
+      });
+    }
+
+    setSavingAutoReminders(true);
+    try {
+      await updatePricing({ autoReminderRules: cleaned });
+      setAutoReminderRules(cleaned.map(toRuleDraft));
+      autoReminderFlash.flashSaved();
+    } catch (error) {
+      console.error('Error saving auto-add reminders:', error);
+      alert('Error saving auto-add reminders. Please try again.');
+    } finally {
+      setSavingAutoReminders(false);
+    }
   };
 
   const resetColorForm = () => {
@@ -315,7 +405,7 @@ export default function Settings() {
       }
 
       setBaseCoatColors(await getAllBaseCoatColors());
-      resetColorForm();
+      colorFlash.flashSaved(resetColorForm);
     } catch (error) {
       console.error('Error saving base coat color:', error);
       alert('Error saving base coat color. Please try again.');
@@ -355,9 +445,11 @@ export default function Settings() {
         await addCommTemplate({ id: generateId(), name, body, createdAt: now, updatedAt: now });
       }
       setCommTemplates(await getAllCommTemplates());
-      setShowTemplateForm(false);
-      setEditingTemplateId(null);
-      setTemplateForm({ name: '', body: '' });
+      templateFlash.flashSaved(() => {
+        setShowTemplateForm(false);
+        setEditingTemplateId(null);
+        setTemplateForm({ name: '', body: '' });
+      });
     } catch (error) {
       console.error('Error saving template:', error);
       alert('Error saving template. Please try again.');
@@ -580,13 +672,14 @@ export default function Settings() {
             <p className="text-xs text-slate-500 mt-1">Gas heater cost applies only when install date falls in selected months.</p>
           </div>
           <div className="pt-4">
-            <button
+            <SaveButton
               type="submit"
-              disabled={saving}
-              className="px-6 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors disabled:opacity-50"
-            >
-              {saving ? 'Saving...' : 'Save Settings'}
-            </button>
+              saving={saving}
+              saved={pricingFlash.saved}
+              label="Save Settings"
+              icon={null}
+              className="px-6 py-2 rounded-lg font-semibold disabled:opacity-50"
+            />
           </div>
         </form>
       </div>
@@ -772,14 +865,15 @@ export default function Settings() {
         )}
 
         <div className="pt-5">
-          <button
+          <SaveButton
             type="button"
             onClick={handleSaveDiscount}
-            disabled={savingDiscount}
-            className="px-6 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors disabled:opacity-50"
-          >
-            {savingDiscount ? 'Saving...' : 'Save Discounts'}
-          </button>
+            saving={savingDiscount}
+            saved={discountFlash.saved}
+            label="Save Discounts"
+            icon={null}
+            className="px-6 py-2 rounded-lg font-semibold disabled:opacity-50"
+          />
         </div>
       </div>
 
@@ -812,13 +906,12 @@ export default function Settings() {
               autoFocus
             />
             <div className="flex gap-3 pt-4">
-              <button
+              <SaveButton
                 onClick={handleSaveColor}
-                className="flex items-center gap-2 px-5 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors"
-              >
-                <Save size={16} />
-                <span>Save</span>
-              </button>
+                saved={colorFlash.saved}
+                label="Save"
+                className="px-5 py-2 rounded-lg font-semibold"
+              />
               <button
                 onClick={resetColorForm}
                 className="flex items-center gap-2 px-5 py-2 bg-slate-200 text-slate-900 rounded-lg font-semibold hover:bg-slate-300 transition-colors"
@@ -916,13 +1009,12 @@ export default function Settings() {
               />
             </div>
             <div className="flex gap-3">
-              <button
+              <SaveButton
                 onClick={handleSaveTemplate}
-                className="flex items-center gap-2 px-5 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors"
-              >
-                <Save size={16} />
-                <span>Save</span>
-              </button>
+                saved={templateFlash.saved}
+                label="Save"
+                className="px-5 py-2 rounded-lg font-semibold"
+              />
               <button
                 onClick={() => { setShowTemplateForm(false); setEditingTemplateId(null); setTemplateForm({ name: '', body: '' }); }}
                 className="flex items-center gap-2 px-5 py-2 bg-slate-200 text-slate-900 rounded-lg font-semibold hover:bg-slate-300 transition-colors"
@@ -998,14 +1090,130 @@ export default function Settings() {
           </div>
         </div>
         <div className="pt-4">
-          <button
+          <SaveButton
             type="button"
-            disabled={saving}
-            onClick={handleSavePricing}
-            className="px-6 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors disabled:opacity-50"
+            saving={saving}
+            saved={pricingFlash.saved}
+            onClick={() => handleSavePricing()}
+            label="Save Settings"
+            icon={null}
+            className="px-6 py-2 rounded-lg font-semibold disabled:opacity-50"
+          />
+        </div>
+      </div>
+
+      {/* Auto-Add Reminders */}
+      <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900">Auto-Add Reminders</h3>
+            <p className="text-sm text-slate-600 mt-1">
+              These reminders are added automatically to every new job, scheduled a set number of days from the job's estimate date. Pick a template to prefill the reminder message.
+            </p>
+          </div>
+          <button
+            onClick={handleAddAutoReminderRule}
+            className="flex items-center gap-2 px-4 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors shrink-0"
           >
-            {saving ? 'Saving...' : 'Save Settings'}
+            <Plus size={18} />
+            <span>Add Reminder</span>
           </button>
+        </div>
+
+        {commTemplates.length === 0 && (
+          <p className="text-xs text-slate-500 mb-4">
+            Tip: add a Communication Template above to prefill each auto-added reminder's message.
+          </p>
+        )}
+
+        {autoReminderRules.length === 0 ? (
+          <p className="text-sm text-slate-500 italic">No auto-add reminders configured. New jobs will not get reminders automatically.</p>
+        ) : (
+          <div className="space-y-3">
+            {autoReminderRules.map((rule) => (
+              <div key={rule.id} className="border border-slate-200 rounded-lg p-4">
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
+                  <div className="md:col-span-4">
+                    <label className="block text-xs font-semibold text-slate-900 mb-1">Subject</label>
+                    <input
+                      type="text"
+                      value={rule.subject}
+                      onChange={(e) => handleUpdateAutoReminderRule(rule.id, { subject: e.target.value })}
+                      placeholder="e.g. Follow-up call"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime text-sm"
+                    />
+                  </div>
+                  <div className="md:col-span-3">
+                    <label className="block text-xs font-semibold text-slate-900 mb-1">Template</label>
+                    <select
+                      value={rule.templateId}
+                      onChange={(e) => handleUpdateAutoReminderRule(rule.id, { templateId: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime text-sm"
+                    >
+                      <option value="">— None —</option>
+                      {commTemplates.map((t) => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-semibold text-slate-900 mb-1">Days After Estimate</label>
+                    <input
+                      type="number"
+                      step="1"
+                      min="0"
+                      value={rule.daysAfterEstimate}
+                      onChange={(e) => handleUpdateAutoReminderRule(rule.id, { daysAfterEstimate: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime text-sm"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-semibold text-slate-900 mb-1">Time</label>
+                    <input
+                      type="time"
+                      value={rule.time}
+                      onChange={(e) => handleUpdateAutoReminderRule(rule.id, { time: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime text-sm"
+                    />
+                    <p className="text-xs text-slate-500 mt-1">Blank uses {form.defaultReminderTime || '05:00'}.</p>
+                  </div>
+                  <div className="md:col-span-1 flex items-center justify-between md:justify-end gap-2 md:pt-6">
+                    <label
+                      className="flex items-center gap-2 text-xs font-semibold text-slate-900"
+                      title={rule.enabled ? 'Active' : 'Paused'}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={rule.enabled}
+                        onChange={(e) => handleUpdateAutoReminderRule(rule.id, { enabled: e.target.checked })}
+                        className="w-4 h-4 text-gf-lime focus:ring-gf-lime border-slate-300 rounded"
+                      />
+                      <span className="md:hidden">Active</span>
+                    </label>
+                    <button
+                      onClick={() => handleRemoveAutoReminderRule(rule.id)}
+                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      title="Remove"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="pt-4 flex items-center gap-3">
+          <SaveButton
+            type="button"
+            saving={savingAutoReminders}
+            saved={autoReminderFlash.saved}
+            onClick={handleSaveAutoReminders}
+            label="Save Auto-Add Reminders"
+            icon={null}
+            className="px-6 py-2 rounded-lg font-semibold disabled:opacity-50"
+          />
         </div>
       </div>
     </div>

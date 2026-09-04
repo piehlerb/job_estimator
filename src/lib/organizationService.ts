@@ -94,7 +94,12 @@ export async function getMyOrganization(): Promise<{
     .eq('user_id', user.id)
     .maybeSingle();
 
-  if (error || !data) return null;
+  // A failed lookup is NOT the same as "no membership". Returning null here
+  // used to make the app treat a transient network/RLS failure as a personal
+  // (org-less) account, which stamped org_id = NULL on everything pushed that
+  // session and hid those records from the user's other devices.
+  if (error) throw new Error(`Failed to load organization: ${error.message}`);
+  if (!data) return null;
 
   const orgRow = (data as any).organizations;
   if (!orgRow) return null;

@@ -1,5 +1,6 @@
 import { Job, JobStatus } from '../types/index.js';
-import { NH_ME_ZIP_CENTROIDS, ZipCentroid } from './nhMeZipRegistry.js';
+import { NH_ME_ZIP_CENTROIDS, ZipCentroid, ZipRecord } from './nhMeZipRegistry.js';
+import { toLocalDateString } from './dateUtils.js';
 
 export type ZipExclusionReason = 'missing' | 'invalid-format' | 'out-of-scope-or-unrecognized';
 export type ZipDateField = 'estimate' | 'install';
@@ -17,13 +18,15 @@ export interface ZipGeographyReport {
   excluded: Record<ZipExclusionReason, number>;
 }
 
+// Resolves to the full registry record, not just the map-facing centroid: the
+// address parser needs `county` to tell a postal-city alias from a real conflict.
 export type ZipAddressResolution =
-  | { zip: string; centroid: ZipCentroid }
+  | { zip: string; centroid: ZipRecord }
   | { reason: ZipExclusionReason };
 
 type ZipDatedJob = Pick<Job, 'estimateDate' | 'installDate' | 'createdAt'>;
 type ZipStatusJob = Pick<Job, 'status'>;
-type ZipAggregateJob = Pick<Job, 'customerAddress' | 'status' | 'groupId' | 'groupType' | 'isPrimaryEstimate'>;
+type ZipAggregateJob = Pick<Job, 'customerAddress' | 'customerZip' | 'status' | 'groupId' | 'groupType' | 'isPrimaryEstimate'>;
 
 // A US ZIP token must be isolated from letters/digits and is either 5 digits or ZIP+4.
 // This deliberately does not infer a state from numeric prefixes or address text.
@@ -70,11 +73,16 @@ export function applyZipToAddress(address: string | undefined, zip: string): str
 
 function dateOnly(value?: string): string | null {
   if (!value) return null;
-  const isoDate = value.match(/^\d{4}-\d{2}-\d{2}/)?.[0];
-  if (isoDate) return isoDate;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
 
-  const timestamp = Date.parse(value);
-  return Number.isNaN(timestamp) ? null : new Date(timestamp).toISOString().slice(0, 10);
+  // Date-only fields (installDate, estimateDate) already hold a local calendar day.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+
+  // Anything with a time component (createdAt) is a UTC instant, so slicing its
+  // ISO prefix would bucket evening jobs into the next day. Use the local day.
+  const timestamp = Date.parse(trimmed);
+  return Number.isNaN(timestamp) ? null : toLocalDateString(new Date(timestamp));
 }
 
 export function zipReportJobDate(job: ZipDatedJob, field: ZipDateField): string | null {
@@ -144,6 +152,23 @@ export function countZipReportJobs(jobs: readonly ZipAggregateJob[]): number {
   return collapseAlternativeJobs(jobs).length;
 }
 
+/**
+ * Prefer the job's structured ZIP over re-parsing the free-text address.
+ *
+ * Once a ZIP has been confirmed on the cleanup page it is more reliable than
+ * whatever the raw string happens to say, and it means work done there actually
+ * shows up on the map — otherwise a job whose ZIP was filled would still be
+ * excluded, because the raw address it was filled from never mentioned one.
+ */
+export function resolveJobZip(job: ZipAggregateJob): ZipAddressResolution {
+  const structured = job.customerZip?.trim();
+  if (structured) {
+    const centroid = NH_ME_ZIP_CENTROIDS[structured];
+    if (centroid) return { zip: structured, centroid };
+  }
+  return resolveNhMeZip(job.customerAddress);
+}
+
 export function aggregateJobsByZip(jobs: readonly ZipAggregateJob[]): ZipGeographyReport {
   const aggregates = new Map<string, ZipAggregate>();
   const excluded: Record<ZipExclusionReason, number> = {
@@ -153,7 +178,7 @@ export function aggregateJobsByZip(jobs: readonly ZipAggregateJob[]): ZipGeograp
   };
 
   for (const job of collapseAlternativeJobs(jobs)) {
-    const resolution = resolveNhMeZip(job.customerAddress);
+    const resolution = resolveJobZip(job);
     if ('reason' in resolution) {
       excluded[resolution.reason] += 1;
       continue;

@@ -1,0 +1,37 @@
+# Supabase CLI project configuration.
+#
+# Deliberately minimal. The CLI applies its own defaults for every section that
+# is absent, so this file contains only settings this project needs to pin.
+# Running `supabase init` would generate a ~400-line file describing local
+# development ports, auth providers and Postgres versions that do not reflect
+# the hosted project — noise that would go stale without anyone noticing.
+
+# Local identifier only, used to name local dev containers. This is NOT the
+# hosted project ref (that is passed with --project-ref, or stored by
+# `supabase link`).
+project_id = "job_estimator"
+
+# ---------------------------------------------------------------------------
+# Edge Functions
+# ---------------------------------------------------------------------------
+
+[functions.ghl-webhook]
+enabled = true
+
+# DO NOT REMOVE, and do not change to true.
+#
+# verify_jwt defaults to TRUE. With it on, Supabase's gateway rejects any
+# request lacking a valid Supabase JWT before the function ever runs.
+#
+# GoHighLevel is an outside service, not a logged-in user of this app: it has no
+# Supabase account and sends no JWT. The function authenticates callers itself,
+# by hashing the x-ghl-webhook-secret header and comparing it against
+# ghl_webhook_sources.secret_hash (see functions/ghl-webhook/index.ts).
+#
+# So JWT verification must stay off for this one function. If it is ever turned
+# on, every GHL webhook silently starts receiving 401 from the gateway: the
+# deploy still reports success, the app keeps working because the app does send
+# a JWT, and new leads simply stop arriving with nothing anywhere looking
+# broken. This line is the reason nobody has to remember `--no-verify-jwt` on
+# every deploy.
+verify_jwt = false

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Save, X } from 'lucide-react';
+import { Plus, Edit2, Trash2, X } from 'lucide-react';
 import {
   getAllChipBlends,
   addChipBlend,
@@ -10,6 +10,8 @@ import {
   ChipBlend,
 } from '../lib/db';
 import { ChipSystem, BaseCoatColor } from '../types';
+import SaveButton from '../components/SaveButton';
+import { useSaveFlash } from '../hooks/useSaveFlash';
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -27,6 +29,8 @@ export default function ChipBlends() {
     systemIds: [] as string[],
     baseCoatColorIds: [] as string[],
   });
+  const [saving, setSaving] = useState(false);
+  const { saved, flashSaved } = useSaveFlash();
 
   useEffect(() => {
     loadData();
@@ -90,6 +94,7 @@ export default function ChipBlends() {
       return;
     }
 
+    setSaving(true);
     try {
       const timestamp = new Date().toISOString();
 
@@ -118,10 +123,12 @@ export default function ChipBlends() {
       }
 
       await loadData();
-      closeModal();
+      flashSaved(closeModal);
     } catch (error) {
       console.error('Error saving blend:', error);
       alert('Error saving blend. Please try again.');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -356,16 +363,15 @@ export default function ChipBlends() {
                 >
                   Cancel
                 </button>
-                <button
+                <SaveButton
                   type="button"
                   onClick={handleSave}
-                  className="px-4 py-2 text-sm font-medium text-white bg-gf-lime rounded-lg hover:bg-gf-dark-green transition-colors"
-                >
-                  <span className="inline-flex items-center gap-2">
-                    <Save size={14} />
-                    {isAdding ? 'Add Blend' : 'Save Changes'}
-                  </span>
-                </button>
+                  saving={saving}
+                  saved={saved}
+                  label={isAdding ? 'Add Blend' : 'Save Changes'}
+                  iconSize={14}
+                  className="px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-50"
+                />
               </div>
             </div>
           </div>

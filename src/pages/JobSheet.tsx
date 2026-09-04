@@ -1,12 +1,63 @@
 import { ArrowLeft, Printer } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { getJob } from '../lib/db';
-import { Job, JobCalculation } from '../types';
+import { Job, JobCalculation, CoatingPart } from '../types';
 import { calculateJobOutputs } from '../lib/calculations';
+import { resolveJobMaterials, ResolvedCoatingLine, ResolvedTintLine } from '../lib/materialAllocation';
 
 interface JobSheetProps {
   jobId: string;
   onBack: () => void;
+}
+
+const PART_LABELS: Record<CoatingPart, string> = {
+  topA: 'Top A',
+  topB: 'Top B',
+  baseA: 'Base A',
+  baseB: 'Base B',
+};
+
+/**
+ * Card label: 'Base B (Grey)', 'Top A (Slow Cure)', 'Base A'. Default variants
+ * (Original/Normal) stay implicit — except on a colorless part split across
+ * flavors, where the variant is the only thing telling the cards apart.
+ */
+function coatingCardLabel(line: ResolvedCoatingLine, splitPart: boolean): string {
+  const isDefaultVariant = line.variant === 'Normal' || line.variant === 'Original';
+  const needsVariant = !isDefaultVariant || (splitPart && !line.color);
+  const detail = [line.variant && needsVariant ? line.variant : null, line.color]
+    .filter(Boolean)
+    .join(' ');
+  return detail ? `${PART_LABELS[line.part]} (${detail})` : PART_LABELS[line.part];
+}
+
+interface MaterialCardProps {
+  label: string;
+  value: string;
+  unit: string;
+  overridden?: boolean;
+}
+
+function MaterialCard({ label, value, unit, overridden }: MaterialCardProps) {
+  if (overridden) {
+    return (
+      <div className="bg-amber-50 border-2 border-amber-400 p-3 rounded-lg text-center">
+        <span className="text-xs text-amber-900 font-semibold block">{label}</span>
+        <span className="text-xl font-bold text-amber-900">{value}</span>
+        <span className="text-xs text-amber-900 block">{unit}</span>
+        <span className="mt-1 inline-block px-1.5 py-0.5 rounded bg-amber-200 text-amber-900 text-[10px] font-bold uppercase tracking-wide">
+          Override
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div className="bg-green-50 p-3 rounded-lg text-center">
+      <span className="text-xs text-gf-dark-green block">{label}</span>
+      <span className="text-xl font-bold text-gf-dark-green">{value}</span>
+      <span className="text-xs text-gf-dark-green block">{unit}</span>
+    </div>
+  );
 }
 
 export default function JobSheet({ jobId, onBack }: JobSheetProps) {
@@ -225,48 +276,80 @@ export default function JobSheet({ jobId, onBack }: JobSheetProps) {
 
             {/* Right Column - Materials */}
             <div>
-              <h3 className="text-sm font-semibold text-slate-900 mb-2 border-b border-slate-200 pb-1">Materials Needed</h3>
               {calculation && (() => {
-                const bg = calculation.baseGallons;
-                const tg = calculation.topGallons;
-                const baseA = bg / 3;
-                const baseBLabel = job.baseColor || null;
-                const baseB = baseBLabel ? (bg * 2) / 3 : 0;
-                const topA = tg * 0.5;
-                const topB = tg * 0.5;
+                const allocationInput = {
+                  baseGallons: calculation.baseGallons,
+                  topGallons: calculation.topGallons,
+                  baseColor: job.baseColor,
+                  tintColor: job.tintColor,
+                  includeBasecoatTint: job.includeBasecoatTint,
+                  includeTopcoatTint: job.includeTopcoatTint,
+                };
+                // Resolve twice: once as saved, once with no override, so any line
+                // that differs from the standard split can be called out.
+                const materials = resolveJobMaterials({ ...allocationInput, override: job.materialAllocation });
+                const standard = resolveJobMaterials(allocationInput);
+
+                // A line is off-standard when the default split has no line with
+                // that SKU key, or has it at a different quantity.
+                const standardCoating = new Map(standard.coating.map((l) => [l.key, l.gallons]));
+                const standardTint = new Map(standard.tint.map((l) => [l.key, l.oz]));
+                const coatingOverridden = (line: ResolvedCoatingLine) =>
+                  Math.abs((standardCoating.get(line.key) ?? 0) - line.gallons) > 0.005;
+                const tintOverridden = (line: ResolvedTintLine) =>
+                  Math.abs((standardTint.get(line.key) ?? 0) - line.oz) > 0.05;
+                const anyOverridden =
+                  materials.coating.some(coatingOverridden) ||
+                  materials.tint.some(tintOverridden) ||
+                  // a SKU the standard split needs but this job no longer draws
+                  standard.coating.some((l) => !materials.coating.some((m) => m.key === l.key)) ||
+                  standard.tint.some((l) => !materials.tint.some((m) => m.key === l.key));
+
+                const partLineCount = materials.coating.reduce<Record<string, number>>((acc, l) => {
+                  acc[l.part] = (acc[l.part] || 0) + 1;
+                  return acc;
+                }, {});
+
                 return (
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="bg-green-50 p-3 rounded-lg text-center">
-                      <span className="text-xs text-gf-dark-green block">Base A</span>
-                      <span className="text-xl font-bold text-gf-dark-green">{baseA.toFixed(1)}</span>
-                      <span className="text-xs text-gf-dark-green block">gal / {(baseA * 128).toFixed(0)} oz</span>
+                  <>
+                    <div className="flex items-center gap-2 mb-2 border-b border-slate-200 pb-1">
+                      <h3 className="text-sm font-semibold text-slate-900">Materials Needed</h3>
+                      {anyOverridden && (
+                        <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-400 text-[10px] font-bold uppercase tracking-wide">
+                          Custom Allocation
+                        </span>
+                      )}
                     </div>
-                    <div className="bg-green-50 p-3 rounded-lg text-center">
-                      <span className="text-xs text-gf-dark-green block">Base B{baseBLabel ? ` (${baseBLabel})` : ''}</span>
-                      <span className="text-xl font-bold text-gf-dark-green">{baseB.toFixed(1)}</span>
-                      <span className="text-xs text-gf-dark-green block">gal / {(baseB * 128).toFixed(0)} oz</span>
+                    <div className="grid grid-cols-2 gap-2">
+                      {materials.coating.map((line) => (
+                        <MaterialCard
+                          key={line.key}
+                          label={coatingCardLabel(line, (partLineCount[line.part] || 0) > 1)}
+                          value={line.gallons.toFixed(1)}
+                          unit={`gal / ${(line.gallons * 128).toFixed(0)} oz`}
+                          overridden={coatingOverridden(line)}
+                        />
+                      ))}
+                      {materials.tint.map((line) => (
+                        <MaterialCard
+                          key={line.key}
+                          label={`Tint (${line.color})`}
+                          value={line.oz.toFixed(1)}
+                          unit="oz"
+                          overridden={tintOverridden(line)}
+                        />
+                      ))}
+                      <MaterialCard label="Chip" value={String(calculation.chipNeeded)} unit="boxes" />
+                      <MaterialCard
+                        label="Crack Fill"
+                        value={calculation.crackFillGallons.toFixed(1)}
+                        unit={`gal / ${(calculation.crackFillGallons * 128).toFixed(0)} oz`}
+                      />
                     </div>
-                    <div className="bg-green-50 p-3 rounded-lg text-center">
-                      <span className="text-xs text-gf-dark-green block">Top A</span>
-                      <span className="text-xl font-bold text-gf-dark-green">{topA.toFixed(1)}</span>
-                      <span className="text-xs text-gf-dark-green block">gal / {(topA * 128).toFixed(0)} oz</span>
-                    </div>
-                    <div className="bg-green-50 p-3 rounded-lg text-center">
-                      <span className="text-xs text-gf-dark-green block">Top B</span>
-                      <span className="text-xl font-bold text-gf-dark-green">{topB.toFixed(1)}</span>
-                      <span className="text-xs text-gf-dark-green block">gal / {(topB * 128).toFixed(0)} oz</span>
-                    </div>
-                    <div className="bg-green-50 p-3 rounded-lg text-center">
-                      <span className="text-xs text-gf-dark-green block">Chip</span>
-                      <span className="text-xl font-bold text-gf-dark-green">{calculation.chipNeeded}</span>
-                      <span className="text-xs text-gf-dark-green block">boxes</span>
-                    </div>
-                    <div className="bg-green-50 p-3 rounded-lg text-center">
-                      <span className="text-xs text-gf-dark-green block">Crack Fill</span>
-                      <span className="text-xl font-bold text-gf-dark-green">{calculation.crackFillGallons.toFixed(1)}</span>
-                      <span className="text-xs text-gf-dark-green block">gal / {(calculation.crackFillGallons * 128).toFixed(0)} oz</span>
-                    </div>
-                  </div>
+                    {materials.warnings.map((warning, idx) => (
+                      <p key={idx} className="text-xs text-amber-700 mt-2">{warning}</p>
+                    ))}
+                  </>
                 );
               })()}
             </div>
@@ -315,6 +398,10 @@ export default function JobSheet({ jobId, onBack }: JobSheetProps) {
             print-color-adjust: exact !important;
           }
           .bg-slate-50, .bg-green-50, .bg-yellow-50 {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .bg-amber-50, .bg-amber-100, .bg-amber-200, .border-amber-400 {
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }

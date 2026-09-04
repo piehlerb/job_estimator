@@ -2,6 +2,8 @@ import { Plus, Edit2, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { getAllProducts, addProduct, updateProduct, deleteProduct } from '../lib/db';
 import { Product } from '../types';
+import SaveButton from '../components/SaveButton';
+import { useSaveFlash } from '../hooks/useSaveFlash';
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -22,6 +24,7 @@ export default function Products() {
     description: '',
   });
   const [saving, setSaving] = useState(false);
+  const { saved, flashSaved } = useSaveFlash();
 
   useEffect(() => {
     loadData();
@@ -86,9 +89,11 @@ export default function Products() {
       }
 
       await loadData();
-      setShowForm(false);
-      setEditingProduct(null);
-      setFormData({ name: '', cost: '', price: '', description: '' });
+      flashSaved(() => {
+        setShowForm(false);
+        setEditingProduct(null);
+        setFormData({ name: '', cost: '', price: '', description: '' });
+      });
     } catch (error) {
       console.error('Error saving product:', error);
     } finally {
@@ -324,13 +329,15 @@ export default function Products() {
                 >
                   Cancel
                 </button>
-                <button
+                <SaveButton
                   type="submit"
-                  disabled={saving || !formData.name.trim()}
-                  className="px-4 py-2 text-sm font-medium text-white bg-gf-lime rounded-lg hover:bg-gf-dark-green transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {saving ? 'Saving...' : editingProduct ? 'Save Changes' : 'Add Product'}
-                </button>
+                  saving={saving}
+                  saved={saved}
+                  disabled={!formData.name.trim()}
+                  label={editingProduct ? 'Save Changes' : 'Add Product'}
+                  icon={null}
+                  className="px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-50"
+                />
               </div>
             </form>
           </div>

@@ -1,15 +1,17 @@
 import { useState, useEffect } from 'react';
 import {
   getCosts,
-  saveCosts,
-  getDefaultCosts,
+  updateCosts,
 } from '../lib/db';
-import { Costs as CostsType } from '../types';
+import SaveButton from '../components/SaveButton';
+import { useSaveFlash } from '../hooks/useSaveFlash';
 
 export default function Costs() {
-  const [costs, setCosts] = useState<CostsType>(getDefaultCosts());
+  // The stored record is deliberately not held in state: saves go through
+  // updateCosts, which re-reads it, so there is no snapshot to go stale.
   const [loading, setLoading] = useState(true);
   const [costsSaving, setCostsSaving] = useState(false);
+  const { saved, flashSaved } = useSaveFlash();
 
   const [costsForm, setCostsForm] = useState({
     baseCostPerGal: '',
@@ -34,12 +36,6 @@ export default function Costs() {
     const storedCosts = await getCosts();
 
     if (storedCosts) {
-      // Merge with defaults to ensure new fields have values
-      const mergedCosts = {
-        ...getDefaultCosts(),
-        ...storedCosts,
-      };
-      setCosts(mergedCosts);
       setCostsForm({
         baseCostPerGal: storedCosts.baseCostPerGal.toString(),
         topCostPerGal: storedCosts.topCostPerGal.toString(),
@@ -63,8 +59,8 @@ export default function Costs() {
     setCostsSaving(true);
 
     try {
-      const updatedCosts: CostsType = {
-        ...costs,
+      // Only the fields this form owns — see updateCosts.
+      await updateCosts({
         baseCostPerGal: parseFloat(costsForm.baseCostPerGal) || 0,
         topCostPerGal: parseFloat(costsForm.topCostPerGal) || 0,
         crackFillCost: parseFloat(costsForm.crackFillCost) || 0,
@@ -76,11 +72,9 @@ export default function Costs() {
         abrasionResistanceCostPerGal: parseFloat(costsForm.abrasionResistanceCostPerGal) || 0,
         moistureMitigationCostPerGal: parseFloat(costsForm.moistureMitigationCostPerGal) || 0,
         moistureMitigationSpreadRate: parseFloat(costsForm.moistureMitigationSpreadRate) || 200,
-        updatedAt: new Date().toISOString(),
-      };
+      });
 
-      await saveCosts(updatedCosts);
-      setCosts(updatedCosts);
+      flashSaved();
     } catch (error) {
       console.error('Error saving costs:', error);
     } finally {
@@ -238,13 +232,14 @@ export default function Costs() {
             </div>
           </div>
           <div className="pt-4">
-            <button
+            <SaveButton
               type="submit"
-              disabled={costsSaving}
-              className="px-6 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors disabled:opacity-50"
-            >
-              {costsSaving ? 'Saving...' : 'Save Costs'}
-            </button>
+              saving={costsSaving}
+              saved={saved}
+              label="Save Costs"
+              icon={null}
+              className="px-6 py-2 rounded-lg font-semibold disabled:opacity-50"
+            />
           </div>
         </form>
       </div>

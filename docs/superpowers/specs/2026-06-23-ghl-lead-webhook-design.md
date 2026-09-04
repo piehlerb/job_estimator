@@ -209,6 +209,8 @@ If an appointment event arrives before a lead-created event, create or update th
 
 If a payload is missing required identity fields or appointment details, keep the raw event and mark it `needs_review`.
 
+Every inbound call opens a GHL contact, so a `lead.created` event that names nobody is almost always a spam call. When such an event would create a brand new lead, keep the raw event, mark it `ignored`, and write no `leads` row. The rule is deliberately narrow: appointment events and events for a lead that already exists are processed as usual, whatever name they carry. A first name counts as present when `first_name` is set, or when the leading word of the full name contains letters and is not a placeholder such as `Unknown` or `N/A`.
+
 ## App Behavior
 
 Add a Leads page with:

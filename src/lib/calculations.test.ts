@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import type { ActualDaySchedule, Costs, Pricing } from '../types/index.js';
-import { calculateActualCosts, calculateJobOutputs } from './calculations.js';
+import type { ActualDaySchedule, Costs, Laborer, Pricing } from '../types/index.js';
+import {
+  calculateActualCosts,
+  calculateJobOutputs,
+  getActualCrewHours,
+  getActualDayDurationHours,
+  getActualLaborerHours,
+} from './calculations.js';
 
 const schedule: ActualDaySchedule[] = [
   { day: 1, hours: 8, laborerIds: [] },
@@ -102,5 +108,116 @@ describe('actual cost calculations', () => {
 
     assert.equal(actuals.actualMoistureMitigationCost, 390);
     assert.equal(actuals.actualTotalCosts, 390);
+  });
+});
+
+const laborers: Laborer[] = [
+  { id: 'a', name: 'Ann', fullyLoadedRate: 30, isActive: true, createdAt: '', updatedAt: '' },
+  { id: 'b', name: 'Bob', fullyLoadedRate: 20, isActive: true, createdAt: '', updatedAt: '' },
+];
+
+function actualsFor(actualSchedule: ActualDaySchedule[], installDays: number, travelDistance = 0) {
+  return calculateActualCosts(
+    {
+      actualSchedule,
+      actualBaseCoatGallons: 0,
+      actualTopCoatGallons: 0,
+      actualCyclo1Gallons: 0,
+      actualTintOz: 0,
+      actualChipBoxes: 0,
+      actualCrackRepairOz: 0,
+      actualMoistureMitigationGallons: 0,
+      chipBoxCost: 0,
+      totalPrice: 0,
+      installDays,
+      installDate: '2026-06-12',
+      travelDistance,
+      disableGasHeater: true,
+    },
+    costs,
+    pricing,
+    laborers
+  );
+}
+
+describe('per-laborer actual hours', () => {
+  test('falls back to the day hours when a laborer has no override', () => {
+    const day: ActualDaySchedule = { day: 1, hours: 8, laborerIds: ['a', 'b'], laborerHours: [{ laborerId: 'b', hours: 6 }] };
+    assert.equal(getActualLaborerHours(day, 'a'), 8);
+    assert.equal(getActualLaborerHours(day, 'b'), 6);
+    assert.equal(getActualCrewHours([day]), 14);
+  });
+
+  test('tolerates a malformed laborerHours value instead of throwing', () => {
+    const day = { day: 1, hours: 8, laborerIds: ['a'], laborerHours: { a: 4 } } as unknown as ActualDaySchedule;
+    assert.equal(getActualLaborerHours(day, 'a'), 8);
+    assert.equal(getActualCrewHours([day]), 8);
+  });
+
+  test('day duration follows the longest shift on site', () => {
+    assert.equal(getActualDayDurationHours({ day: 1, hours: 8, laborerIds: [] }), 8);
+    assert.equal(
+      getActualDayDurationHours({ day: 1, hours: 8, laborerIds: ['a', 'b'], laborerHours: [{ laborerId: 'a', hours: 10 }] }),
+      10
+    );
+    assert.equal(
+      getActualDayDurationHours({ day: 1, hours: 8, laborerIds: ['a', 'b'], laborerHours: [{ laborerId: 'a', hours: 4 }, { laborerId: 'b', hours: 5 }] }),
+      5
+    );
+  });
+
+  test('labor cost charges each laborer their own hours', () => {
+    const actuals = actualsFor([{ day: 1, hours: 8, laborerIds: ['a', 'b'], laborerHours: [{ laborerId: 'b', hours: 6 }] }], 1);
+    // Ann 8h @ $30 + Bob 6h @ $20
+    assert.equal(actuals.actualLaborCost, 360);
+    assert.equal(actuals.actualTotalHours, 8);
+  });
+
+  test('unchanged behaviour when no overrides are present', () => {
+    const actuals = actualsFor([{ day: 1, hours: 8, laborerIds: ['a', 'b'] }], 1);
+    assert.equal(actuals.actualLaborCost, 400);
+    assert.equal(actuals.actualTotalHours, 8);
+  });
+});
+
+describe('actual day count independent of the plan', () => {
+  test('travel gas follows the actual number of days, not the planned days', () => {
+    const gasCosts: Costs = { ...costs, gasCost: 4 };
+    const run = (actualSchedule: ActualDaySchedule[], installDays: number) =>
+      calculateActualCosts(
+        {
+          actualSchedule,
+          actualBaseCoatGallons: 0,
+          actualTopCoatGallons: 0,
+          actualCyclo1Gallons: 0,
+          actualTintOz: 0,
+          actualChipBoxes: 0,
+          actualCrackRepairOz: 0,
+          actualMoistureMitigationGallons: 0,
+          chipBoxCost: 0,
+          totalPrice: 0,
+          installDays,
+          installDate: '2026-06-12',
+          travelDistance: 25,
+          disableGasHeater: true,
+        },
+        gasCosts,
+        pricing,
+        laborers
+      );
+
+    // 50 round-trip miles / 10 mpg * $4 = $20 per trip, one trip per day + one extra
+    const planned3ActualOne = run([{ day: 1, hours: 8, laborerIds: [] }], 3);
+    assert.equal(planned3ActualOne.actualGasTravelCost, 40);
+
+    const planned1ActualTwo = run(
+      [
+        { day: 1, hours: 8, laborerIds: [] },
+        { day: 2, hours: 4, laborerIds: [] },
+      ],
+      1
+    );
+    assert.equal(planned1ActualTwo.actualGasTravelCost, 60);
+    assert.equal(planned1ActualTwo.actualTotalHours, 12);
   });
 });

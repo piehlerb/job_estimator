@@ -7,7 +7,6 @@ import {
   Filter,
   Plus,
   RefreshCw,
-  Save,
   Search,
   Trash2,
   X,
@@ -17,6 +16,11 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { deleteLead, getAllJobs, getAllLeadAppointments, getAllLeads, updateLead } from '../lib/db';
 import { LEAD_DISPOSITION_REASONS, LEAD_STAGES } from '../lib/leadPipeline';
 import { applyLeadEdit } from '../lib/leadMutations';
+import type { AddressFieldSet } from '../lib/addressFields';
+import { parseAddress } from '../lib/addressParse';
+import AddressFieldsEditor from '../components/AddressFieldsEditor';
+import SaveButton from '../components/SaveButton';
+import { useSaveFlash } from '../hooks/useSaveFlash';
 import type { Job, Lead, LeadAppointment, LeadDispositionReason, LeadStage } from '../types';
 
 interface LeadsProps {
@@ -37,6 +41,7 @@ type LeadEditForm = {
   stage: LeadStage;
   dispositionReason: LeadDispositionReason | '';
   dispositionNotes: string;
+  addressFields: AddressFieldSet;
 };
 
 const EMPTY_LEAD_FORM: LeadEditForm = {
@@ -48,6 +53,7 @@ const EMPTY_LEAD_FORM: LeadEditForm = {
   campaign: '',
   stage: 'New',
   dispositionReason: '',
+  addressFields: {},
   dispositionNotes: '',
 };
 
@@ -66,6 +72,15 @@ function formFromLead(lead: Lead): LeadEditForm {
     stage: lead.stage,
     dispositionReason: lead.dispositionReason || '',
     dispositionNotes: lead.dispositionNotes || '',
+    addressFields: {
+      street: lead.street,
+      street2: lead.street2,
+      city: lead.city,
+      state: lead.state,
+      zip: lead.zip,
+      tier: lead.addressParseTier,
+      verifiedAt: lead.addressVerifiedAt,
+    },
   };
 }
 
@@ -145,6 +160,7 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
   const [editForm, setEditForm] = useState<LeadEditForm>(EMPTY_LEAD_FORM);
   const [editError, setEditError] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
+  const { saved: editSaved, flashSaved: flashEditSaved } = useSaveFlash();
   const [deletingLeadId, setDeletingLeadId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -304,8 +320,10 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
     try {
       await updateLead(nextLead);
       setLeads((current) => current.map((item) => (item.id === nextLead.id ? nextLead : item)));
-      setEditingLead(null);
-      setEditForm(EMPTY_LEAD_FORM);
+      flashEditSaved(() => {
+        setEditingLead(null);
+        setEditForm(EMPTY_LEAD_FORM);
+      });
     } catch (error) {
       console.error('Error saving lead:', error);
       setEditError('Unable to save this lead. Please try again.');
@@ -676,6 +694,11 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
                     onChange={(event) => setEditForm((current) => ({ ...current, address: event.target.value }))}
                     className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-gf-lime"
                   />
+                  <AddressFieldsEditor
+                    fields={editForm.addressFields}
+                    onChange={(addressFields) => setEditForm((current) => ({ ...current, addressFields }))}
+                    note={editForm.address.trim() ? parseAddress(editForm.address).note : undefined}
+                  />
                 </label>
 
                 <label className="block">
@@ -746,14 +769,13 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
                 >
                   Cancel
                 </button>
-                <button
+                <SaveButton
                   type="submit"
-                  disabled={savingEdit}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-gf-lime px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-gf-dark-green disabled:cursor-not-allowed disabled:bg-slate-400"
-                >
-                  {savingEdit ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}
-                  {savingEdit ? 'Saving...' : 'Save Lead'}
-                </button>
+                  saving={savingEdit}
+                  saved={editSaved}
+                  label="Save Lead"
+                  className="rounded-lg px-4 py-2 text-sm font-semibold disabled:bg-slate-400"
+                />
               </div>
             </form>
           </div>
