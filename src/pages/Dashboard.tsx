@@ -142,6 +142,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
             installDays: job.installDays,
             jobHours: job.jobHours,
             totalPrice: job.totalPrice,
+            products: job.products,
             includeBasecoatTint: job.includeBasecoatTint || false,
             includeTopcoatTint: job.includeTopcoatTint || false,
             antiSlip: job.antiSlip || false,

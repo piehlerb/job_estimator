@@ -1,4 +1,4 @@
-import { ArrowLeft, Save, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, X, Plus, Trash2, Link, Shuffle, Check, Copy, FileText, Search } from 'lucide-react';
+import { ArrowLeft, Save, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, X, Plus, Trash2, Link, Shuffle, Check, Copy, FileText, Search, Package } from 'lucide-react';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   getAllSystems,
@@ -254,7 +254,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
 
   useEffect(() => {
     calculateCosts();
-  }, [formData, systems, costs, pricing, activeLaborers, installSchedule, existingJob]);
+  }, [formData, systems, costs, pricing, activeLaborers, installSchedule, existingJob, jobProducts]);
 
   // Reactively compute actual costs when actuals change
   useEffect(() => {
@@ -275,6 +275,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
     const calc = calculateActualCosts(
       {
         actualSchedule: actualInstallSchedule,
+        products: jobProducts,
         actualBaseCoatGallons: parseFloat(actualMaterials.actualBaseCoatGallons) || 0,
         actualTopCoatGallons: parseFloat(actualMaterials.actualTopCoatGallons) || 0,
         actualCyclo1Gallons: parseFloat(actualMaterials.actualCyclo1Gallons) || 0,
@@ -295,7 +296,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
       laborersToUse
     );
     setActualCalculation(calc);
-  }, [actualInstallSchedule, actualMaterials, formData.totalPrice, formData.installDays, formData.installDate, formData.travelDistance, formData.disableGasHeater, existingJob, activeLaborers, costs, pricing]);
+  }, [actualInstallSchedule, actualMaterials, formData.totalPrice, formData.installDays, formData.installDate, formData.travelDistance, formData.disableGasHeater, existingJob, activeLaborers, costs, pricing, jobProducts]);
 
 
   const productsTotalPrice = useMemo(
@@ -853,6 +854,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
       installDays: parseFloat(formData.installDays) || 1,
       jobHours: parseFloat(formData.jobHours) || 10,
       totalPrice: parseFloat(formData.totalPrice) || 0,
+      products: jobProducts,
       includeBasecoatTint: formData.includeBasecoatTint,
       includeTopcoatTint: formData.includeTopcoatTint,
       antiSlip: formData.antiSlip,
@@ -1362,6 +1364,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
         installDays: job.installDays,
         jobHours: job.jobHours,
         totalPrice: job.totalPrice,
+        products: job.products,
         includeBasecoatTint: job.includeBasecoatTint || false,
         includeTopcoatTint: job.includeTopcoatTint || false,
         antiSlip: job.antiSlip || false,
@@ -3508,7 +3511,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
                     const totalPrice = parseFloat(formData.totalPrice) || 0;
                     const floorFootage = parseFloat(formData.floorFootage) || 0;
                     const effectivePricePerSqft = floorFootage > 0 ? totalPrice / floorFootage : 0;
-                    const actualMargin = totalPrice - calculation.totalCosts - productsTotalCost;
+                    const actualMargin = totalPrice - calculation.totalCosts;
                     const actualMarginPct = totalPrice > 0 ? (actualMargin / totalPrice) * 100 : 0;
                     const minimumMarginBuffer = pricing.minimumMarginBuffer ?? 2000;
                     const selectedSystem = systems.find(s => s.id === formData.system);
@@ -3545,25 +3548,38 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
               </div>
 
               {/* Products (collapsible) */}
-              <div className="rounded-lg border border-slate-200 mb-4 sm:mb-6">
+              <div className="rounded-xl border-2 border-green-300 bg-green-50 mb-4 sm:mb-6 overflow-hidden">
                 <button
                   type="button"
-                  onClick={() => setShowProductsSection(!showProductsSection)}
-                  className="w-full flex items-center justify-between px-3 sm:px-4 py-3 text-left hover:bg-slate-50 transition-colors rounded-lg"
+                  onClick={() => setShowProductsSection(open => !open)}
+                  aria-expanded={showProductsSection}
+                  aria-controls="job-products-panel"
+                  className="w-full flex items-center justify-between gap-3 px-3 sm:px-4 py-4 text-left hover:bg-green-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-green-700"
                 >
-                  <div className="flex items-center gap-2">
-                    <h4 className="text-xs sm:text-sm font-semibold text-slate-700 uppercase tracking-wide">Products</h4>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <Package size={24} className="shrink-0 text-green-700" aria-hidden="true" />
+                    <div>
+                      <span className="text-base font-bold text-green-900">Products</span>
+                      <span className="block text-xs sm:text-sm text-green-800 mt-1">
+                        {jobProducts.length > 0
+                          ? `${formatCurrency(productsTotalPrice)} in products · ${formatCurrency(productsTotalPrice - productsTotalCost)} product profit`
+                          : 'Add products to this job and include their profit in your margin.'}
+                      </span>
+                    </div>
                     {jobProducts.length > 0 && (
-                      <span className="px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-700 rounded-full">
+                      <span className="px-2 py-0.5 text-xs font-bold bg-green-200 text-green-900 rounded-full">
                         {jobProducts.length}
                       </span>
                     )}
                   </div>
-                  {showProductsSection ? <ChevronUp size={16} className="text-slate-400" /> : <ChevronDown size={16} className="text-slate-400" />}
+                  <span className="flex shrink-0 items-center gap-2 text-sm font-semibold text-green-800">
+                    <span className="hidden sm:inline">{showProductsSection ? 'Collapse' : 'Add / edit products'}</span>
+                    {showProductsSection ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                  </span>
                 </button>
 
                 {showProductsSection && (
-                  <div className="px-3 sm:px-4 pb-3 sm:pb-4 border-t border-slate-200">
+                  <div id="job-products-panel" className="px-3 sm:px-4 pb-3 sm:pb-4 border-t border-green-200 bg-white">
                     {/* Product selector */}
                     <div className="flex items-center gap-2 mt-3 mb-3">
                       <select

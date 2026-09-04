@@ -1,6 +1,7 @@
-import { ChipSystem, Costs, Laborer, JobCalculation, InstallDaySchedule, ActualDaySchedule, ActualCosts, Pricing, CoatingRemovalType } from '../types/index.js';
+import { ChipSystem, Costs, Laborer, JobCalculation, InstallDaySchedule, ActualDaySchedule, ActualCosts, Pricing, CoatingRemovalType, JobProduct } from '../types/index.js';
 
 interface JobInputs {
+  products?: JobProduct[];
   floorFootage: number;
   verticalFootage: number;
   crackFillFactor: number;
@@ -244,9 +245,14 @@ export function calculateJobOutputs(
   const royaltyCost = totalPrice * 0.05;
 
   // Total costs
-  const totalCosts = chipCost + baseCost + topCost + consumablesCost + crackFillCost
+  const installationCosts = chipCost + baseCost + topCost + consumablesCost + crackFillCost
     + cyclo1Cost + tintCost + antiSlipCost + abrasionResistanceCost + moistureMitigationMaterialCost
     + gasHeaterCost + gasTravelCost + gasGeneratorCost + royaltyCost + laborCost;
+
+  const productCost = (inputs.products ?? []).reduce((sum, product) => sum + product.quantity * product.unitCost, 0);
+  const productPrice = (inputs.products ?? []).reduce((sum, product) => sum + product.quantity * product.unitPrice, 0);
+  // totalPrice already includes product revenue; subtract product costs exactly once.
+  const totalCosts = installationCosts + productCost;
 
   // Total costs per sqft
   const totalCostsPerSqft = floorFootage > 0 ? totalCosts / floorFootage : 0;
@@ -296,7 +302,7 @@ export function calculateJobOutputs(
   // Suggested floor price per sqft: min of ((totalCosts - suggestedDiscount - suggestedCrackPrice + margin) / floorFootage) and max, with minimum of min
   const minimumMarginBuffer = pricing.minimumMarginBuffer ?? 2000;
   let suggestedFloorPricePerSqft = floorFootage > 0
-    ? Math.max(floorPriceMin, Math.min((totalCosts - suggestedDiscount - suggestedCrackPrice + minimumMarginBuffer) / floorFootage, floorPriceMax))
+    ? Math.max(floorPriceMin, Math.min((installationCosts - suggestedDiscount - suggestedCrackPrice + minimumMarginBuffer) / floorFootage, floorPriceMax))
     : 0;
   let suggestedFloorPrice = suggestedFloorPricePerSqft * floorFootage;
   let suggestedTotalRaw = suggestedFloorPrice + nonFloorComponents;
@@ -312,7 +318,7 @@ export function calculateJobOutputs(
     suggestedTotalRaw = MINIMUM_JOB_PRICE;
   }
 
-  const suggestedTotal = suggestedTotalRaw;
+  const suggestedTotal = suggestedTotalRaw + productPrice;
 
   // Suggested margin
   const suggestedMargin = suggestedTotal - totalCosts;
@@ -368,6 +374,7 @@ export function calculateJobOutputs(
 }
 
 interface ActualCostParams {
+  products?: JobProduct[];
   actualSchedule: ActualDaySchedule[];
   actualBaseCoatGallons: number;
   actualTopCoatGallons: number;
@@ -464,7 +471,8 @@ export function calculateActualCosts(
   const actualTotalCosts = actualChipCost + actualBaseCost + actualTopCost + actualCyclo1Cost
     + actualTintCost + actualCrackRepairCost + actualMoistureMitigationCost
     + actualGasGeneratorCost + actualGasHeaterCost + actualGasTravelCost
-    + actualLaborCost + actualConsumablesCost + actualRoyaltyCost + actualExpenseAdjustment;
+    + actualLaborCost + actualConsumablesCost + actualRoyaltyCost + actualExpenseAdjustment
+    + (params.products ?? []).reduce((sum, product) => sum + product.quantity * product.unitCost, 0);
 
   const actualMargin = totalPrice - actualTotalCosts;
   const actualMarginPct = totalPrice > 0 ? (actualMargin / totalPrice) * 100 : 0;

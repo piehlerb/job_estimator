@@ -36,6 +36,7 @@ export default function JobSheet({ jobId, onBack }: JobSheetProps) {
             installDays: loadedJob.installDays,
             jobHours: loadedJob.jobHours,
             totalPrice: loadedJob.totalPrice,
+            products: loadedJob.products,
             includeBasecoatTint: loadedJob.includeBasecoatTint || false,
             includeTopcoatTint: loadedJob.includeTopcoatTint || false,
             antiSlip: loadedJob.antiSlip || false,

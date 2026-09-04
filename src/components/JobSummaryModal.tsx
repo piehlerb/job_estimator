@@ -151,6 +151,7 @@ export default function JobSummaryModal({
           installDays: job.installDays,
           jobHours: job.jobHours,
           totalPrice: job.totalPrice,
+          products: job.products,
           includeBasecoatTint: job.includeBasecoatTint || false,
           includeTopcoatTint: job.includeTopcoatTint || false,
           antiSlip: job.antiSlip || false,

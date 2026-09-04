@@ -24,3 +24,7 @@ dist-ssr
 *.sw?
 .env
 .env.local
+
+.agents/
+Job Estimator Mobile Redesign.zip
+estimator_zip_cleanup.zip
