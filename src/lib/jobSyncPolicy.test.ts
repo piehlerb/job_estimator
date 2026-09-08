@@ -96,7 +96,7 @@ describe('job sync working set policy', () => {
 
     assert.equal(
       buildJobWorkingSetOrFilter(cutoff),
-      'status.in.(Pending,Verbal),install_date.gte.2024-12-23,updated_at.gte.2024-12-23T12:00:00.000Z'
+      'tags.cs.{"Hot job"},status.in.(Pending,Verbal),install_date.gte.2024-12-23,updated_at.gte.2024-12-23T12:00:00.000Z'
     );
   });
 });

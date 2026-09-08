@@ -1,5 +1,9 @@
 import { Plus, Trash2, FileText, Search, Bell, Check, X, ChevronDown, ChevronLeft, ChevronRight, Link, Shuffle, PhoneCall, SlidersHorizontal, Calendar, Clock, Wrench, FileSearch, AlertTriangle } from 'lucide-react';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { Star } from 'lucide-react';
+import JobStarButton from '../components/JobStarButton';
+import { isHotJob, setJobHot } from '../lib/hotJobs';
+import { getJob } from '../lib/db';
 import { getAllJobs, deleteJob, updateJob, getDefaultCosts, getCosts, getPricing, getDefaultPricing, getAllCommTemplates } from '../lib/db';
 import { Job, JobCalculation, Costs, Pricing, JobStatus, JobReminder, CommunicationTemplate } from '../types';
 import { calculateJobOutputs } from '../lib/calculations';
@@ -47,6 +51,37 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
   const isReadOnlyJobs = permissions.jobs === 'read';
   const [jobsWithCalc, setJobsWithCalc] = useState<JobWithCalc[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hotJobsExpanded, setHotJobsExpanded] = useState(() => {
+    try { return localStorage.getItem('dashboard_hot_jobs_expanded_v1') === 'true'; } catch { return false; }
+  });
+  const [starError, setStarError] = useState('');
+  const [starringIds, setStarringIds] = useState<Set<string>>(new Set());
+  const starRequests = useRef(new Set<string>());
+  const hotJobs = useMemo(() => jobsWithCalc.filter(({ job }) => !job.deleted && isHotJob(job))
+    .sort((a, b) => (a.job.name || '').localeCompare(b.job.name || '')), [jobsWithCalc]);
+
+  const toggleHotJob = async (job: Job) => {
+    if (!canWriteJobs || starRequests.current.has(job.id)) return;
+    starRequests.current.add(job.id);
+    setStarringIds(new Set(starRequests.current));
+    setStarError('');
+    try {
+      const latest = await getJob(job.id);
+      if (!latest) throw new Error('This job is no longer available.');
+      const updated = setJobHot(latest, !isHotJob(latest));
+      await updateJob(updated);
+      setJobsWithCalc(current => current.map(item => item.job.id === job.id ? { ...item, job: updated } : item));
+    } catch {
+      setStarError('Could not save the star. Please try again.');
+    } finally {
+      starRequests.current.delete(job.id);
+      setStarringIds(new Set(starRequests.current));
+    }
+  };
+
+  const starButton = (job: Job) => canWriteJobs ? (
+    <JobStarButton job={job} disabled={starringIds.has(job.id)} onToggle={toggleHotJob} />
+  ) : null;
 
   // Filter/sort state — persisted to localStorage so it survives navigation away and back
   const _saved = getSavedFilters();
@@ -774,6 +809,42 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
 
       {/* Sticky tabs + toolbar */}
       <div className="sticky top-0 z-10">
+        <section aria-labelledby="hot-jobs-heading" className="border-b border-amber-200 bg-amber-50 px-4 md:px-6 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <h2 id="hot-jobs-heading" className="flex items-center gap-2 text-sm font-bold text-amber-950">
+              <Star size={17} className="text-amber-600" fill="currentColor" /> Hot jobs
+              <span className="rounded-full bg-amber-200/60 px-2 py-0.5 text-xs">{hotJobs.length}</span>
+            </h2>
+            <span className="hidden md:block text-xs text-amber-800">Your team's priority list</span>
+            <button type="button" aria-expanded={hotJobsExpanded} aria-controls="hot-jobs-list"
+              onClick={() => {
+                const expanded = !hotJobsExpanded;
+                setHotJobsExpanded(expanded);
+                try { localStorage.setItem('dashboard_hot_jobs_expanded_v1', String(expanded)); } catch { /* Storage may be unavailable. */ }
+              }} className="md:hidden flex items-center gap-1 min-h-11 px-2 text-xs font-semibold text-amber-900">
+              {hotJobsExpanded ? 'Hide' : 'Show'}
+              <ChevronDown size={16} className={hotJobsExpanded ? 'rotate-180' : ''} />
+            </button>
+          </div>
+          {starError && <p role="alert" className="text-sm text-red-700 mt-2">{starError}</p>}
+          <div id="hot-jobs-list" className={`${hotJobsExpanded ? 'block' : 'hidden'} md:block mt-2`}>
+            {hotJobs.length === 0 ? (
+              <p className="text-xs text-amber-800">{loading ? 'Loading hot jobs…' : 'Star a job below to keep it here, across all dashboard views.'}</p>
+            ) : (
+              <ul className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 max-h-48 overflow-y-auto">
+                {hotJobs.map(({ job }) => (
+                  <li key={job.id} className="flex items-center gap-1 rounded-lg border border-amber-200 bg-white pl-3 pr-1">
+                    <button type="button" onClick={() => onEditJob(job.id)} className="min-w-0 flex-1 py-2 text-left rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500">
+                      <span className="block truncate text-sm font-bold text-slate-900">{job.name || 'Untitled Job'}</span>
+                      <span className="block truncate text-xs text-slate-500">{job.customerName || 'No customer'} · {job.status} · ${job.totalPrice.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
+                    </button>
+                    {starButton(job)}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
         {/* Desktop header row */}
         <div className="hidden md:flex items-center justify-between px-6 py-3 bg-white border-b border-slate-200">
           <div className="flex items-baseline gap-2.5">
@@ -1356,6 +1427,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
                                 <div className="font-bold text-sm text-[#0f172a] truncate">{job.name || 'Untitled Job'}</div>
                                 <div className={`num text-xs font-bold mt-0.5 ${getMarginColor(marginPct)}`}>{marginPct.toFixed(0)}% margin</div>
                               </div>
+                              {starButton(job)}
                               <span className="num text-[17px] font-extrabold text-[#0f172a] shrink-0">${job.totalPrice.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
                             </div>
                           );
@@ -1386,6 +1458,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
                         <div className="text-[12.5px] text-slate-400 mt-[3px] truncate">{metaParts.join(' · ')}</div>
                       )}
                     </div>
+                    {starButton(job)}
                     <span className={`shrink-0 px-[9px] py-[3px] rounded-full text-[11px] font-extrabold ${getStatusColor(job.status)}`}>
                       {job.status}
                     </span>
@@ -1480,7 +1553,8 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
                               <td className="px-4 lg:px-6 py-3 text-sm text-slate-600 text-right">{new Date(job.createdAt).toLocaleDateString()}</td>
                               <td className="px-4 lg:px-6 py-3 text-sm text-right">
                                 <div className="flex items-center justify-end gap-2">
-                                  <button onClick={(e) => { e.stopPropagation(); onViewJobSheet(job.id); }} className="text-green-600 hover:text-green-800" title="Job Sheet"><FileText size={18} /></button>
+                                  {starButton(job)}
+                          <button onClick={(e) => { e.stopPropagation(); onViewJobSheet(job.id); }} className="text-green-600 hover:text-green-800" title="Job Sheet"><FileText size={18} /></button>
                                   <button className="text-gf-dark-green font-medium text-xs lg:text-sm">Edit</button>
                                   {canWriteJobs && (<button onClick={(e) => { e.stopPropagation(); handleDeleteJob(job.id); }} className="text-red-600 hover:text-red-800"><Trash2 size={18} /></button>)}
                                 </div>
@@ -1515,6 +1589,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
                       <td className="px-4 lg:px-6 py-4 text-sm text-slate-600 text-right">{new Date(job.createdAt).toLocaleDateString()}</td>
                       <td className="px-4 lg:px-6 py-4 text-sm text-right">
                         <div className="flex items-center justify-end gap-2">
+                          {starButton(job)}
                           <button onClick={(e) => { e.stopPropagation(); onViewJobSheet(job.id); }} className="text-green-600 hover:text-green-800" title="Job Sheet"><FileText size={18} /></button>
                           <button className="text-gf-dark-green font-medium text-xs lg:text-sm">Edit</button>
                           {canWriteJobs && (<button onClick={(e) => { e.stopPropagation(); handleDeleteJob(job.id); }} className="text-red-600 hover:text-red-800"><Trash2 size={18} /></button>)}

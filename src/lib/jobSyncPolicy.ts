@@ -1,5 +1,6 @@
 import type { Job, JobStatus } from '../types/index.js';
 import { toLocalDateString } from './dateUtils.js';
+import { HOT_JOB_TAG, isHotJob } from './hotJobs.js';
 
 export const JOB_WORKING_SET_MONTHS = 18;
 
@@ -25,7 +26,8 @@ export function getJobWorkingSetCutoff(
   };
 }
 
-export function isJobInWorkingSet(job: Pick<Job, 'status' | 'installDate' | 'updatedAt'>, cutoff: JobWorkingSetCutoff): boolean {
+export function isJobInWorkingSet(job: Pick<Job, 'status' | 'installDate' | 'updatedAt' | 'tags'>, cutoff: JobWorkingSetCutoff): boolean {
+  if (isHotJob(job)) return true;
   if (ACTIVE_JOB_STATUSES.includes(job.status)) return true;
   if (job.installDate && job.installDate >= cutoff.date) return true;
   if (job.updatedAt && job.updatedAt >= cutoff.timestamp) return true;
@@ -34,6 +36,7 @@ export function isJobInWorkingSet(job: Pick<Job, 'status' | 'installDate' | 'upd
 
 export function buildJobWorkingSetOrFilter(cutoff: JobWorkingSetCutoff): string {
   return [
+    `tags.cs.{"${HOT_JOB_TAG}"}`,
     'status.in.(Pending,Verbal)',
     `install_date.gte.${cutoff.date}`,
     `updated_at.gte.${cutoff.timestamp}`,
