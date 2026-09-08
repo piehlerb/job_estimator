@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react';
-import type { Lead } from '../types';
+import LeadQualityBreakdown from './LeadQualityBreakdown';
+import { leadTerritory } from '../lib/leadReporting';
+import type { Lead, LeadAppointment } from '../types';
 
 interface LeadDayRow {
   day: string;
@@ -9,6 +11,7 @@ interface LeadDayRow {
 
 interface LeadCreatedDateReportProps {
   leads: Lead[];
+  appointments: LeadAppointment[];
 }
 
 interface LeadCreationChartProps {
@@ -180,7 +183,7 @@ function LeadCreationChart({ rows, sources, colors }: LeadCreationChartProps) {
   );
 }
 
-export default function LeadCreatedDateReport({ leads }: LeadCreatedDateReportProps) {
+export default function LeadCreatedDateReport({ leads, appointments }: LeadCreatedDateReportProps) {
   const [startDate, setStartDate] = useState(getPriorThirtyDaysStart);
   const [endDate, setEndDate] = useState(getToday);
 
@@ -301,13 +304,15 @@ export default function LeadCreatedDateReport({ leads }: LeadCreatedDateReportPr
             <LeadCreationChart rows={dailyRows} sources={sources} colors={sourceColors} />
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-            <div className="flex items-center justify-between gap-4 border-b border-slate-200 px-4 py-4 sm:px-5">
+          <LeadQualityBreakdown leads={detailLeads} appointments={appointments} />
+
+          <details className="rounded-xl border border-slate-200 bg-white shadow-sm">
+            <summary className="cursor-pointer border-b border-slate-200 px-4 py-4 sm:px-5">
               <div>
                 <h3 className="font-semibold text-slate-900">Lead details</h3>
                 <p className="mt-0.5 text-xs text-slate-500">All {detailLeads.length} lead{detailLeads.length === 1 ? '' : 's'} created in the selected date range.</p>
               </div>
-            </div>
+            </summary>
             {detailLeads.length === 0 ? (
               <div className="px-5 py-10 text-center text-sm text-slate-500">No lead details to show for this date range.</div>
             ) : (
@@ -335,7 +340,7 @@ export default function LeadCreatedDateReport({ leads }: LeadCreatedDateReportPr
                         </td>
                         <td className={`px-4 py-3 text-sm ${getLeadSource(lead) === NO_SOURCE ? 'italic text-slate-400' : 'text-slate-700'}`}>{getLeadSource(lead)}</td>
                         <td className="px-4 py-3 text-sm text-slate-600">{lead.campaign || lead.utmCampaign || '—'}</td>
-                        <td className="px-4 py-3 text-sm text-slate-700">{lead.stage}</td>
+                        <td className="px-4 py-3 text-sm text-slate-700">{lead.stage}<p className="mt-1 text-xs text-slate-500">{lead.dispositionReason || 'No disposition'} · {leadTerritory(lead)}</p></td>
                         <td className="max-w-xs px-4 py-3 text-sm text-slate-600 sm:px-5">{lead.address || '—'}</td>
                       </tr>
                     ))}
@@ -343,7 +348,7 @@ export default function LeadCreatedDateReport({ leads }: LeadCreatedDateReportPr
                 </table>
               </div>
             )}
-          </div>
+          </details>
         </>
       )}
     </section>

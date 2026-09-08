@@ -1,0 +1,4 @@
+{
+  "extends": "./tsconfig.test.json",
+  "include": ["src/lib/leadReporting.ts", "src/lib/leadReporting.test.ts", "src/types/index.ts"]
+}
