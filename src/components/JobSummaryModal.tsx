@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import { getDefaultCosts, getDefaultPricing } from '../lib/db';
 import { calculateJobOutputs } from '../lib/calculations';
 import { normalizeChipBlendName } from '../lib/syncHelpers';
+import { chipInventoryKey, findChipInventoryItem } from '../lib/chipInventory';
 import { findCoatingSku } from '../lib/coatingSkus';
 import { resolveJobMaterials, ResolvedMaterials, ResolvedCoatingLine } from '../lib/materialAllocation';
 import {
@@ -33,6 +34,8 @@ interface JobMaterialRow {
   job: Job;
   materials: ResolvedMaterials;
   chipBlend: string | null;
+  chipSystemId?: string;
+  chipSystemName?: string;
   chipLbs: number;
   moistureMitigationGallons: number;
 }
@@ -184,7 +187,15 @@ export default function JobSummaryModal({
       const chipLbs = calc.chipNeeded * 40;
       const moistureMitigationGallons = calc.moistureMitigationGallons;
 
-      return { job, materials, chipBlend, chipLbs, moistureMitigationGallons };
+      return {
+        job,
+        materials,
+        chipBlend,
+        chipSystemId: job.systemId || undefined,
+        chipSystemName: job.systemSnapshot?.name,
+        chipLbs,
+        moistureMitigationGallons,
+      };
     });
   }, [filteredJobs, currentCosts, currentPricing]);
 
@@ -222,27 +233,38 @@ export default function JobSummaryModal({
     // Sequential chip reclaim simulation: reclaim from Job N feeds into Job N+1
     const reclaimRate = (currentPricing.chipReclaimRate ?? 0) / 100;
 
-    // Group jobs by blend in chronological order (activeRows inherits filteredJobs sort)
-    const jobsByBlend: Record<string, number[]> = {};
+    // Group jobs by blend + chip system (each is its own inventory item) in
+    // chronological order (activeRows inherits filteredJobs sort)
+    const chipBuckets = new Map<
+      string,
+      { blend: string; systemId?: string; systemName?: string; lbsList: number[]; required: number }
+    >();
     for (const r of activeRows) {
       if (r.chipBlend && r.chipLbs > 0) {
-        if (!jobsByBlend[r.chipBlend]) jobsByBlend[r.chipBlend] = [];
-        jobsByBlend[r.chipBlend].push(r.chipLbs);
+        const key = chipInventoryKey(r.chipBlend, r.chipSystemId);
+        const bucket = chipBuckets.get(key) ?? {
+          blend: r.chipBlend,
+          systemId: r.chipSystemId,
+          systemName: r.chipSystemName,
+          lbsList: [],
+          required: 0,
+        };
+        bucket.lbsList.push(r.chipLbs);
+        chipBuckets.set(key, bucket);
       }
     }
 
-    // For each blend, simulate sequential reclaim to compute net required from inventory
-    const chipByBlend: Record<string, number> = {};
-    for (const [blend, lbsList] of Object.entries(jobsByBlend)) {
+    // For each bucket, simulate sequential reclaim to compute net required from inventory
+    for (const bucket of chipBuckets.values()) {
       let requiredFromInventory = 0;
       let reclaimPool = 0;
-      for (const lbs of lbsList) {
+      for (const lbs of bucket.lbsList) {
         const useFromReclaim = Math.min(lbs, reclaimPool);
         const useFromInventory = lbs - useFromReclaim;
         requiredFromInventory += useFromInventory;
         reclaimPool = reclaimPool - useFromReclaim + lbs * reclaimRate;
       }
-      chipByBlend[blend] = requiredFromInventory;
+      bucket.required = requiredFromInventory;
     }
 
     // Aggregate resolved tint lines by color
@@ -253,14 +275,14 @@ export default function JobSummaryModal({
       }
     }
 
-    // All chip blends: union of required blends + inventory blends (where either > 0)
-    const allChipBlendsSet = new Set<string>([
-      ...Object.keys(chipByBlend),
-      ...chipInventory
-        .filter((c) => c.pounds > 0)
-        .map((c) => normalizeChipBlendName(c.blend)),
-    ]);
-    const allChipBlends = [...allChipBlendsSet].sort();
+    const chipTotals = [...chipBuckets.entries()]
+      .map(([key, bucket]) => ({
+        key,
+        label: bucket.systemName ? `${bucket.blend} (${bucket.systemName})` : bucket.blend,
+        required: bucket.required,
+        onHand: findChipInventoryItem(chipInventory, bucket.blend, bucket.systemId)?.pounds ?? 0,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
 
     // All tint colors: union of required colors + inventory colors
     const allTintColorsSet = new Set<string>([
@@ -269,7 +291,7 @@ export default function JobSummaryModal({
     ]);
     const allTintColors = [...allTintColorsSet].sort();
 
-    return { coatingTotals, moistureMitigation, chipByBlend, tintByColor, allChipBlends, allTintColors, reclaimRate };
+    return { coatingTotals, moistureMitigation, chipTotals, tintByColor, allTintColors, reclaimRate };
   }, [jobMaterials, ignoredJobIds, chipInventory, tintInventory, currentPricing]);
 
   const toggleIgnored = (jobId: string) => {
@@ -425,7 +447,9 @@ export default function JobSummaryModal({
                         <td className="py-3 px-3 text-slate-600 whitespace-nowrap">
                           {row.chipBlend && row.chipLbs > 0 ? (
                             <span>
-                              {row.chipBlend} <span className="tabular-nums">{row.chipLbs.toFixed(0)} lbs</span>
+                              {row.chipBlend}
+                              {row.chipSystemName && <span className="text-slate-400"> ({row.chipSystemName})</span>}{' '}
+                              <span className="tabular-nums">{row.chipLbs.toFixed(0)} lbs</span>
                             </span>
                           ) : (
                             <span className="text-slate-400">–</span>
@@ -500,19 +524,16 @@ export default function JobSummaryModal({
                   />
                 )}
 
-                {/* Chip by blend — required accounts for sequential reclaim */}
-                {totals.allChipBlends.map((blend) => {
-                  const required = totals.chipByBlend[blend] || 0;
-                  const inv = chipInventory.find((c) => normalizeChipBlendName(c.blend) === blend);
-                  const onHand = inv?.pounds || 0;
-                  if (required === 0) return null;
+                {/* Chip by blend + system — required accounts for sequential reclaim */}
+                {totals.chipTotals.map((chip) => {
+                  if (chip.required === 0) return null;
                   return (
                     <MaterialRow
-                      key={`chip-${blend}`}
-                      label={`Chip — ${blend}`}
+                      key={chip.key}
+                      label={`Chip — ${chip.label}`}
                       unit="lbs"
-                      required={required}
-                      onHand={onHand}
+                      required={chip.required}
+                      onHand={chip.onHand}
                     />
                   );
                 })}

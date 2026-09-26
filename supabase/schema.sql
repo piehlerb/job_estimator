@@ -134,6 +134,7 @@ CREATE TABLE IF NOT EXISTS chip_inventory (
   id TEXT PRIMARY KEY,
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   blend TEXT NOT NULL,
+  system_id TEXT, -- chip system this stock belongs to; NULL = unassigned legacy stock
   pounds NUMERIC NOT NULL,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   synced_at TIMESTAMPTZ
@@ -334,7 +335,7 @@ COMMENT ON TABLE laborers IS 'Labor rates and worker information';
 COMMENT ON TABLE chip_blends IS 'Available chip blend names';
 COMMENT ON TABLE base_coat_colors IS 'User-managed base coat color options';
 COMMENT ON TABLE jobs IS 'Job estimation records with historical snapshots';
-COMMENT ON TABLE chip_inventory IS 'Chip inventory by blend';
+COMMENT ON TABLE chip_inventory IS 'Chip inventory by blend and chip system';
 COMMENT ON TABLE topcoat_inventory IS 'Top coat inventory levels (singleton per user)';
 COMMENT ON TABLE basecoat_inventory IS 'Base coat inventory levels (singleton per user)';
 COMMENT ON TABLE misc_inventory IS 'Miscellaneous inventory (crack repair, moisture mitigation, silica sand, shot)';

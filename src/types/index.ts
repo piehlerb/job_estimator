@@ -402,7 +402,7 @@ export interface ActualCosts {
 
 // Inventory bucket a resolved actuals line deducts from.
 export type InventoryTarget =
-  | { kind: 'chip'; blend: string }
+  | { kind: 'chip'; blend: string; systemId?: string }
   | { kind: 'coating'; part: CoatingPart; variant?: string; color?: string }
   | { kind: 'tint'; color: string }
   | { kind: 'misc'; field: keyof Pick<MiscInventory, 'crackRepair' | 'moistureMitigation'> };
@@ -425,6 +425,7 @@ export interface InventoryActualsApplied {
   actualCrackRepairOz?: number;
   actualMoistureMitigationGallons?: number;
   chipBlend?: string;
+  chipSystemId?: string; // chip system the blend was drawn from (absent on legacy snapshots)
   baseColor?: string;
   tintColor?: string;
   appliedAt: string;
@@ -580,6 +581,7 @@ export interface JobMaterialAllocation {
 export interface ChipInventory {
   id: string;
   blend: string;
+  systemId?: string; // chip system this stock belongs to; absent = unassigned legacy stock
   pounds: number;
   updatedAt: string;
   deleted?: boolean;

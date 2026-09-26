@@ -18,6 +18,7 @@ import {
   ChipBlend,
 } from './db';
 import { normalizeChipBlendName } from './syncHelpers';
+import { chipInventoryKey } from './chipInventory';
 import { ChipInventory } from '../types';
 
 export interface ConsolidationResult {
@@ -57,18 +58,19 @@ export async function findDuplicateBlends(): Promise<Map<string, ChipBlend[]>> {
 }
 
 /**
- * Find all duplicate chip inventory entries (same normalized blend name)
+ * Find all duplicate chip inventory entries (same normalized blend name and
+ * chip system — the same blend in different systems is a different item)
  */
 export async function findDuplicateInventory(): Promise<Map<string, ChipInventory[]>> {
   const inventory = await getAllChipInventory();
   const groups = new Map<string, ChipInventory[]>();
 
   for (const inv of inventory) {
-    const normalized = normalizeChipBlendName(inv.blend);
-    if (!groups.has(normalized)) {
-      groups.set(normalized, []);
+    const key = chipInventoryKey(inv.blend, inv.systemId);
+    if (!groups.has(key)) {
+      groups.set(key, []);
     }
-    groups.get(normalized)!.push(inv);
+    groups.get(key)!.push(inv);
   }
 
   // Filter to only groups with duplicates
@@ -124,14 +126,14 @@ export async function consolidateChipBlends(dryRun = false): Promise<Consolidati
     blendGroups.get(normalized)!.push(blend);
   }
 
-  // Step 2: Group inventory by normalized blend name
+  // Step 2: Group inventory by normalized blend name + chip system
   const inventoryGroups = new Map<string, ChipInventory[]>();
   for (const inv of inventory) {
-    const normalized = normalizeChipBlendName(inv.blend);
-    if (!inventoryGroups.has(normalized)) {
-      inventoryGroups.set(normalized, []);
+    const key = chipInventoryKey(inv.blend, inv.systemId);
+    if (!inventoryGroups.has(key)) {
+      inventoryGroups.set(key, []);
     }
-    inventoryGroups.get(normalized)!.push(inv);
+    inventoryGroups.get(key)!.push(inv);
   }
 
   // Step 3: Process each group
@@ -181,7 +183,8 @@ export async function consolidateChipBlends(dryRun = false): Promise<Consolidati
   }
 
   // Step 4: Process inventory duplicates
-  for (const [normalizedName, invGroup] of inventoryGroups) {
+  for (const invGroup of inventoryGroups.values()) {
+    const normalizedName = normalizeChipBlendName(invGroup[0].blend);
     if (invGroup.length > 1) {
       console.log(`\nDuplicate inventory found for "${normalizedName}":`);
       invGroup.forEach(i => console.log(`  - "${i.blend}": ${i.pounds} lbs (id: ${i.id})`));

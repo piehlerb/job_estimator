@@ -11,6 +11,7 @@ import type {
 import { coatingSkuKey, coatingSkuLabel, findCoatingSku } from './coatingSkus.js';
 import { resolveJobMaterials } from './materialAllocation.js';
 import { normalizeChipBlendName } from './syncHelpers.js';
+import { chipInventoryKey, findChipInventoryItem } from './chipInventory.js';
 
 // Re-exported for existing importers; the type now lives in types/index.ts
 // because resolved lines are persisted (and synced) data.
@@ -25,6 +26,7 @@ export interface InventoryActualsSource {
   actualCrackRepairOz?: number;
   actualMoistureMitigationGallons?: number;
   chipBlend?: string;
+  systemId?: string; // the job's chip system; selects which blend inventory bucket is used
   baseColor?: string;
   tintColor?: string;
   includeBasecoatTint?: boolean;
@@ -98,11 +100,11 @@ export function buildResolvedLines(
   if (source.chipBlend && actualChipBoxes !== undefined) {
     const blend = normalizeChipBlendName(source.chipBlend);
     lines.push({
-      key: `chip:${blend}`,
+      key: chipInventoryKey(blend, source.systemId),
       label: `${blend} Chips`,
       unit: 'lbs',
       amount: actualChipBoxes * 40,
-      target: { kind: 'chip', blend },
+      target: { kind: 'chip', blend, ...(source.systemId ? { systemId: source.systemId } : {}) },
     });
   }
 
@@ -201,6 +203,7 @@ export function buildInventoryActualsSnapshot(
   }
 
   if (source.chipBlend) snapshot.chipBlend = normalizeChipBlendName(source.chipBlend);
+  if (source.chipBlend && source.systemId) snapshot.chipSystemId = source.systemId;
   if (source.baseColor) snapshot.baseColor = source.baseColor;
   if (hasTint && source.tintColor) snapshot.tintColor = source.tintColor;
 
@@ -223,10 +226,29 @@ function addAmount(map: Map<string, InventoryActualDeltaRow>, row: InventoryActu
   map.set(row.key, { ...row });
 }
 
+/**
+ * Snapshots applied before chip inventory was split by system carry chip lines
+ * with no systemId. Attribute those to the fallback system (the job's current
+ * system) so a reversal lands on the same bucket as the new deduction; the
+ * inventory lookup still falls back to an unassigned row if that bucket is missing.
+ */
+function withChipSystem(
+  key: string,
+  target: InventoryTarget,
+  fallbackSystemId: string | undefined
+): { key: string; target: InventoryTarget } {
+  if (target.kind !== 'chip' || target.systemId || !fallbackSystemId) return { key, target };
+  return {
+    key: chipInventoryKey(target.blend, fallbackSystemId),
+    target: { ...target, systemId: fallbackSystemId },
+  };
+}
+
 function addSnapshotAmounts(
   map: Map<string, InventoryActualDeltaRow>,
   snapshot: InventoryActualsApplied | undefined,
-  multiplier: 1 | -1
+  multiplier: 1 | -1,
+  fallbackChipSystemId?: string
 ): void {
   if (!snapshot) return;
 
@@ -235,23 +257,23 @@ function addSnapshotAmounts(
   if (snapshot.resolvedLines) {
     for (const line of snapshot.resolvedLines) {
       addAmount(map, {
-        key: line.key,
+        ...withChipSystem(line.key, line.target, fallbackChipSystemId),
         productName: line.label,
         unit: line.unit,
         usedDelta: line.amount * multiplier,
-        target: line.target,
       });
     }
     return;
   }
 
   if (snapshot.chipBlend && snapshot.actualChipBoxes) {
+    const systemId = snapshot.chipSystemId ?? fallbackChipSystemId;
     addAmount(map, {
-      key: `chip:${snapshot.chipBlend}`,
+      key: chipInventoryKey(snapshot.chipBlend, systemId),
       productName: `${snapshot.chipBlend} Chips`,
       unit: 'lbs',
       usedDelta: snapshot.actualChipBoxes * 40 * multiplier,
-      target: { kind: 'chip', blend: snapshot.chipBlend },
+      target: { kind: 'chip', blend: snapshot.chipBlend, ...(systemId ? { systemId } : {}) },
     });
   }
 
@@ -334,11 +356,12 @@ function addSnapshotAmounts(
 
 export function buildInventoryActualDeltaRows(
   current: InventoryActualsApplied,
-  baseline: InventoryActualsApplied | undefined
+  baseline: InventoryActualsApplied | undefined,
+  fallbackChipSystemId?: string
 ): InventoryActualDeltaRow[] {
   const map = new Map<string, InventoryActualDeltaRow>();
-  addSnapshotAmounts(map, baseline, -1);
-  addSnapshotAmounts(map, current, 1);
+  addSnapshotAmounts(map, baseline, -1, fallbackChipSystemId);
+  addSnapshotAmounts(map, current, 1, fallbackChipSystemId);
 
   return Array.from(map.values())
     .map((row) => ({ ...row, usedDelta: Math.abs(row.usedDelta) < ZERO_EPSILON ? 0 : row.usedDelta }))
@@ -351,7 +374,7 @@ export function buildInventoryActualsUpdate(
   appliedAt = source.appliedAt ?? new Date().toISOString()
 ): { snapshot: InventoryActualsApplied; deltas: InventoryActualDeltaRow[] } {
   const snapshot = buildInventoryActualsSnapshot(source, appliedAt);
-  const deltas = buildInventoryActualDeltaRows(snapshot, source.inventoryActualsApplied);
+  const deltas = buildInventoryActualDeltaRows(snapshot, source.inventoryActualsApplied, source.systemId);
 
   // Surface resolver warnings (invalid shares, unknown base color, …) on the
   // review rows. They are job-level, so attach them to the first coating row.
@@ -380,7 +403,7 @@ export function buildInventoryReviewRows(inputs: InventoryReviewInputs): Invento
     let inventoryId: string | undefined;
 
     if (target.kind === 'chip') {
-      const item = inputs.chipInventory.find((inv) => normalizeChipBlendName(inv.blend) === target.blend);
+      const item = findChipInventoryItem(inputs.chipInventory, target.blend, target.systemId);
       currentValue = item?.pounds ?? 0;
       inventoryId = item?.id;
     } else if (target.kind === 'tint') {

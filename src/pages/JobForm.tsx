@@ -46,6 +46,7 @@ import { useSaveFlash } from '../hooks/useSaveFlash';
 import { compareSnapshots, SnapshotChanges } from '../lib/snapshotComparison';
 import SnapshotChangeBanner, { SelectedChanges } from '../components/SnapshotChangeBanner';
 import { normalizeChipBlendName } from '../lib/syncHelpers';
+import { findChipInventoryItem } from '../lib/chipInventory';
 import {
   buildInventoryActualsUpdate,
   buildInventoryReviewRows,
@@ -1719,6 +1720,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
     actualCrackRepairOz: job.actualCrackRepairOz,
     actualMoistureMitigationGallons: job.actualMoistureMitigationGallons,
     chipBlend: job.chipBlend,
+    systemId: job.systemId,
     baseColor: job.baseColor,
     tintColor: job.tintColor,
     includeBasecoatTint: job.includeBasecoatTint,
@@ -1791,10 +1793,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
       let hasMiscChanges = false;
       const getFreshCurrentValue = (row: EditableInventoryReviewRow) => {
         if (row.target.kind === 'chip') {
-          const target = row.target;
-          const existing = chipInventoryRows.find(
-            (inventory) => normalizeChipBlendName(inventory.blend) === target.blend
-          );
+          const existing = findChipInventoryItem(chipInventoryRows, row.target.blend, row.target.systemId);
           return existing?.pounds ?? 0;
         }
 
@@ -1828,13 +1827,13 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
       for (const row of rowsToApply) {
         if (row.target.kind === 'chip') {
           const target = row.target;
-          const existing = chipInventoryRows.find(
-            (inventory) => normalizeChipBlendName(inventory.blend) === target.blend
-          );
+          const existing = findChipInventoryItem(chipInventoryRows, target.blend, target.systemId);
 
           await saveChipInventory({
             id: existing?.id || generateId(),
             blend: existing?.blend || target.blend,
+            // Deducting from unassigned legacy stock claims it for this system.
+            systemId: existing?.systemId || target.systemId,
             pounds: row.newValue,
             updatedAt: now,
             deleted: false,
@@ -2188,16 +2187,13 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
       return null;
     }
 
-    // Find matching inventory by blend name (using normalized comparison)
-    const normalizedFormBlend = normalizeChipBlendName(formData.chipBlend);
-    const inventoryItem = chipInventory.find(
-      (inv) => normalizeChipBlendName(inv.blend) === normalizedFormBlend
-    );
+    // Inventory is tracked per blend + chip system
+    const inventoryItem = findChipInventoryItem(chipInventory, formData.chipBlend, formData.system);
 
     if (!inventoryItem || inventoryItem.pounds <= 0) {
       return {
         hasInventory: false,
-        message: "We don't have this chip blend in inventory",
+        message: "We don't have this chip blend in inventory for this system",
       };
     }
 

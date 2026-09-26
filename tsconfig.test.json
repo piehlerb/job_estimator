@@ -13,6 +13,7 @@
   "include": [
     "src/lib/inventoryActuals.ts",
     "src/lib/inventoryActuals.test.ts",
+    "src/lib/chipInventory.ts",
     "src/lib/calculations.ts",
     "src/lib/calculations.test.ts",
     "src/lib/reminderCoverage.ts",

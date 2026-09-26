@@ -358,3 +358,74 @@ describe('allocation-aware resolved lines', () => {
     assert.equal(firstCoating?.warning, 'Topcoat allocation shares do not sum to 100%.');
   });
 });
+
+describe('chip inventory split by system', () => {
+  const quarter = 'sys-quarter';
+  const eighth = 'sys-eighth';
+  const chipOnly: InventoryActualsSource = { actualChipBoxes: 2, chipBlend: 'blue', systemId: quarter };
+
+  test('chip lines and snapshots carry the job system', () => {
+    const snapshot = buildInventoryActualsSnapshot(chipOnly, '2026-06-12T10:00:00.000Z');
+    assert.equal(snapshot.chipSystemId, quarter);
+    assert.deepEqual(snapshot.resolvedLines?.[0].target, { kind: 'chip', blend: 'Blue', systemId: quarter });
+    assert.equal(snapshot.resolvedLines?.[0].key, `chip:Blue:${quarter}`);
+  });
+
+  test('review rows pick the inventory row for the job system, not another system with the same blend', () => {
+    const snapshot = buildInventoryActualsSnapshot(chipOnly, '2026-06-12T10:00:00.000Z');
+    const [row] = buildInventoryReviewRows({
+      deltas: buildInventoryActualDeltaRows(snapshot, undefined),
+      chipInventory: [
+        { id: 'blue-8', blend: 'Blue', systemId: eighth, pounds: 500, updatedAt: '' },
+        { id: 'blue-4', blend: 'Blue', systemId: quarter, pounds: 120, updatedAt: '' },
+      ],
+      tintInventory: [],
+      coatingInventory: [],
+      miscInventory: null,
+    });
+    assert.equal(row.inventoryId, 'blue-4');
+    assert.equal(row.newValue, 40);
+  });
+
+  test('review rows fall back to unassigned stock for the blend', () => {
+    const snapshot = buildInventoryActualsSnapshot(chipOnly, '2026-06-12T10:00:00.000Z');
+    const [row] = buildInventoryReviewRows({
+      deltas: buildInventoryActualDeltaRows(snapshot, undefined),
+      chipInventory: [
+        { id: 'blue-8', blend: 'Blue', systemId: eighth, pounds: 500, updatedAt: '' },
+        { id: 'blue-legacy', blend: 'blue', pounds: 90, updatedAt: '' },
+      ],
+      tintInventory: [],
+      coatingInventory: [],
+      miscInventory: null,
+    });
+    assert.equal(row.inventoryId, 'blue-legacy');
+  });
+
+  test('legacy baseline without a system is reversed against the job system', () => {
+    const baseline = buildInventoryActualsSnapshot({ ...chipOnly, systemId: undefined }, '2026-06-12T09:00:00.000Z');
+    const legacyDerived = asLegacySnapshot({ ...chipOnly, systemId: undefined }, '2026-06-12T09:00:00.000Z');
+
+    for (const legacy of [baseline, legacyDerived]) {
+      const { deltas } = buildInventoryActualsUpdate(
+        { ...chipOnly, actualChipBoxes: 3, inventoryActualsApplied: legacy },
+        '2026-06-12T11:00:00.000Z'
+      );
+      assert.deepEqual(
+        deltas.map((row) => [row.key, row.usedDelta]),
+        [[`chip:Blue:${quarter}`, 40]]
+      );
+    }
+  });
+
+  test('changing the job system moves the deduction between system buckets', () => {
+    const baseline = buildInventoryActualsSnapshot({ ...chipOnly, systemId: eighth }, '2026-06-12T09:00:00.000Z');
+    const { deltas } = buildInventoryActualsUpdate(
+      { ...chipOnly, inventoryActualsApplied: baseline },
+      '2026-06-12T11:00:00.000Z'
+    );
+    const byKey = Object.fromEntries(deltas.map((row) => [row.key, row.usedDelta]));
+    assert.equal(byKey[`chip:Blue:${eighth}`], -80);
+    assert.equal(byKey[`chip:Blue:${quarter}`], 80);
+  });
+});
