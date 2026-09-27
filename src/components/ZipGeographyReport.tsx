@@ -4,6 +4,7 @@ import { CalendarDays, MapPin } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import type { Job, JobStatus } from '../types';
 import AddressCleanupPanel from './AddressCleanupPanel';
+import { useAuth } from '../contexts/AuthContext';
 import {
   aggregateJobsByZip,
   countZipReportJobs,
@@ -141,6 +142,8 @@ export default function ZipGeographyReport({
   loading = false,
   onEditJob,
 }: ZipGeographyReportProps) {
+  const { permissions } = useAuth();
+  const canWriteJobs = permissions.jobs === 'write';
   const [datePreset, setDatePreset] = useState<DatePreset>('ytd');
   const [dateField, setDateField] = useState<ZipDateField>('estimate');
   const [customStart, setCustomStart] = useState('');
@@ -413,7 +416,8 @@ export default function ZipGeographyReport({
       {/* The address cleanup worklist replaced the ZIP-only repair list that used to
           live here: that covered ME/NH ZIPs on jobs, this covers every address field
           on jobs, leads and customers. See AddressCleanupPanel. */}
-      <AddressCleanupPanel onEditJob={onEditJob} />
+      {/* Cleanup edits jobs, leads and customers, so it needs job write access */}
+      {canWriteJobs && <AddressCleanupPanel onEditJob={onEditJob} />}
     </section>
   );
 }

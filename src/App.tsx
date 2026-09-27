@@ -40,7 +40,15 @@ function App() {
   const [returnPage, setReturnPage] = useState<Page>('dashboard');
   const [offlineMode, setOfflineMode] = useState(false);
   const isOnline = useOnlineStatus();
-  const { user, loading, organization, permissions, needsPasswordReset } = useAuth();
+  const { user, loading, organization, permissions, orgLoading, needsPasswordReset } = useAuth();
+  // Mirrors the server-side write rules (org_can_write in
+  // supabase/migration_harden_org_security.sql). Background writes a member
+  // isn't allowed to make would be rejected on push, so skip them here.
+  const canWriteJobs = !organization || permissions.jobs === 'write';
+  const canWriteCustomers = canWriteJobs || permissions.customers;
+  const canWriteInventory = canWriteJobs || permissions.inventory;
+  const canWriteJobsRef = useRef(canWriteJobs);
+  canWriteJobsRef.current = canWriteJobs;
 
   // Redirect users away from pages they don't have permission to view
   useEffect(() => {
@@ -109,7 +117,7 @@ function App() {
             };
           });
 
-          if (changed) {
+          if (changed && canWriteJobsRef.current) {
             await updateJob({
               ...job,
               reminders: updatedReminders,
@@ -150,6 +158,7 @@ function App() {
   // One-time migration: seed customers store from existing job data
   useEffect(() => {
     if (!user && !offlineMode) return;
+    if (orgLoading) return;
 
     // Seed default data for offline/demo users (skips if data already exists)
     if (offlineMode) {
@@ -158,39 +167,45 @@ function App() {
       });
     }
 
-    migrateCustomersFromJobs().then((count) => {
-      if (count > 0) {
-        console.log(`[Migration] Seeded ${count} customer(s) from job history`);
-      }
-    }).catch((err) => {
-      console.warn('[Migration] Customer seed failed:', err);
-    });
+    if (canWriteCustomers) {
+      migrateCustomersFromJobs().then((count) => {
+        if (count > 0) {
+          console.log(`[Migration] Seeded ${count} customer(s) from job history`);
+        }
+      }).catch((err) => {
+        console.warn('[Migration] Customer seed failed:', err);
+      });
 
-    cleanupMigratedCustomerDuplicates().then((count) => {
-      if (count > 0) {
-        console.log(`[Migration] Removed ${count} duplicate migrated- customer(s)`);
-      }
-    }).catch((err) => {
-      console.warn('[Migration] Customer cleanup failed:', err);
-    });
+      cleanupMigratedCustomerDuplicates().then((count) => {
+        if (count > 0) {
+          console.log(`[Migration] Removed ${count} duplicate migrated- customer(s)`);
+        }
+      }).catch((err) => {
+        console.warn('[Migration] Customer cleanup failed:', err);
+      });
+    }
 
-    migrateJobsDisableGasHeater().then((count) => {
-      if (count > 0) {
-        console.log(`[Migration] Backfilled disableGasHeater for ${count} job(s)`);
-      }
-    }).catch((err) => {
-      console.warn('[Migration] disableGasHeater backfill failed:', err);
-    });
+    if (canWriteJobs) {
+      migrateJobsDisableGasHeater().then((count) => {
+        if (count > 0) {
+          console.log(`[Migration] Backfilled disableGasHeater for ${count} job(s)`);
+        }
+      }).catch((err) => {
+        console.warn('[Migration] disableGasHeater backfill failed:', err);
+      });
+    }
 
     // One-time conversion: seed SKU-level coating inventory from legacy top/base coat singletons
-    ensureCoatingInventorySeeded().then((count) => {
-      if (count > 0) {
-        console.log(`[Migration] Seeded ${count} coating inventory SKU(s) from legacy inventory`);
-      }
-    }).catch((err) => {
-      console.warn('[Migration] Coating inventory seed failed:', err);
-    });
-  }, [user, offlineMode]);
+    if (canWriteInventory) {
+      ensureCoatingInventorySeeded().then((count) => {
+        if (count > 0) {
+          console.log(`[Migration] Seeded ${count} coating inventory SKU(s) from legacy inventory`);
+        }
+      }).catch((err) => {
+        console.warn('[Migration] Coating inventory seed failed:', err);
+      });
+    }
+  }, [user, offlineMode, orgLoading, canWriteJobs, canWriteCustomers, canWriteInventory]);
 
   const handleNavigation = (page: Page, jobId?: string, returnTo?: Page) => {
     let target = page;

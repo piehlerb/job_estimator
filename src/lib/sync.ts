@@ -60,6 +60,8 @@ import {
 // Sync state stored in IndexedDB
 const SYNC_STATE_KEY = 'sync_state';
 const BATCH_SIZE = 50; // Process records in batches
+// Postgres insufficient_privilege: returned when RLS rejects a write
+const PERMISSION_DENIED_CODE = '42501';
 const SELECT_PAGE_SIZE = 500; // Supabase/PostgREST page size for reads
 
 // Current organization context — set by AuthContext when user logs in.
@@ -387,7 +389,13 @@ export async function pushToSupabase(): Promise<{
             ignoreDuplicates: false,
           });
 
-          if (error) {
+          if (error && error.code === PERMISSION_DENIED_CODE) {
+            // RLS rejected the write: this member's permissions don't allow
+            // changing this table. Retrying can never succeed, so the change
+            // is dropped from the queue instead of blocking it forever.
+            console.warn(`[Sync] Permission denied writing ${tableName}; dropping queued change(s)`);
+            errors.push(`${storeName}: you don't have permission to save these changes`);
+          } else if (error) {
             console.error(`[Sync] Error syncing ${storeName}:`, error);
             console.error(`[Sync] Failed batch data:`, batch);
             errors.push(
@@ -404,7 +412,8 @@ export async function pushToSupabase(): Promise<{
           }
         }
 
-        // Track successfully pushed records for queue clearing
+        // Track successfully pushed (or permanently denied) records for queue
+        // clearing. Any other error keeps the whole store queued for retry.
         if (!storeHadError) {
           successfulChanges.push(...storeChanges.values());
         }

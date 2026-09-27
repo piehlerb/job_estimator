@@ -36,6 +36,15 @@ export function clearPendingInviteCode(): void {
   window.localStorage.removeItem(PENDING_INVITE_CODE_KEY);
 }
 
+/** Row shape of public.organizations, as returned by the org RPCs */
+type OrganizationRow = {
+  id: string;
+  name: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+};
+
 function mapOrg(row: any): Organization {
   return {
     id: row.id,
@@ -119,30 +128,13 @@ export async function createOrganization(name: string): Promise<Organization> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
 
-  // Insert org
+  // Creates the org and the caller's admin membership in one transaction.
+  // Direct inserts into organizations/organization_members are blocked by RLS.
   const { data: orgData, error: orgError } = await supabase
-    .from('organizations')
-    .insert({ name: name.trim(), created_by: user.id })
-    .select()
-    .single();
+    .rpc('create_organization', { p_name: name.trim() })
+    .single<OrganizationRow>();
 
   if (orgError) throw new Error(orgError.message);
-
-  // Add creator as admin member
-  const { error: memberError } = await supabase
-    .from('organization_members')
-    .insert({
-      org_id: orgData.id,
-      user_id: user.id,
-      email: user.email ?? '',
-      role: 'admin',
-    });
-
-  if (memberError) {
-    // Rollback: delete the org we just created
-    await supabase.from('organizations').delete().eq('id', orgData.id);
-    throw new Error(memberError.message);
-  }
 
   // Migrate all existing personal data to this org
   await migrateMyDataToOrg(orgData.id);
@@ -157,54 +149,14 @@ export async function joinOrganizationByCode(inviteCode: string): Promise<Organi
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
 
-  // Use a SECURITY DEFINER RPC to look up the invite + org, bypassing RLS.
-  // Direct joins from organization_invitations → organizations fail for non-members
-  // because the organizations RLS blocks access until the user is a member.
-  const { data: rows, error: rpcError } = await supabase
-    .rpc('lookup_invite_by_code', { p_invite_code: inviteCode.trim() });
+  // The server validates the code, adds the membership with the invitation's
+  // role and permissions, and marks the invitation accepted in one
+  // transaction. Direct inserts into organization_members are blocked by RLS.
+  const { data: orgRow, error: rpcError } = await supabase
+    .rpc('accept_invite', { p_invite_code: inviteCode.trim() })
+    .single<OrganizationRow>();
 
   if (rpcError) throw new Error(rpcError.message);
-
-  const row = rows?.[0];
-  if (!row) throw new Error('Invalid or expired invite code.');
-
-  const orgRow = {
-    id: row.org_id,
-    name: row.org_name,
-    created_by: row.org_created_by,
-    created_at: row.org_created_at,
-    updated_at: row.org_updated_at,
-  };
-
-  // Check user isn't already a member
-  const { data: existing } = await supabase
-    .from('organization_members')
-    .select('id')
-    .eq('org_id', orgRow.id)
-    .eq('user_id', user.id)
-    .maybeSingle();
-
-  if (existing) throw new Error('You are already a member of this organization.');
-
-  // Add user as member
-  const { error: memberError } = await supabase
-    .from('organization_members')
-    .insert({
-      org_id: orgRow.id,
-      user_id: user.id,
-      email: user.email ?? '',
-      role: row.invite_role,
-      invited_by: row.invited_by_user,
-      permissions: row.invite_permissions ?? null,
-    });
-
-  if (memberError) throw new Error(memberError.message);
-
-  // Mark invitation as accepted
-  await supabase
-    .from('organization_invitations')
-    .update({ accepted_by: user.id, accepted_at: new Date().toISOString() })
-    .eq('id', row.invitation_id);
 
   // Migrate all existing personal data to this org
   await migrateMyDataToOrg(orgRow.id);

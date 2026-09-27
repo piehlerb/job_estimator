@@ -592,6 +592,8 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
     jobId: string,
     reminderUpdater: (currentReminders: JobReminder[]) => JobReminder[]
   ) => {
+    // Reminders live on the job record, so changing them is a job write
+    if (!canWriteJobs) return;
     const jobEntry = jobsWithCalc.find(({ job }) => job.id === jobId);
     if (!jobEntry) return;
 
