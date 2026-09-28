@@ -24,20 +24,23 @@ import SetNewPassword from './pages/SetNewPassword';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { useAuth } from './contexts/AuthContext';
 import { useAutoSync } from './hooks/useAutoSync';
+import { useHashRoute } from './hooks/useHashRoute';
 import { migrateCustomersFromJobs, cleanupMigratedCustomerDuplicates, migrateJobsDisableGasHeater } from './lib/jobMigration';
 import { seedOfflineData } from './lib/seedData';
 import { getAllJobs, updateJob, ensureCoatingInventorySeeded } from './lib/db';
 
 import { isPageAllowed, pickLandingPage, type AppPage } from './lib/permissions';
+import { DEFAULT_ROUTE, isJobPage } from './lib/routes';
 
 type Page = AppPage;
 
 function App() {
-  const [currentPage, setCurrentPage] = useState<Page>('dashboard');
+  // The current screen lives in the URL hash (see lib/routes.ts)
+  const { route, navigate, canGoBack } = useHashRoute();
+  const currentPage: Page = route.page;
+  const editingJobId = route.jobId ?? null;
+  const leadIdForNewJob = route.leadId ?? null;
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [editingJobId, setEditingJobId] = useState<string | null>(null);
-  const [leadIdForNewJob, setLeadIdForNewJob] = useState<string | null>(null);
-  const [returnPage, setReturnPage] = useState<Page>('dashboard');
   const [offlineMode, setOfflineMode] = useState(false);
   const isOnline = useOnlineStatus();
   const { user, loading, organization, permissions, orgLoading, needsPasswordReset } = useAuth();
@@ -50,12 +53,16 @@ function App() {
   const canWriteJobsRef = useRef(canWriteJobs);
   canWriteJobsRef.current = canWriteJobs;
 
-  // Redirect users away from pages they don't have permission to view
+  // Redirect users away from pages they don't have permission to view. This
+  // also covers links opened directly (bookmarks, shared URLs, back button).
   useEffect(() => {
-    if (organization && !isPageAllowed(currentPage, permissions)) {
-      setCurrentPage(pickLandingPage(permissions));
+    if (!organization) return;
+    if (currentPage === 'edit-job' && permissions.jobs === 'read' && editingJobId) {
+      navigate({ page: 'job-sheet', jobId: editingJobId }, { replace: true });
+    } else if (!isPageAllowed(currentPage, permissions)) {
+      navigate({ page: pickLandingPage(permissions) }, { replace: true });
     }
-  }, [permissions, organization, currentPage]);
+  }, [permissions, organization, currentPage, editingJobId, navigate]);
   const notifiedThisSessionRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -207,7 +214,7 @@ function App() {
     }
   }, [user, offlineMode, orgLoading, canWriteJobs, canWriteCustomers, canWriteInventory]);
 
-  const handleNavigation = (page: Page, jobId?: string, returnTo?: Page) => {
+  const handleNavigation = (page: Page, jobId?: string) => {
     let target = page;
     // Read-only job access: rewrite edit/new requests to job-sheet (or block new entirely)
     if (organization && permissions.jobs === 'read') {
@@ -217,37 +224,36 @@ function App() {
     if (organization && !isPageAllowed(target, permissions)) {
       return;
     }
-    setCurrentPage(target);
-    if (jobId) setEditingJobId(jobId);
-    if (target !== 'new-job' || !jobId) setLeadIdForNewJob(null);
-    if (returnTo) {
-      setReturnPage(returnTo);
-    } else if (currentPage !== 'edit-job' && currentPage !== 'new-job' && currentPage !== 'job-sheet') {
-      setReturnPage(currentPage);
-    }
+    // Moving between screens of the same job (edit -> sheet, new -> saved job,
+    // group siblings) replaces the history entry, so "back" returns to the list
+    // the job was opened from rather than stepping through each job screen.
+    navigate(
+      { page: target, jobId: isJobPage(target) ? jobId : undefined },
+      { replace: isJobPage(currentPage) && isJobPage(target) }
+    );
     setSidebarOpen(false);
   };
 
+  // "Back" from a job screen: return to wherever it was opened from
   const handleBackToDashboard = () => {
-    setCurrentPage(returnPage);
-    setEditingJobId(null);
-    setLeadIdForNewJob(null);
+    if (canGoBack()) {
+      window.history.back();
+    } else {
+      navigate(DEFAULT_ROUTE, { replace: true });
+    }
   };
 
   const handleNewJobFromLead = (leadId: string) => {
     if (organization && permissions.jobs !== 'write') return;
     if (organization && !isPageAllowed('new-job', permissions)) return;
 
-    setEditingJobId(null);
-    setLeadIdForNewJob(leadId);
-    setReturnPage('leads');
-    setCurrentPage('new-job');
+    navigate({ page: 'new-job', leadId });
     setSidebarOpen(false);
   };
 
   const handleLoginSuccess = () => {
-    // User logged in successfully, app will re-render with user data
-    setCurrentPage('dashboard');
+    // User logged in successfully; the app re-renders on the screen in the URL,
+    // so a link opened while signed out lands where it pointed.
   };
 
   const handleContinueOffline = () => {
@@ -328,7 +334,7 @@ function App() {
         <Settings />
       )}
       {currentPage === 'inventory' && (
-        <Inventory onEditJob={(id) => handleNavigation('edit-job', id, 'inventory')} />
+        <Inventory onEditJob={(id) => handleNavigation('edit-job', id)} />
       )}
       {currentPage === 'calendar' && (
         <Calendar onEditJob={(id) => handleNavigation('edit-job', id)} />

@@ -1,4 +1,4 @@
-import type { MemberPermissions, OrgAccessLevel } from '../types';
+import type { MemberPermissions, OrgAccessLevel } from '../types/index.js';
 
 export const FULL_PERMISSIONS: MemberPermissions = {
   jobs: 'write',

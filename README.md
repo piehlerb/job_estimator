@@ -47,6 +47,13 @@ supabase/
 docs/               # Design notes and plans
 ```
 
+## Navigation
+
+Each screen has a hash URL (`#/inventory`, `#/jobs/new`, `#/jobs/<id>`,
+`#/jobs/<id>/sheet`, …), defined in `src/lib/routes.ts`. Browser back/forward
+and bookmarks work, and a link opened while signed out lands on that screen after
+sign-in. Permission checks still apply to links opened directly.
+
 ## Conventions
 
 - **Version:** bump `package.json` only; the build stamps it into the UI and the
