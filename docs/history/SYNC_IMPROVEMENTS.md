@@ -1,3 +1,5 @@
+> **Historical document.** Kept for context; parts are out of date (versioning, migrations, file layout). Current conventions are in `.claude/claude.md` and `supabase/README.md`.
+
 # Sync System Improvements - Version 1.6.0
 
 ## Overview

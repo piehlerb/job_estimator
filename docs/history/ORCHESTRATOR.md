@@ -1,3 +1,5 @@
+> **Historical document.** Kept for context; parts are out of date (versioning, migrations, file layout). Current conventions are in `.claude/claude.md` and `supabase/README.md`.
+
 # Job Estimator — Orchestrator Map
 
 Living architectural reference for this AI orchestration thread. Updated as tasks complete and decisions are made.
