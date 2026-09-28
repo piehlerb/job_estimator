@@ -12,6 +12,21 @@ export const LEAD_STAGES = [
 
 export type LeadStage = (typeof LEAD_STAGES)[number];
 
+export const LEAD_DISPOSITION_REASONS = [
+  'Not Interested',
+  'Out of Territory',
+  'Wrong Service',
+  'Bad Contact Info',
+  'Duplicate',
+  'Spam',
+  'Unresponsive',
+  'Price/Budget',
+  'Timing',
+  'Other',
+] as const;
+
+export type LeadDispositionReason = (typeof LEAD_DISPOSITION_REASONS)[number];
+
 export type GhlWebhookEventType =
   | 'lead.created'
   | 'appointment.booked'
@@ -459,6 +474,12 @@ export function nextLeadStageForEvent(currentStage: LeadStage | undefined, event
     default:
       return currentStage || 'New';
   }
+}
+
+export function stageForLinkedJobStatus(status: 'Won' | 'Lost' | 'Pending' | 'Verbal'): LeadStage {
+  if (status === 'Won') return 'Won';
+  if (status === 'Lost') return 'Lost';
+  return 'Quoted';
 }
 
 export function normalizeGhlWebhook(payload: Record<string, unknown>): NormalizedGhlWebhook {
