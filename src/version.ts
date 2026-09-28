@@ -1,2 +1,2 @@
-// App version - keep in sync with package.json and sw.js
-export const APP_VERSION = '2.26.1';
+// App version, injected at build time from package.json (see vite.config.ts)
+export const APP_VERSION: string = __APP_VERSION__;

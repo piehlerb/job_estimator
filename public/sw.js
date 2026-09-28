@@ -1,5 +1,5 @@
-// Cache version - UPDATE THIS WITH EACH DEPLOYMENT
-const CACHE_VERSION = '2.26.1';
+// Cache version: stamped from package.json at build time (vite.config.ts)
+const CACHE_VERSION = '__APP_VERSION__';
 const CACHE_NAME = `estimation-app-v${CACHE_VERSION}`;
 const BASE_PATH = '/job_estimator';
 

@@ -275,13 +275,12 @@ supabase/
 
 ## App Versioning
 
-The app version is tracked in **three files** that must be kept in sync:
+The version lives in **one place: `package.json`**. The build carries it everywhere else:
 
-| File | Constant | Purpose |
-|------|----------|---------|
-| `package.json` | `version` | npm package version |
-| `public/sw.js` | `CACHE_VERSION` | Service worker cache name |
-| `src/version.ts` | `APP_VERSION` | Displayed in UI sidebar |
+| Where | How |
+|------|-----|
+| UI sidebar (`APP_VERSION` in `src/version.ts`) | `__APP_VERSION__` constant injected by `vite.config.ts` |
+| Service worker cache name (`public/sw.js`) | `__APP_VERSION__` placeholder stamped into `dist/sw.js` after each build |
 
 ### When to Update Version
 
@@ -293,11 +292,13 @@ Update the version number when deploying changes that users need to see immediat
 
 ### How to Update Version
 
-1. Increment version in all three files (use semantic versioning: `MAJOR.MINOR.PATCH`)
-2. The service worker cache name includes the version, so changing it will:
-   - Trigger a new service worker install
-   - Delete old caches
-   - Force fresh asset downloads
+Bump `package.json` (semantic versioning: `MAJOR.MINOR.PATCH`), e.g.
+`npm version patch --no-git-tag-version`. Don't edit `src/version.ts` or `public/sw.js`.
+
+A new version changes the service worker cache name, which will:
+- Trigger a new service worker install
+- Delete old caches
+- Force fresh asset downloads
 
 **IMPORTANT: Always bump the version before pushing to GitHub!** This ensures users get the latest changes immediately and the service worker cache is properly invalidated.
 
