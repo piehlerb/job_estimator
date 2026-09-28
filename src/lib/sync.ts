@@ -3,6 +3,7 @@
  * Handles bidirectional synchronization between IndexedDB and Supabase
  */
 
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import { getCurrentUser } from './auth';
 import {
@@ -59,6 +60,10 @@ import {
 
 // Sync state stored in IndexedDB
 const SYNC_STATE_KEY = 'sync_state';
+// Sync works on tables chosen at runtime, which the typed client can't
+// express, so it goes through an untyped view of the same client.
+const untypedSupabase = supabase as unknown as SupabaseClient;
+
 const BATCH_SIZE = 50; // Process records in batches
 // Postgres insufficient_privilege: returned when RLS rejects a write
 const PERMISSION_DENIED_CODE = '42501';
@@ -100,8 +105,8 @@ export function isSyncOrgContextResolved(): boolean {
 
 function getScopedTableQuery(tableName: string, userId: string): any {
   return _currentOrgId
-    ? supabase.from(tableName).select('*').eq('org_id', _currentOrgId)
-    : supabase.from(tableName).select('*').eq('user_id', userId).is('org_id', null);
+    ? untypedSupabase.from(tableName).select('*').eq('org_id', _currentOrgId)
+    : untypedSupabase.from(tableName).select('*').eq('user_id', userId).is('org_id', null);
 }
 
 async function fetchPagedRows(buildQuery: () => any): Promise<{ data: any[]; error: any | null }> {
@@ -384,7 +389,7 @@ export async function pushToSupabase(): Promise<{
         let storeHadError = false;
 
         for (const batch of batches) {
-          const { error } = await supabase.from(tableName).upsert(batch, {
+          const { error } = await untypedSupabase.from(tableName).upsert(batch, {
             onConflict: 'id',
             ignoreDuplicates: false,
           });
@@ -527,7 +532,7 @@ export async function pushAllToSupabase(options?: { bumpTimestamps?: boolean }):
         const batches = batchArray(recordsToSync, BATCH_SIZE);
 
         for (const batch of batches) {
-          const { error } = await supabase.from(tableName).upsert(batch, {
+          const { error } = await untypedSupabase.from(tableName).upsert(batch, {
             onConflict: 'id',
             ignoreDuplicates: false,
           });

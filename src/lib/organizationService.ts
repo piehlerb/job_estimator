@@ -7,6 +7,7 @@
 
 import { supabase } from './supabase';
 import type { Organization, OrganizationMember, OrganizationInvitation, OrgAccessLevel, MemberPermissions } from '../types';
+import type { Json, Tables } from '../types/database';
 
 // =====================================================
 // HELPERS
@@ -37,15 +38,18 @@ export function clearPendingInviteCode(): void {
 }
 
 /** Row shape of public.organizations, as returned by the org RPCs */
-type OrganizationRow = {
-  id: string;
-  name: string;
-  created_by: string;
-  created_at: string;
-  updated_at: string;
-};
+type OrganizationRow = Tables<'organizations'>;
 
-function mapOrg(row: any): Organization {
+/** Permissions are stored in a jsonb column */
+function permissionsToJson(permissions: MemberPermissions | null | undefined): Json | null {
+  return (permissions ?? null) as unknown as Json | null;
+}
+
+function permissionsFromJson(value: Json | null): MemberPermissions | null {
+  return (value as unknown as MemberPermissions | null) ?? null;
+}
+
+function mapOrg(row: OrganizationRow): Organization {
   return {
     id: row.id,
     name: row.name,
@@ -55,33 +59,33 @@ function mapOrg(row: any): Organization {
   };
 }
 
-function mapMember(row: any): OrganizationMember {
+function mapMember(row: Tables<'organization_members'>): OrganizationMember {
   return {
     id: row.id,
     orgId: row.org_id,
     userId: row.user_id,
     email: row.email,
-    role: row.role,
+    role: row.role as OrganizationMember['role'],
     accessLevel: (row.access_level as OrgAccessLevel) ?? 'full',
-    permissions: (row.permissions as MemberPermissions | null) ?? null,
+    permissions: permissionsFromJson(row.permissions),
     invitedBy: row.invited_by ?? undefined,
     joinedAt: row.joined_at,
   };
 }
 
-function mapInvitation(row: any): OrganizationInvitation {
+function mapInvitation(row: Tables<'organization_invitations'>): OrganizationInvitation {
   return {
     id: row.id,
     orgId: row.org_id,
     email: row.email ?? undefined,
-    role: row.role,
+    role: row.role as OrganizationInvitation['role'],
     inviteCode: row.invite_code,
     invitedBy: row.invited_by,
     acceptedBy: row.accepted_by ?? undefined,
     acceptedAt: row.accepted_at ?? undefined,
     expiresAt: row.expires_at,
     createdAt: row.created_at,
-    permissions: (row.permissions as MemberPermissions | null) ?? null,
+    permissions: permissionsFromJson(row.permissions),
   };
 }
 
@@ -110,14 +114,14 @@ export async function getMyOrganization(): Promise<{
   if (error) throw new Error(`Failed to load organization: ${error.message}`);
   if (!data) return null;
 
-  const orgRow = (data as any).organizations;
+  const orgRow = data.organizations;
   if (!orgRow) return null;
 
   return {
     org: mapOrg(orgRow),
     role: data.role as 'admin' | 'member',
-    accessLevel: ((data as any).access_level as OrgAccessLevel) ?? 'full',
-    permissions: ((data as any).permissions as MemberPermissions | null) ?? null,
+    accessLevel: (data.access_level as OrgAccessLevel) ?? 'full',
+    permissions: permissionsFromJson(data.permissions),
   };
 }
 
@@ -271,7 +275,7 @@ export async function generateInviteCode(
       email: email?.trim() || null,
       role,
       invited_by: user.id,
-      permissions: permissions ?? null,
+      permissions: permissionsToJson(permissions),
     })
     .select()
     .single();
@@ -356,7 +360,7 @@ export async function updateMemberPermissions(
 ): Promise<void> {
   const { error } = await supabase
     .from('organization_members')
-    .update({ permissions })
+    .update({ permissions: permissionsToJson(permissions) })
     .eq('org_id', orgId)
     .eq('user_id', userId);
 

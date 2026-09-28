@@ -84,6 +84,9 @@ Apply it with the Supabase CLI so production records it in its migration history
 Avoid pasting SQL into the dashboard SQL Editor: that skips the history, and the
 repo and database drift apart. See `supabase/README.md`.
 
+Then regenerate the database types with `npm run gen:types` so
+`src/types/database.ts` (used by the typed Supabase client) matches the schema.
+
 ### 5. Verify Sync and Backup (Usually No Changes Needed!)
 
 The sync and backup systems work at the **object level**, so new fields are automatically included:

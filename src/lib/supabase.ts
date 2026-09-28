@@ -4,6 +4,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import type { Database } from '../types/database';
 
 // Get environment variables
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -45,7 +46,7 @@ const customStorage = {
 };
 
 // Create Supabase client
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
     storageKey: 'job-estimator-auth',

@@ -48,6 +48,7 @@ supabase migration new add_notes_to_jobs     # creates migrations/<timestamp>_ad
 # write the SQL, then check what production is missing:
 supabase migration list
 supabase db push                             # applies new files and records them
+npm run gen:types                            # refresh src/types/database.ts
 ```
 
 Rules:

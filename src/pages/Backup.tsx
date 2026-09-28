@@ -1,5 +1,5 @@
-import { Download, Upload, AlertTriangle, CheckCircle, XCircle, SkipForward, Cloud, Trash2, RefreshCw } from 'lucide-react';
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { Download, Upload, AlertTriangle, CheckCircle, XCircle, SkipForward } from 'lucide-react';
+import { useState, useRef } from 'react';
 import {
   exportAllData,
   downloadExport,
@@ -8,16 +8,7 @@ import {
   executeImport,
   parseImportFile,
 } from '../lib/backup';
-import {
-  saveCloudBackup,
-  listCloudBackups,
-  fetchCloudBackupData,
-  deleteCloudBackup,
-  type CloudBackupRecord,
-} from '../lib/cloudBackup';
 import { ExportData, ImportPreview, MergeLogEntry } from '../types';
-import SaveButton from '../components/SaveButton';
-import { useSaveFlash } from '../hooks/useSaveFlash';
 
 export default function Backup() {
   const [exporting, setExporting] = useState(false);
@@ -28,32 +19,6 @@ export default function Backup() {
   const [importing, setImporting] = useState(false);
   const [mergeLog, setMergeLog] = useState<MergeLogEntry[] | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Cloud backup state
-  const [cloudBackups, setCloudBackups] = useState<CloudBackupRecord[]>([]);
-  const [cloudLoading, setCloudLoading] = useState(false);
-  const [cloudSaving, setCloudSaving] = useState(false);
-  const [cloudError, setCloudError] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [restoreSourceId, setRestoreSourceId] = useState<string | null>(null);
-  const { saved: cloudSaved, flashSaved: flashCloudSaved } = useSaveFlash();
-
-  const loadCloudBackups = useCallback(async () => {
-    setCloudLoading(true);
-    setCloudError(null);
-    try {
-      const list = await listCloudBackups();
-      setCloudBackups(list);
-    } catch (err) {
-      setCloudError(err instanceof Error ? err.message : 'Failed to load cloud backups');
-    } finally {
-      setCloudLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadCloudBackups();
-  }, [loadCloudBackups]);
 
   const handleExport = async () => {
     setExporting(true);
@@ -75,7 +40,6 @@ export default function Backup() {
     setImportPreview(null);
     setImportErrors([]);
     setMergeLog(null);
-    setRestoreSourceId(null);
 
     try {
       const rawData = await parseImportFile(file);
@@ -116,8 +80,7 @@ export default function Backup() {
       setMergeLog(log);
       setImportData(null);
       setImportPreview(null);
-      setRestoreSourceId(null);
-    } catch (error) {
+      } catch (error) {
       console.error('Import failed:', error);
       setImportErrors([error instanceof Error ? error.message : 'Import failed']);
     } finally {
@@ -129,78 +92,10 @@ export default function Backup() {
     setImportData(null);
     setImportPreview(null);
     setImportErrors([]);
-    setRestoreSourceId(null);
   };
 
   const handleCloseMergeLog = () => {
     setMergeLog(null);
-  };
-
-  // Cloud backup handlers
-  const handleSaveCloudBackup = async () => {
-    setCloudSaving(true);
-    setCloudError(null);
-    try {
-      await saveCloudBackup('manual');
-      await loadCloudBackups();
-      flashCloudSaved();
-    } catch (err) {
-      setCloudError(err instanceof Error ? err.message : 'Failed to save backup');
-    } finally {
-      setCloudSaving(false);
-    }
-  };
-
-  const handleRestoreCloudBackup = async (backup: CloudBackupRecord) => {
-    setImportData(null);
-    setImportPreview(null);
-    setImportErrors([]);
-    setMergeLog(null);
-    setRestoreSourceId(backup.id);
-
-    try {
-      const data = await fetchCloudBackupData(backup.id);
-      const validation = validateImportData(data);
-      if (!validation.valid) {
-        setImportErrors(validation.errors);
-        setRestoreSourceId(null);
-        return;
-      }
-      setImportData(data);
-      const preview = await generateImportPreview(data, deleteOrphans);
-      setImportPreview(preview);
-      // Scroll to the preview section
-      setTimeout(() => {
-        document.getElementById('import-preview-section')?.scrollIntoView({ behavior: 'smooth' });
-      }, 100);
-    } catch (err) {
-      setImportErrors([err instanceof Error ? err.message : 'Failed to load backup']);
-      setRestoreSourceId(null);
-    }
-  };
-
-  const handleDeleteCloudBackup = async (id: string) => {
-    if (!window.confirm('Delete this cloud backup? This cannot be undone.')) return;
-    setDeletingId(id);
-    try {
-      await deleteCloudBackup(id);
-      setCloudBackups((prev) => prev.filter((b) => b.id !== id));
-    } catch (err) {
-      setCloudError(err instanceof Error ? err.message : 'Failed to delete backup');
-    } finally {
-      setDeletingId(null);
-    }
-  };
-
-  const formatRelativeTime = (iso: string) => {
-    const diff = Date.now() - new Date(iso).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return 'just now';
-    if (mins < 60) return `${mins}m ago`;
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return `${hrs}h ago`;
-    const days = Math.floor(hrs / 24);
-    return `${days}d ago`;
   };
 
   return (
@@ -226,105 +121,6 @@ export default function Backup() {
             <Download size={18} />
             {exporting ? 'Exporting...' : 'Export Backup'}
           </button>
-        </div>
-
-        {/* Cloud Backups Section */}
-        <div className="p-6 bg-slate-50 border border-slate-200 rounded-lg">
-          <div className="flex items-center justify-between mb-2">
-            <h4 className="font-semibold text-slate-900 flex items-center gap-2">
-              <Cloud size={18} className="text-gf-lime" />
-              Cloud Backups
-            </h4>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={loadCloudBackups}
-                disabled={cloudLoading}
-                className="p-1.5 text-slate-500 hover:text-slate-700 hover:bg-slate-200 rounded transition-colors"
-                title="Refresh"
-              >
-                <RefreshCw size={15} className={cloudLoading ? 'animate-spin' : ''} />
-              </button>
-              <SaveButton
-                onClick={handleSaveCloudBackup}
-                saving={cloudSaving}
-                saved={cloudSaved}
-                label="Save Now"
-                icon={<Cloud size={14} />}
-                iconSize={14}
-                className="gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold disabled:opacity-50"
-              />
-            </div>
-          </div>
-          <p className="text-sm text-slate-600 mb-4">
-            Snapshots are saved automatically once per day and stored in your account. Keep up to 30.
-          </p>
-
-          {cloudError && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-sm text-red-700">
-              <AlertTriangle size={15} />
-              {cloudError}
-            </div>
-          )}
-
-          {cloudLoading && cloudBackups.length === 0 ? (
-            <p className="text-sm text-slate-400 italic">Loading...</p>
-          ) : cloudBackups.length === 0 ? (
-            <p className="text-sm text-slate-400 italic">
-              No cloud backups yet — they'll be created automatically each day.
-            </p>
-          ) : (
-            <div className="border border-slate-200 rounded-lg overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-100 border-b border-slate-200">
-                  <tr>
-                    <th className="text-left px-4 py-2 text-slate-600 font-medium">Date</th>
-                    <th className="text-left px-4 py-2 text-slate-600 font-medium">Records</th>
-                    <th className="text-left px-4 py-2 text-slate-600 font-medium">Type</th>
-                    <th className="px-4 py-2"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200 bg-white">
-                  {cloudBackups.map((backup) => (
-                    <tr key={backup.id} className="hover:bg-slate-50">
-                      <td className="px-4 py-2.5 text-slate-900">
-                        <span className="font-medium">{new Date(backup.createdAt).toLocaleDateString()}</span>
-                        <span className="text-slate-400 ml-2 text-xs">{formatRelativeTime(backup.createdAt)}</span>
-                      </td>
-                      <td className="px-4 py-2.5 text-slate-600">{backup.recordCount.toLocaleString()}</td>
-                      <td className="px-4 py-2.5">
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                          backup.note === 'auto'
-                            ? 'bg-slate-100 text-slate-600'
-                            : 'bg-blue-50 text-blue-700'
-                        }`}>
-                          {backup.note ?? 'manual'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => handleRestoreCloudBackup(backup)}
-                            disabled={restoreSourceId === backup.id}
-                            className="px-3 py-1 text-xs font-semibold bg-gf-lime text-white rounded hover:bg-gf-dark-green transition-colors disabled:opacity-50"
-                          >
-                            {restoreSourceId === backup.id ? 'Loading...' : 'Restore'}
-                          </button>
-                          <button
-                            onClick={() => handleDeleteCloudBackup(backup.id)}
-                            disabled={deletingId === backup.id}
-                            className="p-1 text-slate-400 hover:text-red-600 transition-colors disabled:opacity-50"
-                            title="Delete"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
         </div>
 
         {/* Import Section */}
@@ -378,7 +174,7 @@ export default function Backup() {
             <div className="mt-4">
               <div className="flex items-center justify-between mb-4">
                 <h5 className="font-semibold text-slate-900">
-                  {restoreSourceId ? 'Cloud Restore Preview' : 'Import Preview'}
+                  Import Preview
                 </h5>
                 <p className="text-sm text-slate-500">
                   Exported: {importData?.metadata.exportedAt ? new Date(importData.metadata.exportedAt).toLocaleString() : 'Unknown'}
@@ -476,7 +272,7 @@ export default function Backup() {
                   disabled={importing || (importPreview.toAdd.length === 0 && importPreview.toUpdate.length === 0 && importPreview.toDelete.length === 0)}
                   className="flex items-center gap-2 px-4 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors disabled:opacity-50"
                 >
-                  {importing ? 'Importing...' : restoreSourceId ? 'Apply Restore' : 'Apply Import'}
+                  {importing ? 'Importing...' : 'Apply Import'}
                 </button>
                 <button
                   onClick={handleCancelImport}
