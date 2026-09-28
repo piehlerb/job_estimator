@@ -380,10 +380,11 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
       switch (sortBy) {
         case 'price':
           return b.job.totalPrice - a.job.totalPrice;
-        case 'margin':
+        case 'margin': {
           const marginA = a.job.totalPrice > 0 ? ((a.job.totalPrice - a.calc.totalCosts) / a.job.totalPrice) * 100 : 0;
           const marginB = b.job.totalPrice > 0 ? ((b.job.totalPrice - b.calc.totalCosts) / b.job.totalPrice) * 100 : 0;
           return marginB - marginA;
+        }
         case 'date':
         default:
           return new Date(b.job.createdAt).getTime() - new Date(a.job.createdAt).getTime();

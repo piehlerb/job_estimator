@@ -1816,7 +1816,7 @@ export function parseImportFile(file: File): Promise<unknown> {
         const text = e.target?.result as string;
         const data = JSON.parse(text);
         resolve(data);
-      } catch (error) {
+      } catch {
         reject(new Error('Invalid JSON file'));
       }
     };

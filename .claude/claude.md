@@ -109,6 +109,9 @@ After adding a field:
 - [ ] Field appears in JSON exports
 - [ ] Field restores from JSON imports
 - [ ] Existing records work (field should be null/undefined)
+- [ ] `npm run lint`, `npm run typecheck` and `npm test` pass — CI runs all three
+      (plus the build) on every branch and PR, and deploys only when they pass.
+      Unit tests are `src/lib/**/*.test.ts` (Node's built-in test runner).
 
 ## Data Synchronization
 

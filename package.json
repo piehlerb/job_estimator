@@ -9,6 +9,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
+    "pretest": "node -e \"require('fs').rmSync('.tmp-tests',{recursive:true,force:true})\" && tsc -p tsconfig.test.json",
+    "test": "node --test .tmp-tests/src/lib/*.test.js",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d dist"
   },

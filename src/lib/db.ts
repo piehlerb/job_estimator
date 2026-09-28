@@ -83,7 +83,7 @@ async function notifySyncError(error: any): Promise<void> {
   try {
     // This is called from a non-React context, so we can't use hooks
     // The error will be caught by the sync function and displayed via SyncContext
-  } catch (err) {
+  } catch {
     // Ignore - context may not be available
   }
 }

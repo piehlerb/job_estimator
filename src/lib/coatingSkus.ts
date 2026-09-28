@@ -4,7 +4,7 @@
  * No db imports — safe to use from any layer.
  */
 
-import { CoatingInventory, CoatingPart } from '../types';
+import type { CoatingInventory, CoatingPart } from '../types/index.js';
 
 /** Coordinates that identify a coating SKU (plus optional display order). */
 export interface CoatingSkuCoords {

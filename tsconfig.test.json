@@ -10,32 +10,5 @@
     "rootDir": ".",
     "types": ["node"]
   },
-  "include": [
-    "src/lib/inventoryActuals.ts",
-    "src/lib/inventoryActuals.test.ts",
-    "src/lib/chipInventory.ts",
-    "src/lib/calculations.ts",
-    "src/lib/calculations.test.ts",
-    "src/lib/reminderCoverage.ts",
-    "src/lib/reminderCoverage.test.ts",
-    "src/lib/leadPipeline.ts",
-    "src/lib/leadPipeline.test.ts",
-    "src/lib/leadMutations.ts",
-    "src/lib/leadMutations.test.ts",
-    "src/lib/jobSyncPolicy.ts",
-    "src/lib/jobSyncPolicy.test.ts",
-    "src/lib/customerPersistence.ts",
-    "src/lib/customerPersistence.test.ts",
-    "src/lib/zipGeography.ts",
-    "src/lib/zipGeography.test.ts",
-    "src/lib/addressParse.ts",
-    "src/lib/addressParse.test.ts",
-    "src/lib/addressFields.ts",
-    "src/lib/addressFields.test.ts",
-    "src/lib/addressBackfill.ts",
-    "src/lib/addressBackfill.test.ts",
-    "src/lib/nhMeZipRegistry.ts",
-    "src/lib/dateUtils.ts",
-    "src/types/index.ts"
-  ]
+  "include": ["src/lib/**/*.test.ts"]
 }
