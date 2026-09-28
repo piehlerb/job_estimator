@@ -1,0 +1,8 @@
+-- add_ad_spend_table: applied to production before the baseline was taken.
+--
+-- Its changes are already part of 20260928235900_baseline.sql, so this file is
+-- intentionally empty. It exists because production's migration history lists
+-- this version, and the Supabase CLI requires every recorded version to have a
+-- matching local file.
+--
+-- Original SQL: supabase/legacy_migrations/migration_add_ad_spend_table.sql

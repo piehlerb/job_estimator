@@ -42,7 +42,7 @@ function App() {
   const isOnline = useOnlineStatus();
   const { user, loading, organization, permissions, orgLoading, needsPasswordReset } = useAuth();
   // Mirrors the server-side write rules (org_can_write in
-  // supabase/migration_harden_org_security.sql). Background writes a member
+  // supabase/migrations/20260928235900_baseline.sql). Background writes a member
   // isn't allowed to make would be rejected on push, so skip them here.
   const canWriteJobs = !organization || permissions.jobs === 'write';
   const canWriteCustomers = canWriteJobs || permissions.customers;

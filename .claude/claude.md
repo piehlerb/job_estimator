@@ -60,15 +60,18 @@ export interface Job {
 - Update form submission to include the field
 
 ### 3. Create Supabase Migration
-**Directory:** `supabase/`
-- Create a new migration file: `migration_add_<field_name>_column.sql`
+**Directory:** `supabase/migrations/`
+- Create a new file named `<UTC timestamp>_<description>.sql`, e.g.
+  `20261005143000_add_notes_to_jobs.sql` (`supabase migration new add_notes_to_jobs`
+  creates it for you). Files run in timestamp order, once each.
 - Use `IF NOT EXISTS` to make it safe to re-run
 - Add appropriate column type and constraints
 - Include helpful comments
+- Never edit a migration that has already been applied; add a new one instead
 
 Example:
 ```sql
--- Migration: Add notes field to jobs table
+-- Add notes field to jobs table
 ALTER TABLE jobs
 ADD COLUMN IF NOT EXISTS notes TEXT;
 
@@ -76,9 +79,10 @@ COMMENT ON COLUMN jobs.notes IS 'Additional notes about the job';
 ```
 
 ### 4. Run the Migration
-Execute the SQL on your Supabase database:
-- **Option A:** Via Supabase Dashboard → SQL Editor
-- **Option B:** Via Supabase CLI: `supabase db push`
+Apply it with the Supabase CLI so production records it in its migration history:
+`supabase db push` (after `supabase link --project-ref <ref>` once).
+Avoid pasting SQL into the dashboard SQL Editor: that skips the history, and the
+repo and database drift apart. See `supabase/README.md`.
 
 ### 5. Verify Sync and Backup (Usually No Changes Needed!)
 
@@ -248,9 +252,9 @@ src/
     └── ...
 
 supabase/
-├── schema.sql              # Full database schema
-├── policies.sql            # Row-level security
-└── migration_*.sql         # Migration files
+├── migrations/             # Ordered migrations (baseline + everything after)
+├── legacy_migrations/      # Pre-baseline SQL, kept for reference only
+└── functions/              # Edge functions
 ```
 
 ## Best Practices
@@ -305,7 +309,7 @@ The service worker uses different strategies:
 ## Need Help?
 
 - Check existing fields in `src/types/index.ts` for patterns
-- Review recent migration files in `supabase/` directory
+- Review recent migration files in `supabase/migrations/`
 - Look at similar UI fields in `src/pages/JobForm.tsx`
 - Test sync with: DevTools → Application → IndexedDB
 - Check Supabase: Dashboard → Table Editor
