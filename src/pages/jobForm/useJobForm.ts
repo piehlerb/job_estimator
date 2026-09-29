@@ -2244,7 +2244,21 @@ export function useJobForm({ jobId, leadId, onBack, onEditJob, onViewJobSheet }:
     moistureMitigationPrice: calculation.suggestedMoistureMitigationPrice > 0,
   } : null;
 
+
+  // Derived values shown in the summary and price sections
+  const selectedLaborers = getSelectedLaborers();
+
+  const marginPct = calculation && parseFloat(formData.totalPrice) > 0
+    ? ((parseFloat(formData.totalPrice) - calculation.totalCosts) / parseFloat(formData.totalPrice)) * 100
+    : 0;
+  const perSqft = calculation && parseFloat(formData.floorFootage) > 0
+    ? parseFloat(formData.totalPrice) / parseFloat(formData.floorFootage)
+    : 0;
+
   return {
+    selectedLaborers,
+    marginPct,
+    perSqft,
     systems,
     setSystems,
     costs,
