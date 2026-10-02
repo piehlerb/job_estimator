@@ -221,3 +221,63 @@ describe('actual day count independent of the plan', () => {
     assert.equal(planned1ActualTwo.actualTotalHours, 12);
   });
 });
+
+describe('shipping factor', () => {
+  const shipCosts: Costs = { ...costs, shippingFactor: 5, gasCost: 4, consumablesCost: 100 };
+  const rich: Laborer[] = [
+    { id: 'a', name: 'A', fullyLoadedRate: 50, isActive: true, createdAt: '', updatedAt: '' },
+  ];
+  const products = [{ productId: 'p', productName: 'Product', quantity: 2, unitCost: 100, unitPrice: 250 }];
+
+  test('actuals: 5% on materials, consumables and products only', () => {
+    const actuals = calculateActualCosts({
+      actualSchedule: [{ day: 1, hours: 8, laborerIds: ['a'] }],
+      actualBaseCoatGallons: 2, actualTopCoatGallons: 0, actualCyclo1Gallons: 0, actualTintOz: 0,
+      actualChipBoxes: 0, actualCrackRepairOz: 0, actualMoistureMitigationGallons: 0, chipBoxCost: 0,
+      totalPrice: 1000, installDays: 1, installDate: '2026-06-12', travelDistance: 20,
+      actualExpenseAdjustment: 500, products,
+    }, shipCosts, pricing, rich);
+    // base $200 + consumables $100 + products $200 = $500 purchased; labor, gas, royalty, adjustment excluded
+    assert.equal(actuals.actualShippingCost, 25);
+    const withoutShipping = calculateActualCosts({
+      actualSchedule: [{ day: 1, hours: 8, laborerIds: ['a'] }],
+      actualBaseCoatGallons: 2, actualTopCoatGallons: 0, actualCyclo1Gallons: 0, actualTintOz: 0,
+      actualChipBoxes: 0, actualCrackRepairOz: 0, actualMoistureMitigationGallons: 0, chipBoxCost: 0,
+      totalPrice: 1000, installDays: 1, installDate: '2026-06-12', travelDistance: 20,
+      actualExpenseAdjustment: 500, products,
+    }, { ...shipCosts, shippingFactor: 0 }, pricing, rich);
+    assert.equal(actuals.actualTotalCosts - withoutShipping.actualTotalCosts, 25);
+  });
+
+  test('estimates: shipping adds to total costs, leaves floor price alone for product shipping', () => {
+    const inputs = {
+      floorFootage: 500, verticalFootage: 0, crackFillFactor: 0, travelDistance: 0,
+      installDate: '2026-06-12', installDays: 2, jobHours: 0, totalPrice: 4000,
+      includeBasecoatTint: false, includeTopcoatTint: false, antiSlip: false,
+      abrasionResistance: false, cyclo1Topcoat: false, coatingRemoval: 'None' as const,
+      moistureMitigation: false, products,
+    };
+    const system = {
+      id: 's', name: 'System', feetPerLb: 10, boxCost: 100, baseSpread: 200,
+      baseCoats: 1, topSpread: 200, topCoats: 1, cyclo1Spread: 200, cyclo1Coats: 0,
+      createdAt: '', updatedAt: '',
+    };
+    const none = calculateJobOutputs(inputs, system, { ...shipCosts, shippingFactor: 0 }, [], pricing);
+    const ship = calculateJobOutputs(inputs, system, shipCosts, [], pricing);
+    const purchased = ship.chipCost + ship.baseCost + ship.topCost + 100 + 200;
+    assert.equal(none.shippingCost, 0);
+    assert.ok(Math.abs(ship.shippingCost - purchased * 0.05) < 1e-9);
+    assert.ok(Math.abs(ship.totalCosts - none.totalCosts - ship.shippingCost) < 1e-9);
+  });
+
+  test('absent factor on old snapshots means no shipping', () => {
+    const { shippingFactor: _unused, ...legacy } = shipCosts;
+    void _unused;
+    const actuals = calculateActualCosts({
+      actualSchedule: schedule, actualBaseCoatGallons: 2, actualTopCoatGallons: 0, actualCyclo1Gallons: 0,
+      actualTintOz: 0, actualChipBoxes: 0, actualCrackRepairOz: 0, actualMoistureMitigationGallons: 0,
+      chipBoxCost: 0, totalPrice: 0, installDays: 1, installDate: '2026-06-12', travelDistance: 0,
+    }, legacy, pricing, []);
+    assert.equal(actuals.actualShippingCost, 0);
+  });
+});

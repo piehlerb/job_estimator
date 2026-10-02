@@ -628,6 +628,7 @@ export function getDefaultCosts(): Costs {
     abrasionResistanceCostPerGal: 0,
     moistureMitigationCostPerGal: 0,
     moistureMitigationSpreadRate: 200,
+    shippingFactor: 0,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };

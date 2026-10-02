@@ -492,6 +492,7 @@ export default function Reporting({ onEditJob }: ReportingProps) {
       { label: 'Gas – Travel', field: 'actualGasTravelCost' },
       { label: 'Labor', field: 'actualLaborCost' },
       { label: 'Consumables', field: 'actualConsumablesCost' },
+      { label: 'Shipping', field: 'actualShippingCost' },
       { label: 'Royalty', field: 'actualRoyaltyCost' },
       { label: 'Adjustments', field: 'actualExpenseAdjustment' },
     ];

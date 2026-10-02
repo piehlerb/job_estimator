@@ -25,6 +25,7 @@ export default function Costs() {
     abrasionResistanceCostPerGal: '',
     moistureMitigationCostPerGal: '',
     moistureMitigationSpreadRate: '',
+    shippingFactor: '',
   });
 
   useEffect(() => {
@@ -48,6 +49,7 @@ export default function Costs() {
         abrasionResistanceCostPerGal: (storedCosts.abrasionResistanceCostPerGal || 0).toString(),
         moistureMitigationCostPerGal: (storedCosts.moistureMitigationCostPerGal ?? 0).toString(),
         moistureMitigationSpreadRate: (storedCosts.moistureMitigationSpreadRate ?? 200).toString(),
+        shippingFactor: (storedCosts.shippingFactor ?? 0).toString(),
       });
     }
 
@@ -72,6 +74,7 @@ export default function Costs() {
         abrasionResistanceCostPerGal: parseFloat(costsForm.abrasionResistanceCostPerGal) || 0,
         moistureMitigationCostPerGal: parseFloat(costsForm.moistureMitigationCostPerGal) || 0,
         moistureMitigationSpreadRate: parseFloat(costsForm.moistureMitigationSpreadRate) || 200,
+        shippingFactor: parseFloat(costsForm.shippingFactor) || 0,
       });
 
       flashSaved();
@@ -202,6 +205,19 @@ export default function Costs() {
                 onChange={(e) => setCostsForm({ ...costsForm, abrasionResistanceCostPerGal: e.target.value })}
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
               />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-900 mb-2">Shipping Factor (%)</label>
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                placeholder="0"
+                value={costsForm.shippingFactor}
+                onChange={(e) => setCostsForm({ ...costsForm, shippingFactor: e.target.value })}
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
+              />
+              <p className="text-xs text-slate-500 mt-1">Added to materials, consumables and products (not labor or gas)</p>
             </div>
           </div>
           <div className="border-t border-slate-200 my-2"></div>

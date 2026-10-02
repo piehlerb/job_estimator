@@ -3601,6 +3601,10 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
                     <p className="text-sm sm:text-base md:text-lg font-semibold">{formatCurrency(calculation.consumablesCost)}</p>
                   </div>
                   <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
+                    <p className="text-xs text-slate-500">Shipping ({usedCosts?.shippingFactor ?? 0}%)</p>
+                    <p className="text-sm sm:text-base md:text-lg font-semibold">{formatCurrency(calculation.shippingCost)}</p>
+                  </div>
+                  <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
                     <p className="text-xs text-slate-500">Royalty (5%)</p>
                     <p className="text-sm sm:text-base md:text-lg font-semibold">{formatCurrency(calculation.royaltyCost)}</p>
                   </div>
@@ -4186,6 +4190,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
                           },
                           { label: 'Labor', est: calculation.laborCost, act: actualCalculation.actualLaborCost },
                           { label: 'Consumables', est: calculation.consumablesCost, act: actualCalculation.actualConsumablesCost },
+                          { label: 'Shipping', est: calculation.shippingCost, act: actualCalculation.actualShippingCost },
                           { label: 'Royalty', est: calculation.royaltyCost, act: actualCalculation.actualRoyaltyCost },
                           ...(actualCalculation.actualExpenseAdjustment !== 0 ? [{ label: 'Expense Adj.', est: 0, act: actualCalculation.actualExpenseAdjustment }] : []),
                         ].map(({ label, est, act }) => {

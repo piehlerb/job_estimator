@@ -29,6 +29,7 @@ const COST_FIELDS: Array<keyof Costs> = [
   'abrasionResistanceCostPerGal',
   'moistureMitigationCostPerGal',
   'moistureMitigationSpreadRate',
+  'shippingFactor',
 ];
 
 const FIELD_LABELS: Record<string, string> = {
@@ -51,6 +52,7 @@ const FIELD_LABELS: Record<string, string> = {
   abrasionResistanceCostPerGal: 'Abrasion Resistance Cost/Gal',
   moistureMitigationCostPerGal: 'Moisture Mitigation Cost/Gal',
   moistureMitigationSpreadRate: 'Moisture Mitigation Spread Rate',
+  shippingFactor: 'Shipping Factor (%)',
 };
 
 export function getFieldLabel(field: string): string {

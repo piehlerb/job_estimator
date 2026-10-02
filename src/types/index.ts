@@ -37,6 +37,7 @@ export interface Costs {
   abrasionResistanceCostPerGal: number;
   moistureMitigationCostPerGal?: number; // Cost per gallon of moisture mitigation product
   moistureMitigationSpreadRate?: number; // Square feet covered per gallon
+  shippingFactor?: number; // Shipping as a % of purchased goods (materials, consumables, products); 5 = 5%. Absent = 0
   createdAt: string;
   updatedAt: string;
 }
@@ -390,6 +391,7 @@ export interface ActualCosts {
   actualGasGeneratorCost: number;
   actualGasHeaterCost: number;
   actualGasTravelCost: number;
+  actualShippingCost: number;
   actualLaborCost: number;
   actualConsumablesCost: number;
   actualRoyaltyCost: number;
@@ -634,6 +636,7 @@ export interface JobCalculation {
   laborCost: number;
   consumablesCost: number;
   royaltyCost: number;
+  shippingCost: number;
   totalCosts: number;
   totalCostsPerSqft: number;
   jobMargin: number;

@@ -69,6 +69,11 @@ function computeSuggestedDiscount(
   return 0;
 }
 
+/** Shipping on purchased goods: `shippingFactor` is a percentage (5 = 5%). */
+export function calculateShippingCost(purchasedCost: number, shippingFactor: number | undefined): number {
+  return purchasedCost * ((shippingFactor ?? 0) / 100);
+}
+
 export function calculateJobOutputs(
   inputs: JobInputs,
   system: ChipSystem,
@@ -119,6 +124,7 @@ export function calculateJobOutputs(
     abrasionResistanceCostPerGal = 0,
     moistureMitigationCostPerGal = 0,
     moistureMitigationSpreadRate = 200,
+    shippingFactor = 0,
   } = costs;
 
   // Price per sqft
@@ -244,15 +250,26 @@ export function calculateJobOutputs(
   // Royalty cost: totalPrice * 0.05
   const royaltyCost = totalPrice * 0.05;
 
-  // Total costs
+  const productCost = (inputs.products ?? []).reduce((sum, product) => sum + product.quantity * product.unitCost, 0);
+
+  // Shipping: percentage markup on everything purchased (materials, consumables, products).
+  // Excludes labor, gas and royalty. Product shipping is kept out of installationCosts so the
+  // suggested floor price (which excludes product price) isn't inflated by it.
+  const materialShippingCost = calculateShippingCost(
+    chipCost + baseCost + topCost + crackFillCost + cyclo1Cost + tintCost + antiSlipCost
+      + abrasionResistanceCost + moistureMitigationMaterialCost + consumablesCost,
+    shippingFactor
+  );
+  const productShippingCost = calculateShippingCost(productCost, shippingFactor);
+  const shippingCost = materialShippingCost + productShippingCost;
+
   const installationCosts = chipCost + baseCost + topCost + consumablesCost + crackFillCost
     + cyclo1Cost + tintCost + antiSlipCost + abrasionResistanceCost + moistureMitigationMaterialCost
-    + gasHeaterCost + gasTravelCost + gasGeneratorCost + royaltyCost + laborCost;
+    + gasHeaterCost + gasTravelCost + gasGeneratorCost + royaltyCost + laborCost + materialShippingCost;
 
-  const productCost = (inputs.products ?? []).reduce((sum, product) => sum + product.quantity * product.unitCost, 0);
   const productPrice = (inputs.products ?? []).reduce((sum, product) => sum + product.quantity * product.unitPrice, 0);
-  // totalPrice already includes product revenue; subtract product costs exactly once.
-  const totalCosts = installationCosts + productCost;
+  // totalPrice already includes product revenue; subtract product costs (and their shipping) exactly once.
+  const totalCosts = installationCosts + productCost + productShippingCost;
 
   // Total costs per sqft
   const totalCostsPerSqft = floorFootage > 0 ? totalCosts / floorFootage : 0;
@@ -351,6 +368,7 @@ export function calculateJobOutputs(
     laborCost,
     consumablesCost,
     royaltyCost,
+    shippingCost,
     totalCosts,
     totalCostsPerSqft,
     jobMargin,
@@ -453,6 +471,7 @@ export function calculateActualCosts(
     cyclo1CostPerGal,
     tintCostPerQuart,
     moistureMitigationCostPerGal = 0,
+    shippingFactor = 0,
   } = costs;
 
   const actualChipCost = actualChipBoxes * chipBoxCost;
@@ -500,11 +519,20 @@ export function calculateActualCosts(
   const actualRoyaltyCost = totalPrice * 0.05;
   const actualExpenseAdjustment = expenseAdj ?? 0;
 
+  const actualProductCost = (params.products ?? []).reduce((sum, product) => sum + product.quantity * product.unitCost, 0);
+
+  // Shipping applies to purchased goods only (not labor, gas, royalty or manual adjustments).
+  const actualShippingCost = calculateShippingCost(
+    actualChipCost + actualBaseCost + actualTopCost + actualCyclo1Cost + actualTintCost
+      + actualCrackRepairCost + actualMoistureMitigationCost + actualConsumablesCost + actualProductCost,
+    shippingFactor
+  );
+
   const actualTotalCosts = actualChipCost + actualBaseCost + actualTopCost + actualCyclo1Cost
     + actualTintCost + actualCrackRepairCost + actualMoistureMitigationCost
     + actualGasGeneratorCost + actualGasHeaterCost + actualGasTravelCost
     + actualLaborCost + actualConsumablesCost + actualRoyaltyCost + actualExpenseAdjustment
-    + (params.products ?? []).reduce((sum, product) => sum + product.quantity * product.unitCost, 0);
+    + actualShippingCost + actualProductCost;
 
   const actualMargin = totalPrice - actualTotalCosts;
   const actualMarginPct = totalPrice > 0 ? (actualMargin / totalPrice) * 100 : 0;
@@ -523,6 +551,7 @@ export function calculateActualCosts(
     actualLaborCost,
     actualConsumablesCost,
     actualRoyaltyCost,
+    actualShippingCost,
     actualExpenseAdjustment,
     actualTotalCosts,
     actualTotalHours,

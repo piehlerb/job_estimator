@@ -345,6 +345,7 @@ export type Database = {
           moisture_mitigation_cost_per_gal: number | null
           moisture_mitigation_spread_rate: number | null
           org_id: string | null
+          shipping_factor: number | null
           synced_at: string | null
           tint_cost_per_quart: number
           top_cost_per_gal: number
@@ -365,6 +366,7 @@ export type Database = {
           moisture_mitigation_cost_per_gal?: number | null
           moisture_mitigation_spread_rate?: number | null
           org_id?: string | null
+          shipping_factor?: number | null
           synced_at?: string | null
           tint_cost_per_quart: number
           top_cost_per_gal: number
@@ -385,6 +387,7 @@ export type Database = {
           moisture_mitigation_cost_per_gal?: number | null
           moisture_mitigation_spread_rate?: number | null
           org_id?: string | null
+          shipping_factor?: number | null
           synced_at?: string | null
           tint_cost_per_quart?: number
           top_cost_per_gal?: number
