@@ -339,7 +339,11 @@ export default function JobSheet({ jobId, onBack }: JobSheetProps) {
                           overridden={tintOverridden(line)}
                         />
                       ))}
-                      <MaterialCard label="Chip" value={String(calculation.chipNeeded)} unit="boxes" />
+                      <MaterialCard
+                        label="Chip"
+                        value={String(calculation.chipNeeded)}
+                        unit={`boxes / ${calculation.chipPoundsNeeded.toFixed(1)} lbs calc.`}
+                      />
                       <MaterialCard
                         label="Crack Fill"
                         value={calculation.crackFillGallons.toFixed(1)}

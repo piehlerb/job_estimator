@@ -349,6 +349,7 @@ export function calculateJobOutputs(
   return {
     pricePerSqft,
     chipNeeded,
+    chipPoundsNeeded,
     chipCost,
     baseGallons,
     baseCost,

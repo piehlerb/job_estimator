@@ -616,7 +616,8 @@ export interface MiscInventory {
 
 export interface JobCalculation {
   pricePerSqft: number;
-  chipNeeded: number;
+  chipNeeded: number; // boxes (40 lbs each), rounded up
+  chipPoundsNeeded: number; // unrounded lbs before boxing
   chipCost: number;
   baseGallons: number;
   baseCost: number;
