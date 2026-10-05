@@ -184,7 +184,8 @@ export default function JobSummaryModal({
       });
 
       const chipBlend = job.chipBlend ? normalizeChipBlendName(job.chipBlend) : null;
-      const chipLbs = calc.chipNeeded * 40;
+      // Unrounded lbs (not whole boxes) so requirements reflect actual usage
+      const chipLbs = calc.chipPoundsNeeded;
       const moistureMitigationGallons = calc.moistureMitigationGallons;
 
       return {
@@ -449,7 +450,7 @@ export default function JobSummaryModal({
                             <span>
                               {row.chipBlend}
                               {row.chipSystemName && <span className="text-slate-400"> ({row.chipSystemName})</span>}{' '}
-                              <span className="tabular-nums">{row.chipLbs.toFixed(0)} lbs</span>
+                              <span className="tabular-nums">{row.chipLbs.toFixed(1)} lbs</span>
                             </span>
                           ) : (
                             <span className="text-slate-400">–</span>

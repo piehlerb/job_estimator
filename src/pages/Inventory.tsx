@@ -194,7 +194,7 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
 
         const mergedCosts = getMergedCosts(job);
         const mergedPricing = getMergedPricing(job);
-        // Calculate chip needed in pounds (chipNeeded is boxes, 40 lbs per box)
+        // Calculate chip needed in unrounded pounds (not whole 40 lb boxes)
         const calc = calculateJobOutputs(
           {
             floorFootage: job.floorFootage,
@@ -222,7 +222,7 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
           mergedPricing
         );
 
-        const poundsNeeded = calc.chipNeeded * 40; // Convert boxes to pounds
+        const poundsNeeded = calc.chipPoundsNeeded;
 
         // Normalize chip blend name for consistent grouping
         const normalizedBlend = normalizeChipBlendName(job.chipBlend);
@@ -660,13 +660,13 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
                         className="w-24 px-2 py-1 border border-slate-300 rounded text-right"
                       />
                     </td>
-                    <td className="py-3 px-2 text-right">{committed.toFixed(0)}</td>
+                    <td className="py-3 px-2 text-right">{committed.toFixed(1)}</td>
                     <td className={`py-3 px-2 text-right font-semibold ${available < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                      {available.toFixed(0)}
+                      {available.toFixed(1)}
                     </td>
-                    <td className="py-3 px-2 text-right text-slate-500">{potential.toFixed(0)}</td>
+                    <td className="py-3 px-2 text-right text-slate-500">{potential.toFixed(1)}</td>
                     <td className={`py-3 px-2 text-right ${availablePotential < 0 ? 'text-red-400' : 'text-slate-500'}`}>
-                      {availablePotential.toFixed(0)}
+                      {availablePotential.toFixed(1)}
                     </td>
                     <td className="py-3 px-2 text-right">
                       <button
