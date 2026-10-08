@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Plus, Edit2, Trash2, X } from 'lucide-react';
 import {
   getAllChipBlends,
@@ -12,6 +12,7 @@ import {
 import { ChipSystem, BaseCoatColor } from '../types';
 import SaveButton from '../components/SaveButton';
 import { useSaveFlash } from '../hooks/useSaveFlash';
+import { blendChipTypes, chipTypeLookup, chipTypeOfSystem, distinctChipTypes, sameChipType } from '../lib/chipInventory';
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -26,7 +27,7 @@ export default function ChipBlends() {
   const [isAdding, setIsAdding] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
-    systemIds: [] as string[],
+    chipTypes: [] as string[],
     baseCoatColorIds: [] as string[],
   });
   const [saving, setSaving] = useState(false);
@@ -67,7 +68,7 @@ export default function ChipBlends() {
   };
 
   const openAddModal = () => {
-    setFormData({ name: '', systemIds: [], baseCoatColorIds: [] });
+    setFormData({ name: '', chipTypes: [], baseCoatColorIds: [] });
     setIsAdding(true);
     setEditingId(null);
   };
@@ -75,7 +76,7 @@ export default function ChipBlends() {
   const openEditModal = (blend: ChipBlend) => {
     setFormData({
       name: blend.name,
-      systemIds: blend.systemIds || [],
+      chipTypes: blendChipTypes(blend, lookup),
       baseCoatColorIds: blend.baseCoatColorIds || [],
     });
     setEditingId(blend.id);
@@ -85,7 +86,7 @@ export default function ChipBlends() {
   const closeModal = () => {
     setIsAdding(false);
     setEditingId(null);
-    setFormData({ name: '', systemIds: [], baseCoatColorIds: [] });
+    setFormData({ name: '', chipTypes: [], baseCoatColorIds: [] });
   };
 
   const handleSave = async () => {
@@ -102,7 +103,7 @@ export default function ChipBlends() {
         const newBlend: ChipBlend = {
           id: generateId(),
           name: formData.name.trim(),
-          systemIds: formData.systemIds,
+          chipTypes: formData.chipTypes,
           baseCoatColorIds: formData.baseCoatColorIds,
           createdAt: timestamp,
           updatedAt: timestamp,
@@ -114,7 +115,7 @@ export default function ChipBlends() {
           const updatedBlend: ChipBlend = {
             ...existingBlend,
             name: formData.name.trim(),
-            systemIds: formData.systemIds,
+            chipTypes: formData.chipTypes,
             baseCoatColorIds: formData.baseCoatColorIds,
             updatedAt: timestamp,
           };
@@ -146,12 +147,12 @@ export default function ChipBlends() {
     }
   };
 
-  const handleSystemToggle = (systemId: string) => {
+  const handleChipTypeToggle = (chipType: string) => {
     setFormData((prev) => {
-      const systemIds = prev.systemIds.includes(systemId)
-        ? prev.systemIds.filter((id) => id !== systemId)
-        : [...prev.systemIds, systemId];
-      return { ...prev, systemIds };
+      const chipTypes = prev.chipTypes.some((t) => sameChipType(t, chipType))
+        ? prev.chipTypes.filter((t) => !sameChipType(t, chipType))
+        : [...prev.chipTypes, chipType];
+      return { ...prev, chipTypes };
     });
   };
 
@@ -164,13 +165,14 @@ export default function ChipBlends() {
     });
   };
 
-  const getSystemNames = (systemIds?: string[]) => {
-    if (!systemIds || systemIds.length === 0) {
-      return 'No systems';
-    }
-    return systemIds
-      .map((id) => systems.find((s) => s.id === id)?.name || 'Unknown')
-      .join(', ');
+  const lookup = useMemo(() => chipTypeLookup(systems), [systems]);
+
+  // Chip types offered by systems, plus any already on the blend being edited
+  const chipTypeOptions = distinctChipTypes([...systems.map(chipTypeOfSystem), ...formData.chipTypes]);
+
+  const getChipTypeNames = (blend: ChipBlend) => {
+    const chipTypes = blendChipTypes(blend, lookup);
+    return chipTypes.length === 0 ? 'Any' : chipTypes.join(', ');
   };
 
   const getBaseCoatColorNames = (baseCoatColorIds?: string[]) => {
@@ -218,7 +220,7 @@ export default function ChipBlends() {
                     Blend Name
                   </th>
                   <th className="text-left px-4 sm:px-6 py-3 text-xs sm:text-sm font-semibold text-slate-900">
-                    Available Systems
+                    Chip Types
                   </th>
                   <th className="text-left px-4 sm:px-6 py-3 text-xs sm:text-sm font-semibold text-slate-900">
                     Base Coat Colors
@@ -235,7 +237,7 @@ export default function ChipBlends() {
                       <span className="text-sm sm:text-base font-medium text-slate-900">{blend.name}</span>
                     </td>
                     <td className="px-4 sm:px-6 py-4">
-                      <span className="text-xs sm:text-sm text-slate-600">{getSystemNames(blend.systemIds)}</span>
+                      <span className="text-xs sm:text-sm text-slate-600">{getChipTypeNames(blend)}</span>
                     </td>
                     <td className="px-4 sm:px-6 py-4">
                       <span className="text-xs sm:text-sm text-slate-600">{getBaseCoatColorNames(blend.baseCoatColorIds)}</span>
@@ -304,28 +306,28 @@ export default function ChipBlends() {
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-slate-900 mb-2">Available Systems</label>
+                <label className="block text-sm font-semibold text-slate-900 mb-2">Available Chip Types</label>
                 <p className="text-xs text-slate-500 mb-3">
-                  Select which chip systems this blend is compatible with. Leave unchecked if not system-specific.
+                  Select which chip types this blend comes in. It is offered on every system that uses those chip types. Leave unchecked if not type-specific.
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                  {systems.map((system) => (
+                  {chipTypeOptions.map((chipType) => (
                     <label
-                      key={system.id}
+                      key={chipType}
                       className="flex items-center gap-2 p-3 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors"
                     >
                       <input
                         type="checkbox"
-                        checked={formData.systemIds.includes(system.id)}
-                        onChange={() => handleSystemToggle(system.id)}
+                        checked={formData.chipTypes.some((t) => sameChipType(t, chipType))}
+                        onChange={() => handleChipTypeToggle(chipType)}
                         className="w-4 h-4 text-gf-dark-green border-slate-300 rounded focus:ring-gf-lime"
                       />
-                      <span className="text-sm text-slate-700">{system.name}</span>
+                      <span className="text-sm text-slate-700">{chipType}</span>
                     </label>
                   ))}
                 </div>
-                {systems.length === 0 && (
-                  <p className="text-sm text-slate-500 italic">No chip systems available. Add systems first.</p>
+                {chipTypeOptions.length === 0 && (
+                  <p className="text-sm text-slate-500 italic">No chip types yet. Set a chip type on your chip systems first.</p>
                 )}
               </div>
 

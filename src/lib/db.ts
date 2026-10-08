@@ -1,4 +1,4 @@
-import { ChipSystem, PricingVariable, Job, Costs, Laborer, ChipInventory, TintInventory, CoatingInventory, TopCoatInventory, BaseCoatInventory, MiscInventory, Pricing, Customer, Product, BaseCoatColor, ShoppingItem, CommunicationTemplate, ReferralAssociate, ReferralService, Lead, LeadAppointment, AdSpend } from '../types';
+import { ChipBlend, ChipSystem, PricingVariable, Job, Costs, Laborer, ChipInventory, TintInventory, CoatingInventory, TopCoatInventory, BaseCoatInventory, MiscInventory, Pricing, Customer, Product, BaseCoatColor, ShoppingItem, CommunicationTemplate, ReferralAssociate, ReferralService, Lead, LeadAppointment, AdSpend } from '../types';
 import { softDeleteLead } from './leadMutations';
 import { DEFAULT_COATING_SKUS, LEGACY_COATING_FIELDS, coatingSkuId, findCoatingSku } from './coatingSkus';
 
@@ -836,15 +836,7 @@ export async function deleteLaborer(id: string): Promise<void> {
 }
 
 // Chip Blends - simple list of blend names
-export interface ChipBlend {
-  id: string;
-  name: string;
-  systemIds?: string[]; // IDs of chip systems this blend is available with
-  baseCoatColorIds?: string[]; // IDs of base coat colors this blend is available with
-  createdAt?: string;
-  updatedAt?: string;
-  deleted?: boolean;
-}
+export type { ChipBlend };
 
 export async function getAllChipBlends(): Promise<ChipBlend[]> {
   const db = await getDB();

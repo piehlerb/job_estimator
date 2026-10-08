@@ -156,6 +156,7 @@ export type Database = {
       chip_blends: {
         Row: {
           base_coat_color_ids: Json | null
+          chip_types: Json | null
           created_at: string
           deleted: boolean
           id: string
@@ -168,6 +169,7 @@ export type Database = {
         }
         Insert: {
           base_coat_color_ids?: Json | null
+          chip_types?: Json | null
           created_at?: string
           deleted?: boolean
           id: string
@@ -180,6 +182,7 @@ export type Database = {
         }
         Update: {
           base_coat_color_ids?: Json | null
+          chip_types?: Json | null
           created_at?: string
           deleted?: boolean
           id?: string
@@ -203,6 +206,7 @@ export type Database = {
       chip_inventory: {
         Row: {
           blend: string
+          chip_type: string | null
           deleted: boolean
           id: string
           org_id: string | null
@@ -214,6 +218,7 @@ export type Database = {
         }
         Insert: {
           blend: string
+          chip_type?: string | null
           deleted?: boolean
           id: string
           org_id?: string | null
@@ -225,6 +230,7 @@ export type Database = {
         }
         Update: {
           blend?: string
+          chip_type?: string | null
           deleted?: boolean
           id?: string
           org_id?: string | null
@@ -1777,6 +1783,7 @@ export type Database = {
           base_coats: number
           base_spread: number | null
           box_cost: number
+          chip_type: string | null
           created_at: string
           cyclo1_coats: number
           cyclo1_spread: number | null
@@ -1802,6 +1809,7 @@ export type Database = {
           base_coats?: number
           base_spread?: number | null
           box_cost: number
+          chip_type?: string | null
           created_at?: string
           cyclo1_coats?: number
           cyclo1_spread?: number | null
@@ -1827,6 +1835,7 @@ export type Database = {
           base_coats?: number
           base_spread?: number | null
           box_cost?: number
+          chip_type?: string | null
           created_at?: string
           cyclo1_coats?: number
           cyclo1_spread?: number | null

@@ -1,4 +1,4 @@
-import { useState, useEffect, Fragment } from 'react';
+import { useState, useEffect, useMemo, Fragment } from 'react';
 import { Plus, Trash2, ClipboardList } from 'lucide-react';
 import JobSummaryModal from '../components/JobSummaryModal';
 import {
@@ -23,7 +23,16 @@ import {
   getAllSystems,
   ChipBlend,
 } from '../lib/db';
-import { findChipInventoryItem } from '../lib/chipInventory';
+import {
+  blendChipTypes,
+  chipTypeLookup,
+  chipTypeOfSystem,
+  distinctChipTypes,
+  findChipInventoryItem,
+  inventoryRowChipType,
+  jobChipType,
+  sameChipType,
+} from '../lib/chipInventory';
 import { Job, ChipSystem, ChipInventory, TintInventory, CoatingInventory, CoatingPart, MiscInventory, Costs, Pricing } from '../types';
 import { calculateJobOutputs } from '../lib/calculations';
 import { normalizeChipBlendName } from '../lib/syncHelpers';
@@ -42,10 +51,11 @@ function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 }
 
-// Chip needed by jobs, per blend + chip system (each is a separate inventory item)
+// Chip needed by jobs, per blend + chip type (each is a separate inventory item;
+// systems that use the same chip type share it)
 interface ChipCommitment {
   blend: string;
-  systemId?: string;
+  chipType?: string;
   committed: number; // Won jobs
   potential: number; // Won + Pending jobs
 }
@@ -93,7 +103,7 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
 
   const [newChipBlend, setNewChipBlend] = useState('');
   const [newChipPounds, setNewChipPounds] = useState('');
-  const [newChipSystemId, setNewChipSystemId] = useState('');
+  const [newChipType, setNewChipType] = useState('');
   const [showBlendDropdown, setShowBlendDropdown] = useState(false);
 
   // Add-SKU form for coating inventory
@@ -138,7 +148,7 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
       // Calculate commitments from jobs that are today or in the future
       const costs = currentCosts || getDefaultCosts();
       const pricing = currentPricing || getDefaultPricing();
-      calculateCommitments(jobs, costs, pricing, tints);
+      calculateCommitments(jobs, costs, pricing, allSystems, tints);
 
       // Save for Job Summary modal
       setAllJobs(jobs);
@@ -151,7 +161,13 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
     }
   };
 
-  const calculateCommitments = (jobs: Job[], currentCosts: Costs, currentPricing: Pricing, currentTintInventory?: TintInventory[]) => {
+  const calculateCommitments = (
+    jobs: Job[],
+    currentCosts: Costs,
+    currentPricing: Pricing,
+    currentSystems: ChipSystem[],
+    currentTintInventory?: TintInventory[]
+  ) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -185,8 +201,9 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
     const pendingJobs = relevantJobs.filter((job) => job.status === 'Pending');
     const wonAndPendingJobs = [...wonJobs, ...pendingJobs];
 
-    // Calculate chip commitments by blend + chip system
+    // Calculate chip commitments by blend + chip type
     const chipByBlend = new Map<string, ChipCommitment>();
+    const jobChipTypeLookup = chipTypeLookup(currentSystems);
 
     const calculateChipForJobs = (jobList: Job[], type: 'committed' | 'potential') => {
       jobList.forEach((job) => {
@@ -226,9 +243,9 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
 
         // Normalize chip blend name for consistent grouping
         const normalizedBlend = normalizeChipBlendName(job.chipBlend);
-        const systemId = job.systemId || undefined;
-        const key = `${normalizedBlend}\u0000${systemId ?? ''}`;
-        const entry = chipByBlend.get(key) ?? { blend: normalizedBlend, systemId, committed: 0, potential: 0 };
+        const chipType = jobChipType(job, jobChipTypeLookup);
+        const key = `${normalizedBlend}\u0000${chipType?.toLowerCase() ?? ''}`;
+        const entry = chipByBlend.get(key) ?? { blend: normalizedBlend, chipType, committed: 0, potential: 0 };
         entry[type] += poundsNeeded;
         chipByBlend.set(key, entry);
       });
@@ -390,39 +407,44 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
     setTintInventory(tintInventory.filter((inv) => inv.id !== id));
   };
 
-  const systemName = (systemId?: string) =>
-    systemId ? systems.find((s) => s.id === systemId)?.name ?? 'Unknown system' : 'Unassigned';
+  const chipTypeForSystem = useMemo(() => chipTypeLookup(systems), [systems]);
+  const rowChipType = (inv: ChipInventory) => inventoryRowChipType(inv, chipTypeForSystem);
 
-  // Systems a blend comes in; a blend with none configured is offered every system
-  const systemsForBlend = (blendName: string) => {
+  // Every chip type in use: those systems use plus any already stocked
+  const knownChipTypes = distinctChipTypes([
+    ...systems.map(chipTypeOfSystem),
+    ...chipInventory.map((inv) => inventoryRowChipType(inv, chipTypeForSystem)),
+  ]);
+
+  // Chip types a blend comes in; a blend with none configured is offered every type
+  const chipTypesForBlend = (blendName: string) => {
     const normalized = normalizeChipBlendName(blendName);
-    const ids = new Set(
+    const types = distinctChipTypes(
       chipBlends
         .filter((b) => normalizeChipBlendName(b.name) === normalized)
-        .flatMap((b) => b.systemIds ?? [])
+        .flatMap((b) => blendChipTypes(b, chipTypeForSystem))
     );
-    const matching = systems.filter((s) => ids.has(s.id));
-    return matching.length > 0 ? matching : systems;
+    return types.length > 0 ? types : knownChipTypes;
   };
 
-  const findStockedRow = (blendName: string, systemId: string) => {
+  const findStockedRow = (blendName: string, chipType: string) => {
     const normalized = normalizeChipBlendName(blendName);
     return chipInventory.find(
-      (inv) => inv.systemId === systemId && normalizeChipBlendName(inv.blend) === normalized
+      (inv) => sameChipType(rowChipType(inv), chipType) && normalizeChipBlendName(inv.blend) === normalized
     );
   };
 
-  const newChipSystemOptions = newChipBlend.trim() ? systemsForBlend(newChipBlend) : systems;
+  const newChipTypeOptions = newChipBlend.trim() ? chipTypesForBlend(newChipBlend) : knownChipTypes;
 
   const handleAddChipInventory = async () => {
-    if (!newChipBlend || !newChipPounds || !newChipSystemId) return;
+    if (!newChipBlend || !newChipPounds || !newChipType) return;
 
     // Normalize chip blend name (trim whitespace, title case)
     const normalizedBlend = normalizeChipBlendName(newChipBlend);
     if (!normalizedBlend) return;
 
-    if (findStockedRow(normalizedBlend, newChipSystemId)) {
-      alert(`${normalizedBlend} (${systemName(newChipSystemId)}) is already in inventory.`);
+    if (findStockedRow(normalizedBlend, newChipType)) {
+      alert(`${normalizedBlend} (${newChipType}) is already in inventory.`);
       return;
     }
 
@@ -431,7 +453,7 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
       const newBlend: ChipBlend = {
         id: generateId(),
         name: normalizedBlend,
-        systemIds: [newChipSystemId],
+        chipTypes: [newChipType],
       };
       await addChipBlend(newBlend);
       setChipBlends([...chipBlends, newBlend]);
@@ -440,7 +462,7 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
     const inventory: ChipInventory = {
       id: generateId(),
       blend: normalizedBlend,
-      systemId: newChipSystemId,
+      chipType: newChipType,
       pounds: parseFloat(newChipPounds) || 0,
       updatedAt: new Date().toISOString(),
     };
@@ -449,25 +471,25 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
     setChipInventory([...chipInventory, inventory]);
     setNewChipBlend('');
     setNewChipPounds('');
-    setNewChipSystemId('');
+    setNewChipType('');
   };
 
   const handleBlendSelect = (blendName: string) => {
     setNewChipBlend(blendName);
     setShowBlendDropdown(false);
-    const options = systemsForBlend(blendName);
-    setNewChipSystemId(options.length === 1 ? options[0].id : '');
+    const options = chipTypesForBlend(blendName);
+    setNewChipType(options.length === 1 ? options[0] : '');
   };
 
-  const handleAssignChipSystem = async (id: string, systemId: string) => {
-    if (!systemId) return;
+  const handleAssignChipType = async (id: string, chipType: string) => {
+    if (!chipType) return;
     const target = chipInventory.find((inv) => inv.id === id);
     if (!target) return;
-    if (findStockedRow(target.blend, systemId)) {
-      alert(`${target.blend} (${systemName(systemId)}) is already in inventory. Update that row instead.`);
+    if (findStockedRow(target.blend, chipType)) {
+      alert(`${target.blend} (${chipType}) is already in inventory. Update that row instead.`);
       return;
     }
-    const item = { ...target, systemId, updatedAt: new Date().toISOString() };
+    const item = { ...target, chipType, updatedAt: new Date().toISOString() };
     setChipInventory(chipInventory.map((inv) => (inv.id === id ? item : inv)));
     await saveChipInventory(item);
   };
@@ -606,7 +628,7 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
             <thead>
               <tr className="border-b border-slate-200">
                 <th className="text-left py-3 px-2 font-semibold">Blend</th>
-                <th className="text-left py-3 px-2 font-semibold">System</th>
+                <th className="text-left py-3 px-2 font-semibold">Chip Type</th>
                 <th className="text-right py-3 px-2 font-semibold">On Hand (lbs)</th>
                 <th className="text-right py-3 px-2 font-semibold">Committed</th>
                 <th className="text-right py-3 px-2 font-semibold">Available</th>
@@ -620,12 +642,14 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
                 .slice()
                 .sort(
                   (a, b) =>
-                    a.blend.localeCompare(b.blend) || systemName(a.systemId).localeCompare(systemName(b.systemId))
+                    a.blend.localeCompare(b.blend) ||
+                    (rowChipType(a) ?? '').localeCompare(rowChipType(b) ?? '', undefined, { numeric: true })
                 )
                 .map((inv) => {
-                // Jobs draw from the row for their blend + system (or unassigned stock of that blend)
+                // Jobs draw from the row for their blend + chip type (or unassigned stock of that blend)
+                const chipType = rowChipType(inv);
                 const commitments = chipCommitments.filter(
-                  (c) => findChipInventoryItem(chipInventory, c.blend, c.systemId)?.id === inv.id
+                  (c) => findChipInventoryItem(chipInventory, c.blend, c.chipType, chipTypeForSystem)?.id === inv.id
                 );
                 const committed = commitments.reduce((sum, c) => sum + c.committed, 0);
                 const potential = commitments.reduce((sum, c) => sum + c.potential, 0);
@@ -636,18 +660,16 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
                   <tr key={inv.id} className="border-b border-slate-100">
                     <td className="py-3 px-2 font-medium">{inv.blend}</td>
                     <td className="py-3 px-2">
-                      {inv.systemId ? (
-                        systemName(inv.systemId)
-                      ) : (
+                      {chipType ?? (
                         <select
                           value=""
-                          onChange={(e) => handleAssignChipSystem(inv.id, e.target.value)}
+                          onChange={(e) => handleAssignChipType(inv.id, e.target.value)}
                           className="px-2 py-1 border border-amber-400 bg-amber-50 rounded text-sm"
-                          title="This stock isn't tied to a chip system yet"
+                          title="This stock isn't tied to a chip type yet"
                         >
-                          <option value="">Unassigned — pick system</option>
-                          {systemsForBlend(inv.blend).map((s) => (
-                            <option key={s.id} value={s.id}>{s.name}</option>
+                          <option value="">Unassigned — pick chip type</option>
+                          {chipTypesForBlend(inv.blend).map((type) => (
+                            <option key={type} value={type}>{type}</option>
                           ))}
                         </select>
                       )}
@@ -691,7 +713,7 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
               value={newChipBlend}
               onChange={(e) => {
                 setNewChipBlend(e.target.value);
-                setNewChipSystemId('');
+                setNewChipType('');
                 setShowBlendDropdown(true);
               }}
               onFocus={() => setShowBlendDropdown(true)}
@@ -703,8 +725,8 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
               <div className="absolute z-10 w-full mt-1 bg-white border border-slate-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
                 {chipBlends
                   .filter((b) =>
-                    // Hide blends already stocked in every system they come in
-                    systemsForBlend(b.name).some((s) => !findStockedRow(b.name, s.id)) &&
+                    // Hide blends already stocked in every chip type they come in
+                    chipTypesForBlend(b.name).some((type) => !findStockedRow(b.name, type)) &&
                     b.name.toLowerCase().includes(newChipBlend.toLowerCase())
                   )
                   .map((blend) => (
@@ -726,16 +748,16 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
             )}
           </div>
           <div>
-            <label className="block text-xs text-slate-600 mb-1">System</label>
+            <label className="block text-xs text-slate-600 mb-1">Chip Type</label>
             <select
-              value={newChipSystemId}
-              onChange={(e) => setNewChipSystemId(e.target.value)}
+              value={newChipType}
+              onChange={(e) => setNewChipType(e.target.value)}
               className="w-40 px-3 py-2 border border-slate-300 rounded-lg text-sm"
             >
               <option value="">Select...</option>
-              {newChipSystemOptions.map((s) => (
-                <option key={s.id} value={s.id} disabled={!!newChipBlend.trim() && !!findStockedRow(newChipBlend, s.id)}>
-                  {s.name}
+              {newChipTypeOptions.map((type) => (
+                <option key={type} value={type} disabled={!!newChipBlend.trim() && !!findStockedRow(newChipBlend, type)}>
+                  {type}
                 </option>
               ))}
             </select>
@@ -752,7 +774,7 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
           </div>
           <button
             onClick={handleAddChipInventory}
-            disabled={!newChipBlend || !newChipPounds || !newChipSystemId}
+            disabled={!newChipBlend || !newChipPounds || !newChipType}
             className="flex items-center gap-1 px-3 py-2 bg-gf-lime text-white rounded-lg text-sm font-medium hover:bg-gf-dark-green disabled:bg-slate-300"
           >
             <Plus size={16} />
@@ -1116,6 +1138,7 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
         coatingInventory={coatingInventory}
         miscInventory={miscInventory}
         chipInventory={chipInventory}
+        chipTypeForSystem={chipTypeForSystem}
         tintInventory={tintInventory}
         currentCosts={summaryCurrentCosts}
         currentPricing={summaryCurrentPricing}

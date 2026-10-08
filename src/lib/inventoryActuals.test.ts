@@ -9,6 +9,16 @@ import {
   hasInventoryActualsDelta,
   type InventoryActualsSource,
 } from './inventoryActuals.js';
+import type { InventoryActualsApplied } from '../types/index.js';
+import {
+  blendAllowsChipType,
+  blendChipTypes,
+  chipTypeLookup,
+  distinctChipTypes,
+  findChipInventoryItem,
+  jobChipType,
+  sameChipType,
+} from './chipInventory.js';
 
 /** Simulate a pre-Phase-4 snapshot that was stored without resolved lines. */
 function asLegacySnapshot(source: InventoryActualsSource, appliedAt: string) {
@@ -359,25 +369,32 @@ describe('allocation-aware resolved lines', () => {
   });
 });
 
-describe('chip inventory split by system', () => {
-  const quarter = 'sys-quarter';
-  const eighth = 'sys-eighth';
-  const chipOnly: InventoryActualsSource = { actualChipBoxes: 2, chipBlend: 'blue', systemId: quarter };
+describe('chip inventory split by chip type', () => {
+  // "1/4" and "1/4 Outdoor" are different systems that use the same 1/4 chip
+  const quarterSystem = 'sys-quarter';
+  const quarterOutdoorSystem = 'sys-quarter-outdoor';
+  const eighthSystem = 'sys-eighth';
+  const chipTypeForSystem = chipTypeLookup([
+    { id: quarterSystem, chipType: '1/4' },
+    { id: quarterOutdoorSystem, chipType: '1/4' },
+    { id: eighthSystem, chipType: '1/8' },
+  ]);
+  const chipOnly: InventoryActualsSource = { actualChipBoxes: 2, chipBlend: 'blue', chipType: '1/4', chipTypeForSystem };
 
-  test('chip lines and snapshots carry the job system', () => {
+  test('chip lines and snapshots carry the job chip type', () => {
     const snapshot = buildInventoryActualsSnapshot(chipOnly, '2026-06-12T10:00:00.000Z');
-    assert.equal(snapshot.chipSystemId, quarter);
-    assert.deepEqual(snapshot.resolvedLines?.[0].target, { kind: 'chip', blend: 'Blue', systemId: quarter });
-    assert.equal(snapshot.resolvedLines?.[0].key, `chip:Blue:${quarter}`);
+    assert.equal(snapshot.chipType, '1/4');
+    assert.deepEqual(snapshot.resolvedLines?.[0].target, { kind: 'chip', blend: 'Blue', chipType: '1/4' });
+    assert.equal(snapshot.resolvedLines?.[0].key, 'chip:Blue:1/4');
   });
 
-  test('review rows pick the inventory row for the job system, not another system with the same blend', () => {
+  test('review rows pick the inventory row for the job chip type, not another type with the same blend', () => {
     const snapshot = buildInventoryActualsSnapshot(chipOnly, '2026-06-12T10:00:00.000Z');
     const [row] = buildInventoryReviewRows({
       deltas: buildInventoryActualDeltaRows(snapshot, undefined),
       chipInventory: [
-        { id: 'blue-8', blend: 'Blue', systemId: eighth, pounds: 500, updatedAt: '' },
-        { id: 'blue-4', blend: 'Blue', systemId: quarter, pounds: 120, updatedAt: '' },
+        { id: 'blue-8', blend: 'Blue', chipType: '1/8', pounds: 500, updatedAt: '' },
+        { id: 'blue-4', blend: 'Blue', chipType: '1/4', pounds: 120, updatedAt: '' },
       ],
       tintInventory: [],
       coatingInventory: [],
@@ -387,12 +404,28 @@ describe('chip inventory split by system', () => {
     assert.equal(row.newValue, 40);
   });
 
+  test('review rows resolve legacy system-tagged stock through the system chip type', () => {
+    const snapshot = buildInventoryActualsSnapshot(chipOnly, '2026-06-12T10:00:00.000Z');
+    const [row] = buildInventoryReviewRows({
+      deltas: buildInventoryActualDeltaRows(snapshot, undefined),
+      chipInventory: [
+        { id: 'blue-8', blend: 'Blue', systemId: eighthSystem, pounds: 500, updatedAt: '' },
+        { id: 'blue-4-outdoor', blend: 'Blue', systemId: quarterOutdoorSystem, pounds: 120, updatedAt: '' },
+      ],
+      tintInventory: [],
+      coatingInventory: [],
+      miscInventory: null,
+      chipTypeForSystem,
+    });
+    assert.equal(row.inventoryId, 'blue-4-outdoor');
+  });
+
   test('review rows fall back to unassigned stock for the blend', () => {
     const snapshot = buildInventoryActualsSnapshot(chipOnly, '2026-06-12T10:00:00.000Z');
     const [row] = buildInventoryReviewRows({
       deltas: buildInventoryActualDeltaRows(snapshot, undefined),
       chipInventory: [
-        { id: 'blue-8', blend: 'Blue', systemId: eighth, pounds: 500, updatedAt: '' },
+        { id: 'blue-8', blend: 'Blue', chipType: '1/8', pounds: 500, updatedAt: '' },
         { id: 'blue-legacy', blend: 'blue', pounds: 90, updatedAt: '' },
       ],
       tintInventory: [],
@@ -402,9 +435,9 @@ describe('chip inventory split by system', () => {
     assert.equal(row.inventoryId, 'blue-legacy');
   });
 
-  test('legacy baseline without a system is reversed against the job system', () => {
-    const baseline = buildInventoryActualsSnapshot({ ...chipOnly, systemId: undefined }, '2026-06-12T09:00:00.000Z');
-    const legacyDerived = asLegacySnapshot({ ...chipOnly, systemId: undefined }, '2026-06-12T09:00:00.000Z');
+  test('legacy baseline without a chip type or system is reversed against the job chip type', () => {
+    const baseline = buildInventoryActualsSnapshot({ ...chipOnly, chipType: undefined }, '2026-06-12T09:00:00.000Z');
+    const legacyDerived = asLegacySnapshot({ ...chipOnly, chipType: undefined }, '2026-06-12T09:00:00.000Z');
 
     for (const legacy of [baseline, legacyDerived]) {
       const { deltas } = buildInventoryActualsUpdate(
@@ -413,19 +446,102 @@ describe('chip inventory split by system', () => {
       );
       assert.deepEqual(
         deltas.map((row) => [row.key, row.usedDelta]),
-        [[`chip:Blue:${quarter}`, 40]]
+        [['chip:Blue:1/4', 40]]
       );
     }
   });
 
-  test('changing the job system moves the deduction between system buckets', () => {
-    const baseline = buildInventoryActualsSnapshot({ ...chipOnly, systemId: eighth }, '2026-06-12T09:00:00.000Z');
+  test('baseline tagged with another system of the same chip type nets out against the new deduction', () => {
+    // Applied while inventory was split by system, from the "1/4 Outdoor" system
+    const withLines: InventoryActualsApplied = {
+      appliedAt: '2026-06-12T09:00:00.000Z',
+      chipBlend: 'Blue',
+      actualChipBoxes: 2,
+      chipSystemId: quarterOutdoorSystem,
+      resolvedLines: [
+        {
+          key: `chip:Blue:${quarterOutdoorSystem}`,
+          label: 'Blue Chips',
+          unit: 'lbs',
+          amount: 80,
+          target: { kind: 'chip', blend: 'Blue', systemId: quarterOutdoorSystem },
+        },
+      ],
+    };
+    const derived: InventoryActualsApplied = { ...withLines, resolvedLines: undefined };
+
+    for (const legacy of [withLines, derived]) {
+      const { deltas } = buildInventoryActualsUpdate(
+        { ...chipOnly, actualChipBoxes: 3, inventoryActualsApplied: legacy },
+        '2026-06-12T11:00:00.000Z'
+      );
+      assert.deepEqual(
+        deltas.map((row) => [row.key, row.usedDelta]),
+        [['chip:Blue:1/4', 40]]
+      );
+    }
+  });
+
+  test('changing to a system with another chip type moves the deduction between buckets', () => {
+    const baseline = buildInventoryActualsSnapshot({ ...chipOnly, chipType: '1/8' }, '2026-06-12T09:00:00.000Z');
     const { deltas } = buildInventoryActualsUpdate(
       { ...chipOnly, inventoryActualsApplied: baseline },
       '2026-06-12T11:00:00.000Z'
     );
     const byKey = Object.fromEntries(deltas.map((row) => [row.key, row.usedDelta]));
-    assert.equal(byKey[`chip:Blue:${eighth}`], -80);
-    assert.equal(byKey[`chip:Blue:${quarter}`], 80);
+    assert.equal(byKey['chip:Blue:1/8'], -80);
+    assert.equal(byKey['chip:Blue:1/4'], 80);
+  });
+});
+
+describe('chip type helpers', () => {
+  const lookup = chipTypeLookup([
+    { id: 'quarter', chipType: '1/4' },
+    { id: 'quarter-outdoor', chipType: ' 1/4 ' },
+    { id: 'stone', chipType: 'Stone' },
+    { id: 'grind', chipType: undefined },
+  ]);
+
+  test('chip types compare case- and whitespace-insensitively', () => {
+    assert.equal(sameChipType('Stone', ' stone '), true);
+    assert.equal(sameChipType('1/4', '1/8'), false);
+    assert.equal(sameChipType(undefined, undefined), false);
+  });
+
+  test('distinct chip types sort sizes numerically', () => {
+    assert.deepEqual(distinctChipTypes(['1/16', 'Stone', '1/4', '1/8', '1/4 ', undefined, 'stone']), [
+      '1/4',
+      '1/8',
+      '1/16',
+      'Stone',
+    ]);
+  });
+
+  test('a job draws on its current system chip type, else its snapshot', () => {
+    assert.equal(jobChipType({ systemId: 'quarter-outdoor', systemSnapshot: { chipType: '1/8' } }, lookup), '1/4');
+    assert.equal(jobChipType({ systemId: 'deleted', systemSnapshot: { chipType: 'Stone' } }, lookup), 'Stone');
+    assert.equal(jobChipType({ systemId: 'grind', systemSnapshot: {} }, lookup), undefined);
+  });
+
+  test('blends saved with systems are available for every system of those chip types', () => {
+    const legacyBlend = { systemIds: ['quarter'] };
+    assert.deepEqual(blendChipTypes(legacyBlend, lookup), ['1/4']);
+    assert.equal(blendAllowsChipType(legacyBlend, '1/4', lookup), true);
+    assert.equal(blendAllowsChipType(legacyBlend, 'Stone', lookup), false);
+  });
+
+  test('blend chip types win over legacy systems and an empty list allows any type', () => {
+    assert.deepEqual(blendChipTypes({ chipTypes: ['Stone'], systemIds: ['quarter'] }, lookup), ['Stone']);
+    assert.equal(blendAllowsChipType({ chipTypes: [] }, '1/8', lookup), true);
+  });
+
+  test('inventory lookup matches stock of the same chip type from any system', () => {
+    const rows = [
+      { id: 'a', blend: 'Blue', systemId: 'quarter-outdoor' },
+      { id: 'b', blend: 'Blue', chipType: 'Stone' },
+    ];
+    assert.equal(findChipInventoryItem(rows, 'blue', '1/4', lookup)?.id, 'a');
+    assert.equal(findChipInventoryItem(rows, 'blue', 'stone', lookup)?.id, 'b');
+    assert.equal(findChipInventoryItem(rows, 'blue', '1/8', lookup), undefined);
   });
 });

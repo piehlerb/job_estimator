@@ -3,7 +3,7 @@ import { X } from 'lucide-react';
 import { getDefaultCosts, getDefaultPricing } from '../lib/db';
 import { calculateJobOutputs } from '../lib/calculations';
 import { normalizeChipBlendName } from '../lib/syncHelpers';
-import { chipInventoryKey, findChipInventoryItem } from '../lib/chipInventory';
+import { chipInventoryKey, findChipInventoryItem, jobChipType, type ChipTypeLookup } from '../lib/chipInventory';
 import { findCoatingSku } from '../lib/coatingSkus';
 import { resolveJobMaterials, ResolvedMaterials, ResolvedCoatingLine } from '../lib/materialAllocation';
 import {
@@ -24,6 +24,7 @@ interface JobSummaryModalProps {
   coatingInventory: CoatingInventory[];
   miscInventory: MiscInventory;
   chipInventory: ChipInventory[];
+  chipTypeForSystem: ChipTypeLookup;
   tintInventory: TintInventory[];
   currentCosts: Costs;
   currentPricing: Pricing;
@@ -34,8 +35,7 @@ interface JobMaterialRow {
   job: Job;
   materials: ResolvedMaterials;
   chipBlend: string | null;
-  chipSystemId?: string;
-  chipSystemName?: string;
+  chipType?: string;
   chipLbs: number;
   moistureMitigationGallons: number;
 }
@@ -88,6 +88,7 @@ export default function JobSummaryModal({
   coatingInventory,
   miscInventory,
   chipInventory,
+  chipTypeForSystem,
   tintInventory,
   currentCosts,
   currentPricing,
@@ -192,13 +193,12 @@ export default function JobSummaryModal({
         job,
         materials,
         chipBlend,
-        chipSystemId: job.systemId || undefined,
-        chipSystemName: job.systemSnapshot?.name,
+        chipType: jobChipType(job, chipTypeForSystem),
         chipLbs,
         moistureMitigationGallons,
       };
     });
-  }, [filteredJobs, currentCosts, currentPricing]);
+  }, [filteredJobs, currentCosts, currentPricing, chipTypeForSystem]);
 
   // Aggregate totals for non-ignored jobs
   const totals = useMemo(() => {
@@ -234,19 +234,19 @@ export default function JobSummaryModal({
     // Sequential chip reclaim simulation: reclaim from Job N feeds into Job N+1
     const reclaimRate = (currentPricing.chipReclaimRate ?? 0) / 100;
 
-    // Group jobs by blend + chip system (each is its own inventory item) in
-    // chronological order (activeRows inherits filteredJobs sort)
+    // Group jobs by blend + chip type (each is its own inventory item, shared by
+    // every system using that chip) in chronological order (activeRows inherits
+    // filteredJobs sort)
     const chipBuckets = new Map<
       string,
-      { blend: string; systemId?: string; systemName?: string; lbsList: number[]; required: number }
+      { blend: string; chipType?: string; lbsList: number[]; required: number }
     >();
     for (const r of activeRows) {
       if (r.chipBlend && r.chipLbs > 0) {
-        const key = chipInventoryKey(r.chipBlend, r.chipSystemId);
+        const key = chipInventoryKey(r.chipBlend, r.chipType);
         const bucket = chipBuckets.get(key) ?? {
           blend: r.chipBlend,
-          systemId: r.chipSystemId,
-          systemName: r.chipSystemName,
+          chipType: r.chipType,
           lbsList: [],
           required: 0,
         };
@@ -279,9 +279,9 @@ export default function JobSummaryModal({
     const chipTotals = [...chipBuckets.entries()]
       .map(([key, bucket]) => ({
         key,
-        label: bucket.systemName ? `${bucket.blend} (${bucket.systemName})` : bucket.blend,
+        label: bucket.chipType ? `${bucket.blend} (${bucket.chipType})` : bucket.blend,
         required: bucket.required,
-        onHand: findChipInventoryItem(chipInventory, bucket.blend, bucket.systemId)?.pounds ?? 0,
+        onHand: findChipInventoryItem(chipInventory, bucket.blend, bucket.chipType, chipTypeForSystem)?.pounds ?? 0,
       }))
       .sort((a, b) => a.label.localeCompare(b.label));
 
@@ -293,7 +293,7 @@ export default function JobSummaryModal({
     const allTintColors = [...allTintColorsSet].sort();
 
     return { coatingTotals, moistureMitigation, chipTotals, tintByColor, allTintColors, reclaimRate };
-  }, [jobMaterials, ignoredJobIds, chipInventory, tintInventory, currentPricing]);
+  }, [jobMaterials, ignoredJobIds, chipInventory, chipTypeForSystem, tintInventory, currentPricing]);
 
   const toggleIgnored = (jobId: string) => {
     setIgnoredIds((prev) => {
@@ -449,7 +449,7 @@ export default function JobSummaryModal({
                           {row.chipBlend && row.chipLbs > 0 ? (
                             <span>
                               {row.chipBlend}
-                              {row.chipSystemName && <span className="text-slate-400"> ({row.chipSystemName})</span>}{' '}
+                              {row.chipType && <span className="text-slate-400"> ({row.chipType})</span>}{' '}
                               <span className="tabular-nums">{row.chipLbs.toFixed(1)} lbs</span>
                             </span>
                           ) : (

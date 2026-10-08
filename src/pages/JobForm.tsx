@@ -46,7 +46,13 @@ import { useSaveFlash } from '../hooks/useSaveFlash';
 import { compareSnapshots, SnapshotChanges } from '../lib/snapshotComparison';
 import SnapshotChangeBanner, { SelectedChanges } from '../components/SnapshotChangeBanner';
 import { normalizeChipBlendName } from '../lib/syncHelpers';
-import { findChipInventoryItem } from '../lib/chipInventory';
+import {
+  blendAllowsChipType,
+  chipTypeLookup,
+  findChipInventoryItem,
+  inventoryRowChipType,
+  jobChipType,
+} from '../lib/chipInventory';
 import {
   buildInventoryActualsUpdate,
   buildInventoryReviewRows,
@@ -481,15 +487,16 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
       .slice(0, 8);
   }, [formData.customerName, availableCustomers]);
 
+  const chipTypeForSystem = useMemo(() => chipTypeLookup(systems), [systems]);
+  // Physical chip the selected system uses; blends and inventory are matched on it
+  const selectedChipType = formData.system ? chipTypeForSystem(formData.system) : undefined;
+
   const applicableChipBlends = useMemo(() => {
     const filtered = !formData.system
       ? chipBlends
-      : chipBlends.filter((blend) => {
-          if (!blend.systemIds || blend.systemIds.length === 0) return true;
-          return blend.systemIds.includes(formData.system);
-        });
+      : chipBlends.filter((blend) => blendAllowsChipType(blend, selectedChipType, chipTypeForSystem));
     return [...filtered].sort((a, b) => a.name.localeCompare(b.name));
-  }, [chipBlends, formData.system]);
+  }, [chipBlends, formData.system, selectedChipType, chipTypeForSystem]);
 
   const selectedBlend = useMemo(() => {
     const normalized = normalizeChipBlendName(formData.chipBlend);
@@ -1720,7 +1727,8 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
     actualCrackRepairOz: job.actualCrackRepairOz,
     actualMoistureMitigationGallons: job.actualMoistureMitigationGallons,
     chipBlend: job.chipBlend,
-    systemId: job.systemId,
+    chipType: jobChipType(job, chipTypeForSystem),
+    chipTypeForSystem,
     baseColor: job.baseColor,
     tintColor: job.tintColor,
     includeBasecoatTint: job.includeBasecoatTint,
@@ -1743,6 +1751,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
       tintInventory: tintInventoryRows,
       coatingInventory: coatingInventoryRows,
       miscInventory,
+      chipTypeForSystem,
     });
   };
 
@@ -1793,7 +1802,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
       let hasMiscChanges = false;
       const getFreshCurrentValue = (row: EditableInventoryReviewRow) => {
         if (row.target.kind === 'chip') {
-          const existing = findChipInventoryItem(chipInventoryRows, row.target.blend, row.target.systemId);
+          const existing = findChipInventoryItem(chipInventoryRows, row.target.blend, row.target.chipType, chipTypeForSystem);
           return existing?.pounds ?? 0;
         }
 
@@ -1827,13 +1836,13 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
       for (const row of rowsToApply) {
         if (row.target.kind === 'chip') {
           const target = row.target;
-          const existing = findChipInventoryItem(chipInventoryRows, target.blend, target.systemId);
+          const existing = findChipInventoryItem(chipInventoryRows, target.blend, target.chipType, chipTypeForSystem);
 
           await saveChipInventory({
             id: existing?.id || generateId(),
             blend: existing?.blend || target.blend,
-            // Deducting from unassigned legacy stock claims it for this system.
-            systemId: existing?.systemId || target.systemId,
+            // Deducting from unassigned legacy stock claims it for this chip type.
+            chipType: (existing && inventoryRowChipType(existing, chipTypeForSystem)) || target.chipType,
             pounds: row.newValue,
             updatedAt: now,
             deleted: false,
@@ -2187,13 +2196,15 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
       return null;
     }
 
-    // Inventory is tracked per blend + chip system
-    const inventoryItem = findChipInventoryItem(chipInventory, formData.chipBlend, formData.system);
+    // Inventory is tracked per blend + chip type, shared by systems using the same chip
+    const inventoryItem = findChipInventoryItem(chipInventory, formData.chipBlend, selectedChipType, chipTypeForSystem);
 
     if (!inventoryItem || inventoryItem.pounds <= 0) {
       return {
         hasInventory: false,
-        message: "We don't have this chip blend in inventory for this system",
+        message: selectedChipType
+          ? `We don't have this chip blend in inventory in ${selectedChipType} chip`
+          : "We don't have this chip blend in inventory",
       };
     }
 

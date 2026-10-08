@@ -9,6 +9,7 @@ import {
 import { ChipSystem } from '../types';
 import SaveButton from '../components/SaveButton';
 import { useSaveFlash } from '../hooks/useSaveFlash';
+import { chipTypeOfSystem, distinctChipTypes, normalizeChipType } from '../lib/chipInventory';
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -16,6 +17,7 @@ function generateId(): string {
 
 const defaultSystemForm = {
   name: '',
+  chipType: '',
   feetPerLb: '',
   boxCost: '',
   baseSpread: '',
@@ -59,6 +61,7 @@ export default function ChipSystems() {
       const system: ChipSystem = {
         id: editingSystem?.id || generateId(),
         name: systemForm.name,
+        chipType: normalizeChipType(systemForm.chipType),
         feetPerLb: parseFloat(systemForm.feetPerLb) || 0,
         boxCost: parseFloat(systemForm.boxCost) || 0,
         baseSpread: parseFloat(systemForm.baseSpread) || 0,
@@ -100,6 +103,7 @@ export default function ChipSystems() {
     const fallbackTopCoats = (system as unknown as { doubleBroadcast?: boolean }).doubleBroadcast ? 2 : 1;
     setSystemForm({
       name: system.name,
+      chipType: system.chipType || '',
       feetPerLb: system.feetPerLb.toString(),
       boxCost: system.boxCost.toString(),
       baseSpread: system.baseSpread.toString(),
@@ -130,6 +134,8 @@ export default function ChipSystems() {
       console.error('Error setting default system:', error);
     }
   };
+
+  const knownChipTypes = distinctChipTypes(systems.map(chipTypeOfSystem));
 
   if (loading) {
     return <div className="p-6 text-center">Loading...</div>;
@@ -188,7 +194,7 @@ export default function ChipSystems() {
                     )}
                   </div>
                   <p className="text-sm text-slate-600 mt-1">
-                    {system.feetPerLb} ft/lb | ${system.boxCost}/box
+                    Chip: {chipTypeOfSystem(system) ?? 'none'} | {system.feetPerLb} ft/lb | ${system.boxCost}/box
                   </p>
                   <p className="text-sm text-slate-600">
                     Base: {system.baseSpread} @ {system.baseCoats ?? 1} coats | Top: {system.topSpread} @ {system.topCoats ?? 1} coats | Cyclo1: {system.cyclo1Spread || 0} @ {system.cyclo1Coats ?? 1} coats
@@ -270,6 +276,27 @@ export default function ChipSystems() {
                     className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
                   />
                   <p className="text-xs text-slate-500 mt-1">Enter coverage in square feet per pound (not per 40 lb box).</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-900 mb-2">Chip Type</label>
+                  <input
+                    type="text"
+                    list="chip-type-options"
+                    placeholder="e.g., 1/4, 1/8, Stone"
+                    value={systemForm.chipType}
+                    onChange={(e) => setSystemForm({ ...systemForm, chipType: e.target.value })}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
+                  />
+                  <datalist id="chip-type-options">
+                    {knownChipTypes.map((chipType) => (
+                      <option key={chipType} value={chipType} />
+                    ))}
+                  </datalist>
+                  <p className="text-xs text-slate-500 mt-1">
+                    The chip this system uses. Systems with the same chip type share inventory (e.g. 1/4 and 1/4 Outdoor). Leave blank if the system uses no chip.
+                  </p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">

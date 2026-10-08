@@ -14,11 +14,12 @@ import {
   getAllChipBlends,
   getAllChipInventory,
   getAllJobs,
+  getAllSystems,
   openDB,
   ChipBlend,
 } from './db';
 import { normalizeChipBlendName } from './syncHelpers';
-import { chipInventoryKey } from './chipInventory';
+import { chipInventoryKey, chipTypeLookup, inventoryRowChipType } from './chipInventory';
 import { ChipInventory } from '../types';
 
 export interface ConsolidationResult {
@@ -59,14 +60,15 @@ export async function findDuplicateBlends(): Promise<Map<string, ChipBlend[]>> {
 
 /**
  * Find all duplicate chip inventory entries (same normalized blend name and
- * chip system — the same blend in different systems is a different item)
+ * chip type — the same blend in different chip types is a different item)
  */
 export async function findDuplicateInventory(): Promise<Map<string, ChipInventory[]>> {
   const inventory = await getAllChipInventory();
+  const lookup = chipTypeLookup(await getAllSystems());
   const groups = new Map<string, ChipInventory[]>();
 
   for (const inv of inventory) {
-    const key = chipInventoryKey(inv.blend, inv.systemId);
+    const key = chipInventoryKey(inv.blend, inventoryRowChipType(inv, lookup));
     if (!groups.has(key)) {
       groups.set(key, []);
     }
@@ -114,6 +116,7 @@ export async function consolidateChipBlends(dryRun = false): Promise<Consolidati
   // Get all data
   const blends = await getAllChipBlends();
   const inventory = await getAllChipInventory();
+  const lookup = chipTypeLookup(await getAllSystems());
   const jobs = await getAllJobs();
 
   // Step 1: Group blends by normalized name
@@ -126,10 +129,10 @@ export async function consolidateChipBlends(dryRun = false): Promise<Consolidati
     blendGroups.get(normalized)!.push(blend);
   }
 
-  // Step 2: Group inventory by normalized blend name + chip system
+  // Step 2: Group inventory by normalized blend name + chip type
   const inventoryGroups = new Map<string, ChipInventory[]>();
   for (const inv of inventory) {
-    const key = chipInventoryKey(inv.blend, inv.systemId);
+    const key = chipInventoryKey(inv.blend, inventoryRowChipType(inv, lookup));
     if (!inventoryGroups.has(key)) {
       inventoryGroups.set(key, []);
     }

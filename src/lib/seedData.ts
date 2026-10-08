@@ -38,6 +38,7 @@ const SEED_SYSTEMS: ChipSystem[] = [
   {
     id: 'e1dkd3bxlujfbuy570062a',
     name: '1/4',
+    chipType: '1/4',
     feetPerLb: 5,
     boxCost: 93,
     baseSpread: 300,
@@ -57,6 +58,7 @@ const SEED_SYSTEMS: ChipSystem[] = [
   {
     id: '9mtbkjkyfjgkpdk12c9368',
     name: '1/8',
+    chipType: '1/8',
     feetPerLb: 4.5,
     boxCost: 103,
     baseSpread: 300,
@@ -76,6 +78,7 @@ const SEED_SYSTEMS: ChipSystem[] = [
   {
     id: 'c79h9zlyz3am2slqbn2gnf',
     name: '1/16',
+    chipType: '1/16',
     feetPerLb: 3.5,
     boxCost: 103,
     baseSpread: 300,
@@ -95,6 +98,7 @@ const SEED_SYSTEMS: ChipSystem[] = [
   {
     id: '2cl0w5ka2sbfb60n06ym54',
     name: 'Stone',
+    chipType: 'Stone',
     feetPerLb: 200,
     boxCost: 93,
     baseSpread: 300,
@@ -114,6 +118,7 @@ const SEED_SYSTEMS: ChipSystem[] = [
   {
     id: 'f5p787qmqsrcg5w0tui7je',
     name: 'Hybrid',
+    chipType: 'Hybrid',
     feetPerLb: 5,
     boxCost: 125,
     baseSpread: 300,
@@ -133,6 +138,7 @@ const SEED_SYSTEMS: ChipSystem[] = [
   {
     id: 'mri9gwpnd7qw44qogkge3',
     name: 'Stonebridge',
+    chipType: 'Stonebridge',
     feetPerLb: 200,
     boxCost: 125,
     baseSpread: 300,

@@ -5,6 +5,10 @@ export type JobStatus = 'Won' | 'Lost' | 'Pending' | 'Verbal';
 export interface ChipSystem {
   id: string;
   name: string;
+  // Physical chip product this system uses (e.g. "1/4", "Stone"). Inventory is
+  // tracked per blend + chip type, so "1/4" and "1/4 Outdoor" share stock.
+  // Blank for systems that use no chip.
+  chipType?: string;
   feetPerLb: number;
   boxCost: number;
   baseSpread: number;
@@ -404,7 +408,8 @@ export interface ActualCosts {
 
 // Inventory bucket a resolved actuals line deducts from.
 export type InventoryTarget =
-  | { kind: 'chip'; blend: string; systemId?: string }
+  // systemId only on lines written before chip types; resolve it via the system
+  | { kind: 'chip'; blend: string; chipType?: string; systemId?: string }
   | { kind: 'coating'; part: CoatingPart; variant?: string; color?: string }
   | { kind: 'tint'; color: string }
   | { kind: 'misc'; field: keyof Pick<MiscInventory, 'crackRepair' | 'moistureMitigation'> };
@@ -427,7 +432,8 @@ export interface InventoryActualsApplied {
   actualCrackRepairOz?: number;
   actualMoistureMitigationGallons?: number;
   chipBlend?: string;
-  chipSystemId?: string; // chip system the blend was drawn from (absent on legacy snapshots)
+  chipType?: string; // chip type the blend was drawn from
+  chipSystemId?: string; // legacy: chip system the blend was drawn from, before chip types
   baseColor?: string;
   tintColor?: string;
   appliedAt: string;
@@ -583,7 +589,8 @@ export interface JobMaterialAllocation {
 export interface ChipInventory {
   id: string;
   blend: string;
-  systemId?: string; // chip system this stock belongs to; absent = unassigned legacy stock
+  chipType?: string; // chip type this stock is (1/4, 1/8, Stone, ...); absent = unassigned
+  systemId?: string; // legacy: chip system the stock was tagged with before chip types
   pounds: number;
   updatedAt: string;
   deleted?: boolean;
@@ -663,7 +670,8 @@ export interface JobCalculation {
 export interface ChipBlend {
   id: string;
   name: string;
-  systemIds?: string[]; // IDs of chip systems this blend is available with
+  chipTypes?: string[]; // chip types this blend comes in; empty = any
+  systemIds?: string[]; // legacy: chip systems, used only until chipTypes is set
   baseCoatColorIds?: string[]; // IDs of base coat colors this blend is available with
   createdAt?: string;
   updatedAt?: string;

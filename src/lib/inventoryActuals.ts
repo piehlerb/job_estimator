@@ -11,7 +11,7 @@ import type {
 import { coatingSkuKey, coatingSkuLabel, findCoatingSku } from './coatingSkus.js';
 import { resolveJobMaterials } from './materialAllocation.js';
 import { normalizeChipBlendName } from './syncHelpers.js';
-import { chipInventoryKey, findChipInventoryItem } from './chipInventory.js';
+import { chipInventoryKey, findChipInventoryItem, type ChipTypeLookup } from './chipInventory.js';
 
 // Re-exported for existing importers; the type now lives in types/index.ts
 // because resolved lines are persisted (and synced) data.
@@ -26,7 +26,9 @@ export interface InventoryActualsSource {
   actualCrackRepairOz?: number;
   actualMoistureMitigationGallons?: number;
   chipBlend?: string;
-  systemId?: string; // the job's chip system; selects which blend inventory bucket is used
+  chipType?: string; // the job's chip type; selects which blend inventory bucket is used
+  // Resolves chip systems recorded on snapshots written before chip types
+  chipTypeForSystem?: ChipTypeLookup;
   baseColor?: string;
   tintColor?: string;
   includeBasecoatTint?: boolean;
@@ -61,6 +63,12 @@ export interface InventoryReviewInputs {
   tintInventory: TintInventory[];
   coatingInventory: CoatingInventory[];
   miscInventory: MiscInventory | null;
+  chipTypeForSystem?: ChipTypeLookup; // resolves legacy system-tagged chip rows
+}
+
+export interface ChipTypeResolution {
+  fallbackChipType?: string; // the job's current chip type
+  chipTypeForSystem?: ChipTypeLookup;
 }
 
 const ZERO_EPSILON = 0.000001;
@@ -100,11 +108,11 @@ export function buildResolvedLines(
   if (source.chipBlend && actualChipBoxes !== undefined) {
     const blend = normalizeChipBlendName(source.chipBlend);
     lines.push({
-      key: chipInventoryKey(blend, source.systemId),
+      key: chipInventoryKey(blend, source.chipType),
       label: `${blend} Chips`,
       unit: 'lbs',
       amount: actualChipBoxes * 40,
-      target: { kind: 'chip', blend, ...(source.systemId ? { systemId: source.systemId } : {}) },
+      target: { kind: 'chip', blend, ...(source.chipType ? { chipType: source.chipType } : {}) },
     });
   }
 
@@ -203,7 +211,7 @@ export function buildInventoryActualsSnapshot(
   }
 
   if (source.chipBlend) snapshot.chipBlend = normalizeChipBlendName(source.chipBlend);
-  if (source.chipBlend && source.systemId) snapshot.chipSystemId = source.systemId;
+  if (source.chipBlend && source.chipType) snapshot.chipType = source.chipType;
   if (source.baseColor) snapshot.baseColor = source.baseColor;
   if (hasTint && source.tintColor) snapshot.tintColor = source.tintColor;
 
@@ -227,20 +235,26 @@ function addAmount(map: Map<string, InventoryActualDeltaRow>, row: InventoryActu
 }
 
 /**
- * Snapshots applied before chip inventory was split by system carry chip lines
- * with no systemId. Attribute those to the fallback system (the job's current
- * system) so a reversal lands on the same bucket as the new deduction; the
- * inventory lookup still falls back to an unassigned row if that bucket is missing.
+ * Chip type of a chip line from an older snapshot: lines written while chip
+ * inventory was split by system carry a systemId (translated through that
+ * system's chip type), and earlier lines carry neither. Both fall back to the
+ * job's current chip type so a reversal lands on the same bucket as the new
+ * deduction; the inventory lookup still falls back to an unassigned row.
  */
-function withChipSystem(
+function resolveLegacyChipType(systemId: string | undefined, resolution: ChipTypeResolution): string | undefined {
+  return (systemId && resolution.chipTypeForSystem?.(systemId)) || resolution.fallbackChipType;
+}
+
+function withChipType(
   key: string,
   target: InventoryTarget,
-  fallbackSystemId: string | undefined
+  resolution: ChipTypeResolution
 ): { key: string; target: InventoryTarget } {
-  if (target.kind !== 'chip' || target.systemId || !fallbackSystemId) return { key, target };
+  if (target.kind !== 'chip' || target.chipType) return { key, target };
+  const chipType = resolveLegacyChipType(target.systemId, resolution);
   return {
-    key: chipInventoryKey(target.blend, fallbackSystemId),
-    target: { ...target, systemId: fallbackSystemId },
+    key: chipInventoryKey(target.blend, chipType),
+    target: { kind: 'chip', blend: target.blend, ...(chipType ? { chipType } : {}) },
   };
 }
 
@@ -248,7 +262,7 @@ function addSnapshotAmounts(
   map: Map<string, InventoryActualDeltaRow>,
   snapshot: InventoryActualsApplied | undefined,
   multiplier: 1 | -1,
-  fallbackChipSystemId?: string
+  resolution: ChipTypeResolution
 ): void {
   if (!snapshot) return;
 
@@ -257,7 +271,7 @@ function addSnapshotAmounts(
   if (snapshot.resolvedLines) {
     for (const line of snapshot.resolvedLines) {
       addAmount(map, {
-        ...withChipSystem(line.key, line.target, fallbackChipSystemId),
+        ...withChipType(line.key, line.target, resolution),
         productName: line.label,
         unit: line.unit,
         usedDelta: line.amount * multiplier,
@@ -267,13 +281,13 @@ function addSnapshotAmounts(
   }
 
   if (snapshot.chipBlend && snapshot.actualChipBoxes) {
-    const systemId = snapshot.chipSystemId ?? fallbackChipSystemId;
+    const chipType = snapshot.chipType ?? resolveLegacyChipType(snapshot.chipSystemId, resolution);
     addAmount(map, {
-      key: chipInventoryKey(snapshot.chipBlend, systemId),
+      key: chipInventoryKey(snapshot.chipBlend, chipType),
       productName: `${snapshot.chipBlend} Chips`,
       unit: 'lbs',
       usedDelta: snapshot.actualChipBoxes * 40 * multiplier,
-      target: { kind: 'chip', blend: snapshot.chipBlend, ...(systemId ? { systemId } : {}) },
+      target: { kind: 'chip', blend: snapshot.chipBlend, ...(chipType ? { chipType } : {}) },
     });
   }
 
@@ -357,11 +371,11 @@ function addSnapshotAmounts(
 export function buildInventoryActualDeltaRows(
   current: InventoryActualsApplied,
   baseline: InventoryActualsApplied | undefined,
-  fallbackChipSystemId?: string
+  resolution: ChipTypeResolution = {}
 ): InventoryActualDeltaRow[] {
   const map = new Map<string, InventoryActualDeltaRow>();
-  addSnapshotAmounts(map, baseline, -1, fallbackChipSystemId);
-  addSnapshotAmounts(map, current, 1, fallbackChipSystemId);
+  addSnapshotAmounts(map, baseline, -1, resolution);
+  addSnapshotAmounts(map, current, 1, resolution);
 
   return Array.from(map.values())
     .map((row) => ({ ...row, usedDelta: Math.abs(row.usedDelta) < ZERO_EPSILON ? 0 : row.usedDelta }))
@@ -374,7 +388,10 @@ export function buildInventoryActualsUpdate(
   appliedAt = source.appliedAt ?? new Date().toISOString()
 ): { snapshot: InventoryActualsApplied; deltas: InventoryActualDeltaRow[] } {
   const snapshot = buildInventoryActualsSnapshot(source, appliedAt);
-  const deltas = buildInventoryActualDeltaRows(snapshot, source.inventoryActualsApplied, source.systemId);
+  const deltas = buildInventoryActualDeltaRows(snapshot, source.inventoryActualsApplied, {
+    fallbackChipType: source.chipType,
+    chipTypeForSystem: source.chipTypeForSystem,
+  });
 
   // Surface resolver warnings (invalid shares, unknown base color, …) on the
   // review rows. They are job-level, so attach them to the first coating row.
@@ -403,7 +420,7 @@ export function buildInventoryReviewRows(inputs: InventoryReviewInputs): Invento
     let inventoryId: string | undefined;
 
     if (target.kind === 'chip') {
-      const item = findChipInventoryItem(inputs.chipInventory, target.blend, target.systemId);
+      const item = findChipInventoryItem(inputs.chipInventory, target.blend, target.chipType, inputs.chipTypeForSystem);
       currentValue = item?.pounds ?? 0;
       inventoryId = item?.id;
     } else if (target.kind === 'tint') {
