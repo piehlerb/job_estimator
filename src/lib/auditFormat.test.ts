@@ -30,7 +30,7 @@ describe('audit log formatting', () => {
   });
 
   test('names the actor, with the webhook as system', () => {
-    assert.equal(actorName({ userId: undefined, actorEmail: undefined }), 'System (GoHighLevel)');
+    assert.equal(actorName({ userId: undefined, actorEmail: undefined }), 'System');
     assert.equal(actorName({ userId: 'u', actorEmail: 'muse@example.com' }), 'muse@example.com');
   });
 });

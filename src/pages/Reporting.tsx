@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import { getAllAdSpend, getAllJobs, getAllLaborers, getAllLeadAppointments, getAllLeads, getCosts, getDefaultCosts, getPricing, getDefaultPricing, setAdSpendForMonth } from '../lib/db';
+import { getAllAdSpend, getAllJobs, getAllLaborers, getAllLeadAppointments, getAllLeads, getCosts, getDefaultCosts, getPricing, getDefaultPricing, setAdSpend, deleteAdSpend } from '../lib/db';
 import { calculateJobOutputs, calculateActualCosts, getActualLaborerHours } from '../lib/calculations';
 import { ActualCosts, AdSpend, Costs, Job, JobCalculation, JobStatus, Laborer, Lead, LeadAppointment, Pricing } from '../types';
 import { loadAllHistoricalJobsFromSupabase } from '../lib/sync';
@@ -108,8 +108,6 @@ export default function Reporting({ onEditJob }: ReportingProps) {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [leadAppointments, setLeadAppointments] = useState<LeadAppointment[]>([]);
   const [adSpendRecords, setAdSpendRecords] = useState<AdSpend[]>([]);
-  const [spendDrafts, setSpendDrafts] = useState<Record<string, string>>({});
-  const [savingSpendMonth, setSavingSpendMonth] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -551,50 +549,18 @@ export default function Reporting({ onEditJob }: ReportingProps) {
 
   // ==================== LEAD TRACKING ====================
 
-  const handleSaveSpend = async (month: string) => {
+  // One source's spend for a month; null removes it. Errors propagate to the editor.
+  const handleSaveSpend = async (month: string, source: string, amount: number | null) => {
     if (!canEditSpend) return;
-    const draft = spendDrafts[month];
-    if (draft === undefined) return; // untouched
-
-    const existing = adSpendRecords.find((r) => r.month === month);
-    if (draft.trim() === '' && !existing) {
-      // Nothing entered and nothing stored — leave as "no spend recorded"
-      setSpendDrafts((prev) => {
-        const next = { ...prev };
-        delete next[month];
-        return next;
-      });
+    const existing = adSpendRecords.find((r) => !r.deleted && r.month === month && (r.source?.trim() ?? '') === source.trim());
+    if (amount === null) {
+      if (!existing) return;
+      await deleteAdSpend(existing.id);
+      setAdSpendRecords((prev) => prev.filter((r) => r.id !== existing.id));
       return;
     }
-
-    const amount = draft.trim() === '' ? 0 : Number(draft);
-    if (Number.isNaN(amount) || amount < 0) return;
-    if (existing && existing.amount === amount) {
-      setSpendDrafts((prev) => {
-        const next = { ...prev };
-        delete next[month];
-        return next;
-      });
-      return;
-    }
-
-    setSavingSpendMonth(month);
-    try {
-      const saved = await setAdSpendForMonth(month, amount);
-      setAdSpendRecords((prev) => {
-        const others = prev.filter((r) => r.id !== saved.id);
-        return [...others, saved];
-      });
-      setSpendDrafts((prev) => {
-        const next = { ...prev };
-        delete next[month];
-        return next;
-      });
-    } catch (error) {
-      console.error('Error saving ad spend:', error);
-    } finally {
-      setSavingSpendMonth(null);
-    }
+    const saved = await setAdSpend(month, source, amount);
+    setAdSpendRecords((prev) => [...prev.filter((r) => r.id !== saved.id), saved]);
   };
 
   // ==================== HANDLERS ====================
@@ -1271,7 +1237,7 @@ export default function Reporting({ onEditJob }: ReportingProps) {
           {activeView === 'leads-by-created-date' && <LeadCreatedDateReport leads={leads} appointments={leadAppointments} />}
 
           {/* ===== LEAD TRACKING ===== */}
-          {activeView === 'lead-tracking' && <LeadTrackingReport leads={leads} appointments={leadAppointments} spendRecords={adSpendRecords} drafts={spendDrafts} setDraft={(month, value) => setSpendDrafts(prev => ({ ...prev, [month]: value }))} saveSpend={handleSaveSpend} savingMonth={savingSpendMonth} canEditSpend={canEditSpend} />}
+          {activeView === 'lead-tracking' && <LeadTrackingReport leads={leads} appointments={leadAppointments} spendRecords={adSpendRecords} saveSpend={handleSaveSpend} canEditSpend={canEditSpend} />}
 
         </>
       )}

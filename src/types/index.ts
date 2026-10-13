@@ -270,11 +270,13 @@ export interface Lead {
   deleted?: boolean;
 }
 
-// Manually-entered advertising spend for a calendar month (used by lead tracking reports)
+// Manually-entered advertising spend for one lead source in a calendar month
+// (used by lead tracking reports)
 export interface AdSpend {
   id: string;
   month: string; // YYYY-MM
-  amount: number; // Total advertising dollars spent in that month
+  source?: string; // Lead source the money was spent on (matches Lead.source); absent on rows entered before per-source tracking
+  amount: number; // Advertising dollars spent on that source that month
   notes?: string;
   createdAt: string;
   updatedAt: string;

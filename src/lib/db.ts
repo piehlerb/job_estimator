@@ -1734,17 +1734,19 @@ export async function updateAdSpend(record: AdSpend): Promise<void> {
 }
 
 /**
- * Set the advertising spend for a calendar month (YYYY-MM).
- * Updates the existing record for that month if one exists, otherwise creates one.
+ * Set the advertising spend for one source in a calendar month (YYYY-MM).
+ * Updates that month + source's record if one exists, otherwise creates one.
  */
-export async function setAdSpendForMonth(month: string, amount: number): Promise<AdSpend> {
-  const existing = (await getAllAdSpend()).find((r) => r.month === month);
+export async function setAdSpend(month: string, source: string, amount: number): Promise<AdSpend> {
+  const name = source.trim();
+  const existing = (await getAllAdSpend()).find((r) => r.month === month && (r.source?.trim() ?? '') === name);
   const now = new Date().toISOString();
   const record: AdSpend = existing
-    ? { ...existing, amount, updatedAt: now }
+    ? { ...existing, source: name, amount, updatedAt: now }
     : {
         id: crypto.randomUUID(),
         month,
+        source: name,
         amount,
         createdAt: now,
         updatedAt: now,

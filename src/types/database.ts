@@ -27,6 +27,7 @@ export type Database = {
           month: string
           notes: string | null
           org_id: string | null
+          source: string | null
           synced_at: string | null
           updated_at: string
           user_id: string | null
@@ -39,6 +40,7 @@ export type Database = {
           month: string
           notes?: string | null
           org_id?: string | null
+          source?: string | null
           synced_at?: string | null
           updated_at?: string
           user_id?: string | null
@@ -51,6 +53,7 @@ export type Database = {
           month?: string
           notes?: string | null
           org_id?: string | null
+          source?: string | null
           synced_at?: string | null
           updated_at?: string
           user_id?: string | null

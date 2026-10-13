@@ -1,4 +1,5 @@
-import type { Lead, LeadAppointment } from '../types/index.js';
+import type { AdSpend, Lead, LeadAppointment } from '../types/index.js';
+import { toLocalDateString } from './dateUtils.js';
 
 export type Territory = 'In territory' | 'Out of territory';
 
@@ -34,4 +35,69 @@ export function summarizeLeads(leads: Lead[], appointments: LeadAppointment[]) {
 
 export function costPer(spend: number | null, count: number): number | null {
   return spend !== null && count > 0 ? spend / count : null;
+}
+
+/** Name a lead's source is grouped under */
+export const leadSourceOf = (lead: Pick<Lead, 'source'>) => lead.source?.trim() || '(No Source)';
+
+/** Spend entered before spend was tracked per source */
+export const UNATTRIBUTED_SOURCE = '(Unattributed)';
+
+export const spendSourceOf = (record: Pick<AdSpend, 'source'>) => record.source?.trim() || UNATTRIBUTED_SOURCE;
+
+/** Month (YYYY-MM) a lead counts in: first seen, else created; '' if neither parses */
+export function leadMonth(lead: Pick<Lead, 'firstSeenAt' | 'createdAt'>): string {
+  const date = new Date(lead.firstSeenAt || lead.createdAt);
+  return Number.isNaN(date.getTime()) ? '' : toLocalDateString(date).slice(0, 7);
+}
+
+export interface SourceCost {
+  spend: number;
+  /** Lead outcomes from this source, counted only in months it has spend recorded */
+  leads: number;
+  inTerritory: number;
+  booked: number;
+}
+
+/**
+ * Spend and lead outcomes per source over a set of months. A source's leads
+ * count only in months where that source has spend recorded: a month with no
+ * spend entered is missing data, not free leads. Only sources with spend
+ * appear. Spend rows with no source are grouped under UNATTRIBUTED_SOURCE.
+ */
+export function costsBySource(
+  leads: Lead[],
+  appointments: LeadAppointment[],
+  spend: AdSpend[],
+  months: ReadonlySet<string>
+): Map<string, SourceCost> {
+  const spendMonths = new Map<string, Set<string>>();
+  const costs = new Map<string, SourceCost>();
+  for (const record of spend) {
+    if (record.deleted || !months.has(record.month)) continue;
+    const source = spendSourceOf(record);
+    const entry = costs.get(source) ?? { spend: 0, leads: 0, inTerritory: 0, booked: 0 };
+    entry.spend += record.amount;
+    costs.set(source, entry);
+    const set = spendMonths.get(source) ?? new Set<string>();
+    set.add(record.month);
+    spendMonths.set(source, set);
+  }
+  const bySource = new Map<string, Lead[]>();
+  for (const lead of leads) {
+    if (lead.deleted) continue;
+    const source = leadSourceOf(lead);
+    if (!spendMonths.get(source)?.has(leadMonth(lead))) continue;
+    const group = bySource.get(source) ?? [];
+    group.push(lead);
+    bySource.set(source, group);
+  }
+  for (const [source, group] of bySource) {
+    const summary = summarizeLeads(group, appointments);
+    const entry = costs.get(source)!;
+    entry.leads = summary.leads;
+    entry.inTerritory = summary.territory['In territory'];
+    entry.booked = summary.booked;
+  }
+  return costs;
 }

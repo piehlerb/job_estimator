@@ -104,7 +104,7 @@ export default function ActivityLog({ orgId, members }: { orgId: string; members
               {m.email}{m.isAgent ? ' (agent)' : ''}
             </option>
           ))}
-          <option value="system">System (GoHighLevel)</option>
+          <option value="system">System (GoHighLevel, database updates)</option>
         </select>
         <select aria-label="Area" value={area} onChange={(e) => setArea(e.target.value)} className={selectClass}>
           <option value="">All areas</option>

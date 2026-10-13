@@ -106,8 +106,8 @@ export function formatValue(value: unknown, maxLength = 160): string {
   return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
 }
 
-/** Who made the change: the member's email, or "System" for the GHL webhook */
+/** Who made the change: the member's email, or "System" (GHL webhook, database updates) */
 export function actorName(entry: Pick<AuditLogEntry, 'userId' | 'actorEmail'>): string {
-  if (!entry.userId) return 'System (GoHighLevel)';
+  if (!entry.userId) return 'System';
   return entry.actorEmail || 'Unknown user';
 }
