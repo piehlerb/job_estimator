@@ -1050,6 +1050,7 @@ export type Database = {
           campaign: string | null
           city: string | null
           closed_at: string | null
+          contact_log: Json | null
           created_at: string
           customer_id: string | null
           deleted: boolean
@@ -1084,6 +1085,7 @@ export type Database = {
           campaign?: string | null
           city?: string | null
           closed_at?: string | null
+          contact_log?: Json | null
           created_at?: string
           customer_id?: string | null
           deleted?: boolean
@@ -1118,6 +1120,7 @@ export type Database = {
           campaign?: string | null
           city?: string | null
           closed_at?: string | null
+          contact_log?: Json | null
           created_at?: string
           customer_id?: string | null
           deleted?: boolean

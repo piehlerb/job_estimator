@@ -1,4 +1,4 @@
-import type { Lead, LeadDispositionReason, LeadStage } from '../types/index.js';
+import type { Lead, LeadContactAttempt, LeadDispositionReason, LeadStage } from '../types/index.js';
 import { withLeadAddressFields, type AddressFieldSet } from './addressFields.js';
 
 export type LeadEditInput = {
@@ -17,6 +17,8 @@ export type LeadEditInput = {
    * rather than re-derived.
    */
   addressFields?: AddressFieldSet;
+  /** The full call/text history as edited in the form; omitted leaves it unchanged */
+  contactLog?: LeadContactAttempt[];
 };
 
 const TERMINAL_STAGES = new Set<LeadStage>(['Won', 'Lost', 'Disqualified']);
@@ -43,6 +45,10 @@ export function applyLeadEdit(
     stage: input.stage,
     updatedAt: nowIso,
   };
+
+  if (input.contactLog) {
+    next.contactLog = input.contactLog.length > 0 ? input.contactLog : null;
+  }
 
   if (TERMINAL_STAGES.has(input.stage)) {
     next.closedAt = lead.closedAt || nowIso;

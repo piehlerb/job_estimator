@@ -2,6 +2,7 @@ export const LEAD_STAGES = [
   'New',
   'Contact Attempted',
   'Engaged',
+  'Call Booked',
   'Estimate Booked',
   'Estimate Completed',
   'Quoted',
