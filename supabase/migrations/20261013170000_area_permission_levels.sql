@@ -16,6 +16,7 @@
 --   Screens share data (an estimate needs costs, pricing and systems; inventory
 --   commitments need jobs), so each table is readable from every area whose
 --   screens load it -- see the map at the bottom.
+-- * Policies are changed with ALTER POLICY (they exist since the baseline).
 -- * Writes keep their existing feature lists, except leads and
 --   lead_appointments, which are now written under {leads, jobs} (equivalent
 --   for legacy permissions, since leads derives from customers/reporting).
@@ -97,7 +98,7 @@ REVOKE ALL ON FUNCTION public.org_can_read(uuid, text[]) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.org_can_read(uuid, text[]) TO authenticated, service_role;
 
 -- Read map: table -> areas whose screens load it. Keep in sync with
--- TABLE_READ_AREAS in src/lib/permissions.ts.
+-- STORE_READ_AREAS in src/lib/permissions.ts.
 DO $$
 DECLARE
   r record;
@@ -128,9 +129,8 @@ BEGIN
       ('topcoat_inventory',   '{inventory,jobs}')
     ) AS t(table_name, areas)
   LOOP
-    EXECUTE format('DROP POLICY IF EXISTS "Org-aware select" ON public.%I', r.table_name);
     EXECUTE format(
-      'CREATE POLICY "Org-aware select" ON public.%I AS PERMISSIVE FOR SELECT TO authenticated '
+      'ALTER POLICY "Org-aware select" ON public.%I TO authenticated '
       'USING (((org_id IS NULL) AND (user_id = auth.uid())) OR ((org_id IS NOT NULL) AND org_can_read(org_id, %L::text[])))',
       r.table_name, r.areas
     );
@@ -139,18 +139,14 @@ END $$;
 
 -- Leads get their own area: written under {leads, jobs} (a job save updates its
 -- linked lead).
-DROP POLICY IF EXISTS "Org-aware insert" ON public.leads;
-CREATE POLICY "Org-aware insert" ON public.leads AS PERMISSIVE FOR INSERT TO authenticated
+ALTER POLICY "Org-aware insert" ON public.leads
   WITH CHECK (((user_id = auth.uid()) AND ((org_id IS NULL) OR ((org_id IS NOT NULL) AND org_can_write(org_id, '{leads,jobs}'::text[])))));
-DROP POLICY IF EXISTS "Org-aware update" ON public.leads;
-CREATE POLICY "Org-aware update" ON public.leads AS PERMISSIVE FOR UPDATE TO authenticated
+ALTER POLICY "Org-aware update" ON public.leads
   USING ((((org_id IS NULL) AND (user_id = auth.uid())) OR ((org_id IS NOT NULL) AND org_can_write(org_id, '{leads,jobs}'::text[]))))
   WITH CHECK ((((org_id IS NULL) AND (user_id = auth.uid())) OR ((org_id IS NOT NULL) AND org_can_write(org_id, '{leads,jobs}'::text[]))));
 
-DROP POLICY IF EXISTS "Org-aware insert" ON public.lead_appointments;
-CREATE POLICY "Org-aware insert" ON public.lead_appointments AS PERMISSIVE FOR INSERT TO authenticated
+ALTER POLICY "Org-aware insert" ON public.lead_appointments
   WITH CHECK (((user_id = auth.uid()) AND ((org_id IS NULL) OR ((org_id IS NOT NULL) AND org_can_write(org_id, '{leads,jobs}'::text[])))));
-DROP POLICY IF EXISTS "Org-aware update" ON public.lead_appointments;
-CREATE POLICY "Org-aware update" ON public.lead_appointments AS PERMISSIVE FOR UPDATE TO authenticated
+ALTER POLICY "Org-aware update" ON public.lead_appointments
   USING ((((org_id IS NULL) AND (user_id = auth.uid())) OR ((org_id IS NOT NULL) AND org_can_write(org_id, '{leads,jobs}'::text[]))))
   WITH CHECK ((((org_id IS NULL) AND (user_id = auth.uid())) OR ((org_id IS NOT NULL) AND org_can_write(org_id, '{leads,jobs}'::text[]))));

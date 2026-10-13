@@ -55,6 +55,10 @@ Rules:
 
 - Never edit a migration that has been applied — add a new one.
 - Don't run schema SQL in the dashboard SQL Editor; it bypasses the history.
+- Prefer `ALTER POLICY` / `CREATE OR REPLACE TRIGGER` over drop-and-recreate. Besides
+  avoiding a window with no policy, the Supabase MCP tools hold any statement
+  containing `DROP` for a confirmation and time out, so such migrations can't be
+  applied from an agent session.
 - New org-scoped tables need RLS policies in the same shape as the existing ones:
   reads through `org_can_read(org_id, '{areas}')`, writes through
   `org_can_write(org_id, '{areas}')` (see `20261013170000_area_permission_levels.sql`),

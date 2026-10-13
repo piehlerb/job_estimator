@@ -1211,8 +1211,8 @@ export type Database = {
           expires_at: string
           id: string
           invite_code: string
-          is_agent: boolean
           invited_by: string
+          is_agent: boolean
           org_id: string
           permissions: Json | null
           role: string
@@ -1225,8 +1225,8 @@ export type Database = {
           expires_at?: string
           id?: string
           invite_code?: string
-          is_agent?: boolean
           invited_by: string
+          is_agent?: boolean
           org_id: string
           permissions?: Json | null
           role?: string
@@ -1239,8 +1239,8 @@ export type Database = {
           expires_at?: string
           id?: string
           invite_code?: string
-          is_agent?: boolean
           invited_by?: string
+          is_agent?: boolean
           org_id?: string
           permissions?: Json | null
           role?: string
@@ -2082,14 +2082,32 @@ export type Database = {
           org_updated_at: string
         }[]
       }
+      member_area_rank: {
+        Args: {
+          p_access_level: string
+          p_area: string
+          p_permissions: Json
+          p_role: string
+        }
+        Returns: number
+      }
       migrate_user_data_to_org: {
         Args: { p_org_id: string }
         Returns: undefined
+      }
+      org_area_rank: {
+        Args: { p_features: string[]; p_org_id: string }
+        Returns: number
+      }
+      org_can_read: {
+        Args: { p_features: string[]; p_org_id: string }
+        Returns: boolean
       }
       org_can_write: {
         Args: { p_features: string[]; p_org_id: string }
         Returns: boolean
       }
+      permission_rank: { Args: { p_value: Json }; Returns: number }
       title_case: { Args: { input_text: string }; Returns: string }
     }
     Enums: {

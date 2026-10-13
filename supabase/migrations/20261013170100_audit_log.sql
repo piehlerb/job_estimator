@@ -43,7 +43,6 @@ CREATE INDEX IF NOT EXISTS idx_audit_log_org_user_created ON public.audit_log (o
 CREATE INDEX IF NOT EXISTS idx_audit_log_record ON public.audit_log (table_name, record_id);
 
 ALTER TABLE public.audit_log ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Admins can view org audit log" ON public.audit_log;
 CREATE POLICY "Admins can view org audit log" ON public.audit_log AS PERMISSIVE FOR SELECT TO authenticated
   USING (((org_id IS NOT NULL) AND is_org_admin(org_id)) OR ((org_id IS NULL) AND (user_id = auth.uid())));
 REVOKE ALL ON public.audit_log FROM anon, authenticated;
@@ -147,9 +146,8 @@ BEGIN
     'organization_members', 'organization_invitations'
   ]
   LOOP
-    EXECUTE format('DROP TRIGGER IF EXISTS audit_row_change ON public.%I', t);
     EXECUTE format(
-      'CREATE TRIGGER audit_row_change AFTER INSERT OR UPDATE OR DELETE ON public.%I '
+      'CREATE OR REPLACE TRIGGER audit_row_change AFTER INSERT OR UPDATE OR DELETE ON public.%I '
       'FOR EACH ROW EXECUTE FUNCTION audit_row_change()',
       t
     );
