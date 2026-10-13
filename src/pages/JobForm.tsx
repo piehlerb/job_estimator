@@ -2026,7 +2026,12 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
             existingReminders: reminders,
             generateId,
           });
-      const allReminders = [...reminders, ...autoReminders];
+      // A won job needs no more follow-ups: open reminders are dropped as part of
+      // the save (not when the status is picked) so switching back keeps them.
+      const isWon = formData.status === 'Won';
+      const allReminders = isWon
+        ? reminders.filter((reminder) => reminder.completed)
+        : [...reminders, ...autoReminders];
 
       const job: Job = {
         id: jobId || generateId(),
@@ -2133,8 +2138,10 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
       } else {
         await addJob(jobWithAddress);
       }
-      if (autoReminders.length > 0) {
+      if (allReminders.length !== reminders.length) {
         setReminders(allReminders);
+      }
+      if (!isWon && autoReminders.length > 0) {
         await requestReminderNotificationPermission();
       }
       await syncLinkedLeadFromJob(job);

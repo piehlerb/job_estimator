@@ -74,19 +74,23 @@ export default function LeadTrackingReport({ leads, appointments, spendRecords, 
       <p className="text-xs text-slate-500">CPLIT = spend ÷ in-territory leads. Cost / booking = spend ÷ booked leads. Summary costs use only months with recorded spend ({rows.filter(r => r.spend !== null).length} of {rows.length}); missing spend and zero denominators display —. Lead → booking: {percent(total.booked, total.leads)}; {percent(total.booked, total.decided)} of decided leads.</p>
       <LeadQualityBreakdown leads={filtered} appointments={appointments} />
       <div className="space-y-3">
-        <div><h3 className="font-semibold text-slate-900">Leads by Month &amp; Source</h3><p className="text-xs text-slate-500">Expand a month for spend entry, conversion metrics, and its source breakdown.</p></div>
-        {rows.map(row => <details key={row.month} className="rounded-lg border bg-white">
-          <summary className="cursor-pointer p-4"><span className="font-semibold">{monthLabel(row.month)}</span>
-            <dl className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-3 lg:grid-cols-6">{Object.entries({ Leads: row.leads, 'In territory': row.territory['In territory'], Booked: row.booked, 'Cost / lead': money(costPer(row.spend, row.leads)), CPLIT: money(costPer(row.spend, row.territory['In territory'])), 'Cost / booking': money(costPer(row.spend, row.booked)) }).map(([label, value]) => <div key={label}><dt className="text-xs text-slate-500">{label}</dt><dd className="font-semibold tabular-nums">{value}</dd></div>)}</dl>
-          </summary>
-          <div className="space-y-4 border-t p-4">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <label className="text-sm">Ad spend · {monthLabel(row.month)}<input aria-label={`Ad spend for ${monthLabel(row.month)}`} type="number" min="0" step="any" inputMode="decimal" placeholder="Not entered" value={drafts[row.month] ?? (row.spend === null ? '' : String(row.spend))} disabled={savingMonth === row.month} onChange={e => setDraft(row.month, e.target.value)} onBlur={() => saveSpend(row.month)} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }} className="ml-2 w-32 rounded border p-2" /><span className="block mt-1 text-xs text-slate-500">{savingMonth === row.month ? 'Saving…' : 'Saves when you leave the field.'}</span></label>
-              <p className="text-sm text-slate-600">Booking: {percent(row.booked, row.leads)} · Decided booking: {percent(row.booked, row.decided)} · Open: {row.open} · Won: {row.won}</p>
-            </div>
-            <LeadQualityBreakdown leads={row.cohort} appointments={appointments} />
+        <div><h3 className="font-semibold text-slate-900">Leads by Month &amp; Source</h3><p className="text-xs text-slate-500">Enter each month's ad spend below. Expand a month for conversion metrics and its source breakdown.</p></div>
+        {rows.map(row => <div key={row.month} className="rounded-lg border bg-white">
+          {/* Spend entry stays outside <details> so it is always visible and typing in it never toggles the row */}
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 pt-4">
+            <span className="font-semibold">{monthLabel(row.month)}</span>
+            <label className="flex items-center gap-2 text-sm text-slate-600">Ad spend<input aria-label={`Ad spend for ${monthLabel(row.month)}`} type="number" min="0" step="any" inputMode="decimal" placeholder="Not entered" title="Saves when you leave the field" value={drafts[row.month] ?? (row.spend === null ? '' : String(row.spend))} disabled={savingMonth === row.month} onChange={e => setDraft(row.month, e.target.value)} onBlur={() => saveSpend(row.month)} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }} className="w-32 rounded border p-2 text-slate-900" />{savingMonth === row.month && <span className="text-xs text-slate-500">Saving…</span>}</label>
           </div>
-        </details>)}
+          <details>
+            <summary className="cursor-pointer p-4">
+              <dl className="inline-grid w-[calc(100%-1.5rem)] grid-cols-2 gap-3 align-top text-sm sm:grid-cols-3 lg:grid-cols-6">{Object.entries({ Leads: row.leads, 'In territory': row.territory['In territory'], Booked: row.booked, 'Cost / lead': money(costPer(row.spend, row.leads)), CPLIT: money(costPer(row.spend, row.territory['In territory'])), 'Cost / booking': money(costPer(row.spend, row.booked)) }).map(([label, value]) => <div key={label}><dt className="text-xs text-slate-500">{label}</dt><dd className="font-semibold tabular-nums">{value}</dd></div>)}</dl>
+            </summary>
+            <div className="space-y-4 border-t p-4">
+              <p className="text-sm text-slate-600">Booking: {percent(row.booked, row.leads)} · Decided booking: {percent(row.booked, row.decided)} · Open: {row.open} · Won: {row.won}</p>
+              <LeadQualityBreakdown leads={row.cohort} appointments={appointments} />
+            </div>
+          </details>
+        </div>)}
       </div>
     </>}
   </section>;

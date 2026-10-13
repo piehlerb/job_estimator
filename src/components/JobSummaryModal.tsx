@@ -1,11 +1,12 @@
-import { useState, useEffect, useMemo } from 'react';
-import { X } from 'lucide-react';
+import { useState, useEffect, useMemo, Fragment } from 'react';
+import { ChevronDown, ChevronRight, X } from 'lucide-react';
 import { getDefaultCosts, getDefaultPricing } from '../lib/db';
 import { calculateJobOutputs } from '../lib/calculations';
 import { normalizeChipBlendName } from '../lib/syncHelpers';
 import { chipInventoryKey, findChipInventoryItem, jobChipType, type ChipTypeLookup } from '../lib/chipInventory';
 import { findCoatingSku } from '../lib/coatingSkus';
 import { resolveJobMaterials, ResolvedMaterials, ResolvedCoatingLine } from '../lib/materialAllocation';
+import { projectInventoryAfterJobs, type ProjectedLine, type ProjectionNeed } from '../lib/inventoryProjection';
 import {
   Job,
   Costs,
@@ -81,6 +82,60 @@ function MaterialRow({ label, unit, required, onHand }: MaterialRowProps) {
   );
 }
 
+const formatQty = (value: number, unit: string) => (unit === 'gal' ? value.toFixed(2) : value.toFixed(1));
+
+// Running inventory for one job: what was on hand before it, what it uses, and what is left after
+function InventoryAfterJob({ lines, ignored }: { lines: ProjectedLine[]; ignored: boolean }) {
+  if (ignored) {
+    return <p className="text-xs text-slate-500">Ignored jobs are left out of the running inventory balance.</p>;
+  }
+  if (lines.length === 0) {
+    return <p className="text-xs text-slate-500">This job uses no tracked inventory.</p>;
+  }
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full max-w-2xl table-fixed text-xs">
+        <colgroup>
+          <col className="w-[40%]" />
+          <col className="w-[10%]" />
+          <col className="w-[15%]" />
+          <col className="w-[20%]" />
+          <col className="w-[15%]" />
+        </colgroup>
+        <thead>
+          <tr className="text-slate-500">
+            <th className="py-1 pr-6 text-left font-semibold">Material</th>
+            <th className="py-1 pr-6 text-left font-semibold">Unit</th>
+            <th className="py-1 pr-6 text-right font-semibold">Before Job</th>
+            <th className="py-1 pr-6 text-right font-semibold">This Job</th>
+            <th className="py-1 text-right font-semibold">After Job</th>
+          </tr>
+        </thead>
+        <tbody>
+          {lines.map((line) => (
+            <tr key={line.key} className="border-t border-slate-200">
+              <td className="py-1 pr-6 text-slate-700">{line.label}</td>
+              <td className="py-1 pr-6 text-slate-500">{line.unit}</td>
+              <td className="py-1 pr-6 text-right tabular-nums">{formatQty(line.before, line.unit)}</td>
+              <td className="py-1 pr-6 text-right tabular-nums">
+                −{formatQty(line.fromInventory, line.unit)}
+                {line.fromReclaim > 0 && (
+                  <span className="block text-[11px] text-gf-dark-green">
+                    {formatQty(line.fromReclaim, line.unit)} more covered by reclaim
+                  </span>
+                )}
+              </td>
+              <td className={`py-1 text-right font-semibold tabular-nums ${line.after < 0 ? 'text-red-600' : 'text-green-700'}`}>
+                {formatQty(line.after, line.unit)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function JobSummaryModal({
   isOpen,
   onClose,
@@ -96,6 +151,7 @@ export default function JobSummaryModal({
 }: JobSummaryModalProps) {
   const [dayWindow, setDayWindow] = useState(30);
   const [ignoredJobIds, setIgnoredIds] = useState<Set<string>>(new Set());
+  const [expandedJobIds, setExpandedJobIds] = useState<Set<string>>(new Set());
 
   // On-hand gallons for a coating SKU (legacy coordinates)
   const coatingOnHand = (part: CoatingPart, variant?: string, color?: string) =>
@@ -103,7 +159,10 @@ export default function JobSummaryModal({
 
   // Reset ignored state when modal opens
   useEffect(() => {
-    if (isOpen) setIgnoredIds(new Set());
+    if (isOpen) {
+      setIgnoredIds(new Set());
+      setExpandedJobIds(new Set());
+    }
   }, [isOpen]);
 
   const getMergedCosts = (job: Job): Costs => ({
@@ -295,6 +354,63 @@ export default function JobSummaryModal({
     return { coatingTotals, moistureMitigation, chipTotals, tintByColor, allTintColors, reclaimRate };
   }, [jobMaterials, ignoredJobIds, chipInventory, chipTypeForSystem, tintInventory, currentPricing]);
 
+  // Inventory left after each active job, drawn down in install date order
+  const projection = useMemo(() => {
+    const activeJobs = jobMaterials
+      .filter((r) => !ignoredJobIds.has(r.job.id))
+      .map((r) => {
+        const needs: ProjectionNeed[] = r.materials.coating.map((line) => ({
+          key: line.key,
+          label: line.label,
+          unit: 'gal',
+          amount: line.gallons,
+          onHand: findCoatingSku(coatingInventory, line.part, line.variant, line.color)?.gallons ?? 0,
+        }));
+        needs.push({
+          key: 'misc:moistureMitigation',
+          label: 'Moisture Mitigation',
+          unit: 'gal',
+          amount: r.moistureMitigationGallons,
+          onHand: miscInventory.moistureMitigation ?? 0,
+        });
+        if (r.chipBlend) {
+          needs.push({
+            key: chipInventoryKey(r.chipBlend, r.chipType),
+            label: `Chip — ${r.chipType ? `${r.chipBlend} (${r.chipType})` : r.chipBlend}`,
+            unit: 'lbs',
+            amount: r.chipLbs,
+            onHand: findChipInventoryItem(chipInventory, r.chipBlend, r.chipType, chipTypeForSystem)?.pounds ?? 0,
+            reclaimable: true,
+          });
+        }
+        for (const line of r.materials.tint) {
+          needs.push({
+            key: line.key,
+            label: `Tint — ${line.color}`,
+            unit: 'oz',
+            amount: line.oz,
+            onHand: tintInventory.find((t) => t.color === line.color)?.ounces ?? 0,
+          });
+        }
+        return { id: r.job.id, needs };
+      });
+    return projectInventoryAfterJobs(activeJobs, totals.reclaimRate);
+  }, [jobMaterials, ignoredJobIds, coatingInventory, miscInventory, chipInventory, chipTypeForSystem, tintInventory, totals.reclaimRate]);
+
+  const toggleExpanded = (jobId: string) => {
+    setExpandedJobIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(jobId)) next.delete(jobId);
+      else next.add(jobId);
+      return next;
+    });
+  };
+
+  const allExpanded = jobMaterials.length > 0 && jobMaterials.every((r) => expandedJobIds.has(r.job.id));
+  const toggleAllExpanded = () => {
+    setExpandedJobIds(allExpanded ? new Set() : new Set(jobMaterials.map((r) => r.job.id)));
+  };
+
   const toggleIgnored = (jobId: string) => {
     setIgnoredIds((prev) => {
       const next = new Set(prev);
@@ -350,14 +466,28 @@ export default function JobSummaryModal({
 
         {/* Per-job table */}
         <div className="bg-white rounded-lg shadow-sm border border-slate-200">
-          <div className="px-4 py-3 border-b border-slate-200">
-            <h3 className="font-semibold text-slate-900">Upcoming Jobs</h3>
-            <p className="text-xs text-slate-500 mt-0.5">Check "Ignore" to exclude a job from the material totals below.</p>
+          <div className="px-4 py-3 border-b border-slate-200 flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h3 className="font-semibold text-slate-900">Upcoming Jobs</h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Check "Ignore" to exclude a job from the material totals below. Expand a job to see the inventory left after it.
+              </p>
+            </div>
+            {jobMaterials.length > 0 && (
+              <button
+                type="button"
+                onClick={toggleAllExpanded}
+                className="text-xs font-medium text-gf-dark-green hover:underline whitespace-nowrap"
+              >
+                {allExpanded ? 'Collapse all' : 'Expand all'}
+              </button>
+            )}
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50">
+                  <th className="py-3 px-2 w-8"><span className="sr-only">Expand</span></th>
                   <th className="py-3 px-3 text-left font-semibold text-slate-600 w-16">Ignore</th>
                   <th className="py-3 px-3 text-left font-semibold text-slate-600">Job</th>
                   <th className="py-3 px-3 text-left font-semibold text-slate-600">Customer</th>
@@ -370,12 +500,13 @@ export default function JobSummaryModal({
                   <th className="py-3 px-3 text-right font-semibold text-slate-600">MVB (gal)</th>
                   <th className="py-3 px-3 text-left font-semibold text-slate-600">Chip</th>
                   <th className="py-3 px-3 text-left font-semibold text-slate-600">Tint</th>
+                  <th className="py-3 px-3 text-left font-semibold text-slate-600">Stock After</th>
                 </tr>
               </thead>
               <tbody>
                 {jobMaterials.length === 0 ? (
                   <tr>
-                    <td colSpan={12} className="py-10 text-center text-slate-400">
+                    <td colSpan={14} className="py-10 text-center text-slate-400">
                       No jobs scheduled in the next {dayWindow} days
                     </td>
                   </tr>
@@ -396,11 +527,25 @@ export default function JobSummaryModal({
                     };
                     const formatBaseBLine = (l: ResolvedCoatingLine) =>
                       `${l.variant && l.variant !== 'Normal' ? `${l.variant} ` : ''}${l.color} ${l.gallons.toFixed(2)}`;
+                    const expanded = expandedJobIds.has(row.job.id);
+                    const projected = projection.get(row.job.id) ?? [];
+                    const shortCount = projected.filter((l) => l.after < 0).length;
                     return (
+                      <Fragment key={row.job.id}>
                       <tr
-                        key={row.job.id}
                         className={`border-b border-slate-100 ${ignored ? 'opacity-40' : 'hover:bg-slate-50'}`}
                       >
+                        <td className="py-3 px-2 text-center">
+                          <button
+                            type="button"
+                            onClick={() => toggleExpanded(row.job.id)}
+                            aria-expanded={expanded}
+                            aria-label={`${expanded ? 'Hide' : 'Show'} inventory after ${row.job.name}`}
+                            className="p-1 rounded text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                          >
+                            {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                          </button>
+                        </td>
                         <td className="py-3 px-3 text-center">
                           <input
                             type="checkbox"
@@ -467,7 +612,32 @@ export default function JobSummaryModal({
                             <span className="text-slate-400">–</span>
                           )}
                         </td>
+                        <td className="py-3 px-3 whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => toggleExpanded(row.job.id)}
+                            className="text-xs font-medium hover:underline"
+                          >
+                            {ignored ? (
+                              <span className="text-slate-400">Ignored</span>
+                            ) : projected.length === 0 ? (
+                              <span className="text-slate-400">–</span>
+                            ) : shortCount > 0 ? (
+                              <span className="text-red-600">Short: {shortCount} item{shortCount !== 1 ? 's' : ''}</span>
+                            ) : (
+                              <span className="text-green-700">All covered</span>
+                            )}
+                          </button>
+                        </td>
                       </tr>
+                      {expanded && (
+                        <tr className="border-b border-slate-100 bg-slate-50/60">
+                          <td colSpan={14} className="px-4 py-3">
+                            <InventoryAfterJob lines={projected} ignored={ignored} />
+                          </td>
+                        </tr>
+                      )}
+                      </Fragment>
                     );
                   })
                 )}
