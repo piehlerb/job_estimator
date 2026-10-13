@@ -28,7 +28,7 @@ import { migrateCustomersFromJobs, cleanupMigratedCustomerDuplicates, migrateJob
 import { seedOfflineData } from './lib/seedData';
 import { getAllJobs, updateJob, ensureCoatingInventorySeeded } from './lib/db';
 
-import { isPageAllowed, pickLandingPage, type AppPage } from './lib/permissions';
+import { canWrite, isPageAllowed, pickLandingPage, type AppPage } from './lib/permissions';
 
 type Page = AppPage;
 
@@ -42,11 +42,11 @@ function App() {
   const isOnline = useOnlineStatus();
   const { user, loading, organization, permissions, orgLoading, needsPasswordReset } = useAuth();
   // Mirrors the server-side write rules (org_can_write in
-  // supabase/migrations/20260928235900_baseline.sql). Background writes a member
+  // supabase/migrations/*_area_permission_levels.sql). Background writes a member
   // isn't allowed to make would be rejected on push, so skip them here.
   const canWriteJobs = !organization || permissions.jobs === 'write';
-  const canWriteCustomers = canWriteJobs || permissions.customers;
-  const canWriteInventory = canWriteJobs || permissions.inventory;
+  const canWriteCustomers = canWriteJobs || canWrite(permissions, 'customers');
+  const canWriteInventory = canWriteJobs || canWrite(permissions, 'inventory');
   const canWriteJobsRef = useRef(canWriteJobs);
   canWriteJobsRef.current = canWriteJobs;
 

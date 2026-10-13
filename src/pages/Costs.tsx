@@ -5,8 +5,11 @@ import {
 } from '../lib/db';
 import SaveButton from '../components/SaveButton';
 import { useSaveFlash } from '../hooks/useSaveFlash';
+import { useCanEdit } from '../hooks/useAreaAccess';
+import ViewOnlyNotice from '../components/ViewOnlyNotice';
 
 export default function Costs() {
+  const canEdit = useCanEdit('costs');
   // The stored record is deliberately not held in state: saves go through
   // updateCosts, which re-reads it, so there is no snapshot to go stale.
   const [loading, setLoading] = useState(true);
@@ -58,6 +61,7 @@ export default function Costs() {
 
   const handleSaveCosts = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canEdit) return;
     setCostsSaving(true);
 
     try {
@@ -92,12 +96,14 @@ export default function Costs() {
   return (
     <div className="p-6 md:p-8 max-w-4xl mx-auto">
       <h1 className="text-3xl font-bold text-slate-900 mb-8">Cost Settings</h1>
+      {!canEdit && <ViewOnlyNotice className="-mt-4 mb-6" />}
 
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
         <p className="text-sm text-slate-600 mb-6">
           These costs are used for new job calculations. Existing jobs retain their original cost values.
         </p>
         <form onSubmit={handleSaveCosts} className="space-y-4">
+          <fieldset disabled={!canEdit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-semibold text-slate-900 mb-2">Base Cost per Gallon ($)</label>
@@ -247,6 +253,8 @@ export default function Costs() {
               <p className="text-xs text-slate-500 mt-1">Square feet of floor covered per gallon</p>
             </div>
           </div>
+          </fieldset>
+          {canEdit && (
           <div className="pt-4">
             <SaveButton
               type="submit"
@@ -257,6 +265,7 @@ export default function Costs() {
               className="px-6 py-2 rounded-lg font-semibold disabled:opacity-50"
             />
           </div>
+          )}
         </form>
       </div>
     </div>

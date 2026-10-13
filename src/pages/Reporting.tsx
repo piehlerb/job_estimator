@@ -8,6 +8,7 @@ import ZipGeographyReport from '../components/ZipGeographyReport';
 import LeadTrackingReport from '../components/LeadTrackingReport';
 import LeadCreatedDateReport from '../components/LeadCreatedDateReport';
 import { localToday, toLocalDateString } from '../lib/dateUtils';
+import { useCanEdit } from '../hooks/useAreaAccess';
 
 interface JobWithCalc {
   job: Job;
@@ -74,6 +75,7 @@ interface ReportingProps {
 }
 
 export default function Reporting({ onEditJob }: ReportingProps) {
+  const canEditSpend = useCanEdit('reporting');
   const [jobsWithCalc, setJobsWithCalc] = useState<JobWithCalc[]>([]);
   const [allLaborers, setAllLaborers] = useState<Laborer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -550,6 +552,7 @@ export default function Reporting({ onEditJob }: ReportingProps) {
   // ==================== LEAD TRACKING ====================
 
   const handleSaveSpend = async (month: string) => {
+    if (!canEditSpend) return;
     const draft = spendDrafts[month];
     if (draft === undefined) return; // untouched
 
@@ -1268,7 +1271,7 @@ export default function Reporting({ onEditJob }: ReportingProps) {
           {activeView === 'leads-by-created-date' && <LeadCreatedDateReport leads={leads} appointments={leadAppointments} />}
 
           {/* ===== LEAD TRACKING ===== */}
-          {activeView === 'lead-tracking' && <LeadTrackingReport leads={leads} appointments={leadAppointments} spendRecords={adSpendRecords} drafts={spendDrafts} setDraft={(month, value) => setSpendDrafts(prev => ({ ...prev, [month]: value }))} saveSpend={handleSaveSpend} savingMonth={savingSpendMonth} />}
+          {activeView === 'lead-tracking' && <LeadTrackingReport leads={leads} appointments={leadAppointments} spendRecords={adSpendRecords} drafts={spendDrafts} setDraft={(month, value) => setSpendDrafts(prev => ({ ...prev, [month]: value }))} saveSpend={handleSaveSpend} savingMonth={savingSpendMonth} canEditSpend={canEditSpend} />}
 
         </>
       )}

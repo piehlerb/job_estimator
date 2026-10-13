@@ -4,7 +4,7 @@ import { useSyncStatus } from '../contexts/SyncContext';
 import { SyncStatusIndicator } from './SyncStatusIndicator';
 import { signOut } from '../lib/auth';
 import { APP_VERSION } from '../version';
-import type { AppPage } from '../lib/permissions';
+import { canRead, type AppPage } from '../lib/permissions';
 
 const PAGE_TITLES: Partial<Record<AppPage, string>> = {
   'chip-systems': 'Chip Systems',
@@ -48,7 +48,7 @@ export default function Layout({
   const canWriteJobs = permissions.jobs === 'write';
   const canSeeJobs = permissions.jobs !== 'none';
   const canSeeCalendar = permissions.calendar !== 'none';
-  const canSeeLeads = permissions.customers || permissions.reporting;
+  const canSeeLeads = canRead(permissions, 'leads');
 
   const handleLogout = async () => {
     if (confirm('Are you sure you want to log out?')) {
@@ -133,7 +133,7 @@ export default function Layout({
               </button>
             )}
 
-            {permissions.inventory && (
+            {canRead(permissions, 'inventory') && (
               <button
                 onClick={() => onNavigate('inventory')}
                 className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
@@ -143,7 +143,7 @@ export default function Layout({
               </button>
             )}
 
-            {permissions.inventory && (
+            {canRead(permissions, 'inventory') && (
               <button
                 onClick={() => onNavigate('shopping-list')}
                 className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
@@ -163,7 +163,7 @@ export default function Layout({
               </button>
             )}
 
-            {permissions.reporting && (
+            {canRead(permissions, 'reporting') && (
               <button
                 onClick={() => onNavigate('reporting')}
                 className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
@@ -183,7 +183,7 @@ export default function Layout({
               </button>
             )}
 
-            {permissions.customers && (
+            {canRead(permissions, 'customers') && (
               <button
                 onClick={() => onNavigate('customers')}
                 className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
@@ -193,7 +193,7 @@ export default function Layout({
               </button>
             )}
 
-            {permissions.referralAssociates && (
+            {canRead(permissions, 'referralAssociates') && (
               <button
                 onClick={() => onNavigate('referral-associates')}
                 className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
@@ -203,7 +203,7 @@ export default function Layout({
               </button>
             )}
 
-            {permissions.products && (
+            {canRead(permissions, 'products') && (
               <button
                 onClick={() => onNavigate('products')}
                 className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
@@ -213,7 +213,7 @@ export default function Layout({
               </button>
             )}
 
-            {permissions.chipSystems && (
+            {canRead(permissions, 'chipSystems') && (
               <button
                 onClick={() => onNavigate('chip-systems')}
                 className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
@@ -223,7 +223,7 @@ export default function Layout({
               </button>
             )}
 
-            {permissions.chipBlends && (
+            {canRead(permissions, 'chipBlends') && (
               <button
                 onClick={() => onNavigate('chip-blends')}
                 className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
@@ -233,7 +233,7 @@ export default function Layout({
               </button>
             )}
 
-            {permissions.laborers && (
+            {canRead(permissions, 'laborers') && (
               <button
                 onClick={() => onNavigate('laborers')}
                 className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
@@ -243,7 +243,7 @@ export default function Layout({
               </button>
             )}
 
-            {permissions.costs && (
+            {canRead(permissions, 'costs') && (
               <button
                 onClick={() => onNavigate('costs')}
                 className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
@@ -253,7 +253,7 @@ export default function Layout({
               </button>
             )}
 
-            {permissions.pricing && (
+            {canRead(permissions, 'pricing') && (
               <button
                 onClick={() => onNavigate('pricing')}
                 className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
@@ -263,7 +263,7 @@ export default function Layout({
               </button>
             )}
 
-            {permissions.settings && (
+            {canRead(permissions, 'settings') && (
               <button
                 onClick={() => onNavigate('settings')}
                 className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"
@@ -273,7 +273,7 @@ export default function Layout({
               </button>
             )}
 
-            {permissions.backup && (
+            {canRead(permissions, 'backup') && (
               <button
                 onClick={() => onNavigate('backup')}
                 className="w-full flex items-center gap-3 px-3 py-2.5 md:px-4 md:py-3 rounded-lg text-slate-300 hover:bg-gray-900 hover:text-gf-electric transition-colors text-sm md:text-base"

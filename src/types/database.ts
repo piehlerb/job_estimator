@@ -65,6 +65,48 @@ export type Database = {
           },
         ]
       }
+      audit_log: {
+        Row: {
+          action: string
+          actor_email: string | null
+          changes: Json | null
+          created_at: string
+          id: number
+          is_agent: boolean
+          org_id: string | null
+          record_id: string | null
+          record_label: string | null
+          table_name: string
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          actor_email?: string | null
+          changes?: Json | null
+          created_at?: string
+          id?: never
+          is_agent?: boolean
+          org_id?: string | null
+          record_id?: string | null
+          record_label?: string | null
+          table_name: string
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          actor_email?: string | null
+          changes?: Json | null
+          created_at?: string
+          id?: never
+          is_agent?: boolean
+          org_id?: string | null
+          record_id?: string | null
+          record_label?: string | null
+          table_name?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       base_coat_colors: {
         Row: {
           created_at: string
@@ -1166,6 +1208,7 @@ export type Database = {
           expires_at: string
           id: string
           invite_code: string
+          is_agent: boolean
           invited_by: string
           org_id: string
           permissions: Json | null
@@ -1179,6 +1222,7 @@ export type Database = {
           expires_at?: string
           id?: string
           invite_code?: string
+          is_agent?: boolean
           invited_by: string
           org_id: string
           permissions?: Json | null
@@ -1192,6 +1236,7 @@ export type Database = {
           expires_at?: string
           id?: string
           invite_code?: string
+          is_agent?: boolean
           invited_by?: string
           org_id?: string
           permissions?: Json | null
@@ -1213,6 +1258,7 @@ export type Database = {
           email: string
           id: string
           invited_by: string | null
+          is_agent: boolean
           joined_at: string
           org_id: string
           permissions: Json | null
@@ -1224,6 +1270,7 @@ export type Database = {
           email: string
           id?: string
           invited_by?: string | null
+          is_agent?: boolean
           joined_at?: string
           org_id: string
           permissions?: Json | null
@@ -1235,6 +1282,7 @@ export type Database = {
           email?: string
           id?: string
           invited_by?: string | null
+          is_agent?: boolean
           joined_at?: string
           org_id?: string
           permissions?: Json | null

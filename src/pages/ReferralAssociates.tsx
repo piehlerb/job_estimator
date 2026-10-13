@@ -10,6 +10,8 @@ import {
 } from '../lib/db';
 import { ReferralAssociate, ReferralService } from '../types';
 import SaveButton from '../components/SaveButton';
+import { useCanEdit } from '../hooks/useAreaAccess';
+import ViewOnlyNotice from '../components/ViewOnlyNotice';
 import { useSaveFlash } from '../hooks/useSaveFlash';
 
 function generateId(): string {
@@ -41,6 +43,7 @@ const EMPTY_FORM: FormState = {
 };
 
 export default function ReferralAssociates() {
+  const canEdit = useCanEdit('referralAssociates');
   const [associates, setAssociates] = useState<ReferralAssociate[]>([]);
   const [services, setServices] = useState<ReferralService[]>([]);
   const [loading, setLoading] = useState(true);
@@ -289,15 +292,16 @@ export default function ReferralAssociates() {
             Contacts who refer work — tagged by services they provide.
           </p>
         </div>
-        <button
+        {canEdit && <button
           type="button"
           onClick={openAddForm}
           className="flex items-center gap-2 px-4 py-2 bg-gf-lime text-white rounded-lg font-medium hover:bg-gf-dark-green transition-colors text-sm"
         >
           <Plus size={16} />
           Add Associate
-        </button>
+        </button>}
       </div>
+      {!canEdit && <ViewOnlyNotice className="mb-4" />}
 
       {/* Summary */}
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-4 sm:mb-6">
@@ -369,7 +373,7 @@ export default function ReferralAssociates() {
         ) : filteredAssociates.length === 0 ? (
           <div className="p-8 text-center text-slate-600">
             {associates.length === 0
-              ? 'No referral associates yet. Click "Add Associate" to create one.'
+              ? canEdit ? 'No referral associates yet. Click "Add Associate" to create one.' : 'No referral associates yet.'
               : 'No associates match the current filters.'}
           </div>
         ) : (
@@ -386,9 +390,9 @@ export default function ReferralAssociates() {
                   <th className="px-4 lg:px-6 py-3 text-left text-sm font-semibold text-slate-700">
                     Services
                   </th>
-                  <th className="px-4 lg:px-6 py-3 text-right text-sm font-semibold text-slate-700">
+                  {canEdit && <th className="px-4 lg:px-6 py-3 text-right text-sm font-semibold text-slate-700">
                     Actions
-                  </th>
+                  </th>}
                 </tr>
               </thead>
               <tbody>
@@ -431,7 +435,7 @@ export default function ReferralAssociates() {
                         })}
                       </div>
                     </td>
-                    <td className="px-4 lg:px-6 py-4 text-right">
+                    {canEdit && <td className="px-4 lg:px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-1">
                         <button
                           type="button"
@@ -450,7 +454,7 @@ export default function ReferralAssociates() {
                           <Trash2 size={16} />
                         </button>
                       </div>
-                    </td>
+                    </td>}
                   </tr>
                 ))}
               </tbody>
@@ -460,7 +464,7 @@ export default function ReferralAssociates() {
       </div>
 
       {/* Add/Edit modal */}
-      {showForm && (
+      {canEdit && showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">

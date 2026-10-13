@@ -20,9 +20,10 @@ interface Props {
   setDraft: (month: string, value: string) => void;
   saveSpend: (month: string) => void;
   savingMonth: string | null;
+  canEditSpend: boolean;
 }
 
-export default function LeadTrackingReport({ leads, appointments, spendRecords, drafts, setDraft, saveSpend, savingMonth }: Props) {
+export default function LeadTrackingReport({ leads, appointments, spendRecords, drafts, setDraft, saveSpend, savingMonth, canEditSpend }: Props) {
   const [start, setStart] = useState('');
   const [end, setEnd] = useState(() => toLocalDateString().slice(0, 7));
   const [sources, setSources] = useState<string[]>([]);
@@ -74,12 +75,14 @@ export default function LeadTrackingReport({ leads, appointments, spendRecords, 
       <p className="text-xs text-slate-500">CPLIT = spend ÷ in-territory leads. Cost / booking = spend ÷ booked leads. Summary costs use only months with recorded spend ({rows.filter(r => r.spend !== null).length} of {rows.length}); missing spend and zero denominators display —. Lead → booking: {percent(total.booked, total.leads)}; {percent(total.booked, total.decided)} of decided leads.</p>
       <LeadQualityBreakdown leads={filtered} appointments={appointments} />
       <div className="space-y-3">
-        <div><h3 className="font-semibold text-slate-900">Leads by Month &amp; Source</h3><p className="text-xs text-slate-500">Enter each month's ad spend below. Expand a month for conversion metrics and its source breakdown.</p></div>
+        <div><h3 className="font-semibold text-slate-900">Leads by Month &amp; Source</h3><p className="text-xs text-slate-500">{canEditSpend ? "Enter each month's ad spend below. " : ''}Expand a month for conversion metrics and its source breakdown.</p></div>
         {rows.map(row => <div key={row.month} className="rounded-lg border bg-white">
           {/* Spend entry stays outside <details> so it is always visible and typing in it never toggles the row */}
           <div className="flex flex-wrap items-center justify-between gap-3 px-4 pt-4">
             <span className="font-semibold">{monthLabel(row.month)}</span>
-            <label className="flex items-center gap-2 text-sm text-slate-600">Ad spend<input aria-label={`Ad spend for ${monthLabel(row.month)}`} type="number" min="0" step="any" inputMode="decimal" placeholder="Not entered" title="Saves when you leave the field" value={drafts[row.month] ?? (row.spend === null ? '' : String(row.spend))} disabled={savingMonth === row.month} onChange={e => setDraft(row.month, e.target.value)} onBlur={() => saveSpend(row.month)} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }} className="w-32 rounded border p-2 text-slate-900" />{savingMonth === row.month && <span className="text-xs text-slate-500">Saving…</span>}</label>
+            {canEditSpend
+              ? <label className="flex items-center gap-2 text-sm text-slate-600">Ad spend<input aria-label={`Ad spend for ${monthLabel(row.month)}`} type="number" min="0" step="any" inputMode="decimal" placeholder="Not entered" title="Saves when you leave the field" value={drafts[row.month] ?? (row.spend === null ? '' : String(row.spend))} disabled={savingMonth === row.month} onChange={e => setDraft(row.month, e.target.value)} onBlur={() => saveSpend(row.month)} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }} className="w-32 rounded border p-2 text-slate-900" />{savingMonth === row.month && <span className="text-xs text-slate-500">Saving…</span>}</label>
+              : <span className="text-sm text-slate-600">Ad spend <span className="font-semibold tabular-nums text-slate-900">{money(row.spend)}</span></span>}
           </div>
           <details>
             <summary className="cursor-pointer p-4">

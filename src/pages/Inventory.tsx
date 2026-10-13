@@ -46,6 +46,8 @@ import {
 import { resolveJobMaterials } from '../lib/materialAllocation';
 import SaveButton from '../components/SaveButton';
 import { useSaveFlash } from '../hooks/useSaveFlash';
+import { useCanEdit } from '../hooks/useAreaAccess';
+import ViewOnlyNotice from '../components/ViewOnlyNotice';
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -74,6 +76,7 @@ const COATING_GROUP_LABELS: Record<CoatingPart, string> = {
 };
 
 export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) => void }) {
+  const canEdit = useCanEdit('inventory');
   const [loading, setLoading] = useState(true);
   const [chipBlends, setChipBlends] = useState<ChipBlend[]>([]);
   const [systems, setSystems] = useState<ChipSystem[]>([]);
@@ -601,14 +604,14 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-3xl font-bold text-slate-900">Inventory</h1>
         <div className="flex items-center gap-2">
-          <SaveButton
+          {canEdit && <SaveButton
             onClick={handleSaveAll}
             saving={savingAll}
             saved={saved}
             label="Save"
             iconSize={18}
             className="px-4 py-2 rounded-lg font-medium disabled:opacity-50"
-          />
+          />}
           <button
             onClick={() => setShowJobSummary(true)}
             className="flex items-center gap-2 px-4 py-2 bg-gf-lime text-white rounded-lg font-medium hover:bg-gf-dark-green transition-colors"
@@ -619,6 +622,10 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
         </div>
       </div>
 
+      {!canEdit && <ViewOnlyNotice className="-mt-4 mb-6" />}
+
+      {/* Every inventory control below is an edit; View-level members see them disabled */}
+      <fieldset disabled={!canEdit} className="min-w-0">
       {/* Chip Inventory */}
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6 mb-6">
         <h2 className="text-xl font-bold text-slate-900 mb-4">Chip Inventory</h2>
@@ -1130,6 +1137,8 @@ export default function Inventory({ onEditJob }: { onEditJob?: (jobId: string) =
           </table>
         </div>
       </div>
+
+      </fieldset>
 
       <JobSummaryModal
         isOpen={showJobSummary}

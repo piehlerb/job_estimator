@@ -116,6 +116,26 @@ After adding a field:
       (plus the build) on every branch and PR, and deploys only when they pass.
       Unit tests are `src/lib/**/*.test.ts` (Node's built-in test runner).
 
+## Permissions and the Audit Log
+
+Org members get `'none' | 'read' | 'write'` per area (`MemberPermissions` in
+`src/types/index.ts`; calendar uses `'none' | 'install' | 'full'`). Admins always
+have full access. Older rows store booleans; `normalizePermissions()` in
+`src/lib/permissions.ts` and `member_area_rank()` in the database read both.
+
+- **Database is the source of truth.** `org_can_read()` gates every SELECT and
+  `org_can_write()` every insert/update. Each table is readable from every area
+  whose screens load it (an estimate needs costs, pricing and systems), so the read
+  map lives in two places that must match: the migration
+  `20261013170000_area_permission_levels.sql` and `STORE_READ_AREAS`.
+- **Pages at View level** call `useCanEdit(area)` (`src/hooks/useAreaAccess.ts`),
+  show `<ViewOnlyNotice />`, and hide or disable every editing control.
+- **Audit log:** `public.audit_log`, written by the `audit_row_change` trigger on
+  every org table. Admins read it on the Organization page (Activity section).
+  New org tables need the trigger.
+- **Agents:** `organization_members.is_agent` marks an AI agent's account; it is
+  set from the invite and stamped on its audit entries.
+
 ## Data Synchronization
 
 ### How Sync Works

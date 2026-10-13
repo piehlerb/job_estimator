@@ -776,24 +776,33 @@ export interface Organization {
 
 export type OrgAccessLevel = 'full' | 'inventory_only';
 
-export type JobsPermission = 'write' | 'read' | 'none';
+/** Access to one area of the app: hidden, view only, or view and edit */
+export type AreaAccess = 'none' | 'read' | 'write';
+export type JobsPermission = AreaAccess;
+// Calendar is a view over jobs: 'install' shows installs only (read), 'full' everything
 export type CalendarPermission = 'full' | 'install' | 'none';
 
+/**
+ * Per-area access for an org member. Stored as JSON in
+ * organization_members.permissions; older rows hold booleans (true = write,
+ * false = none) and no `leads` key — normalizePermissions() reads both.
+ */
 export interface MemberPermissions {
   jobs: JobsPermission;
   calendar: CalendarPermission;
-  inventory: boolean;
-  reporting: boolean;
-  customers: boolean;
-  referralAssociates: boolean;
-  products: boolean;
-  chipSystems: boolean;
-  chipBlends: boolean;
-  laborers: boolean;
-  costs: boolean;
-  pricing: boolean;
-  settings: boolean;
-  backup: boolean;
+  leads: AreaAccess;
+  inventory: AreaAccess;
+  reporting: AreaAccess;
+  customers: AreaAccess;
+  referralAssociates: AreaAccess;
+  products: AreaAccess;
+  chipSystems: AreaAccess;
+  chipBlends: AreaAccess;
+  laborers: AreaAccess;
+  costs: AreaAccess;
+  pricing: AreaAccess;
+  settings: AreaAccess;
+  backup: AreaAccess;
 }
 
 export interface OrganizationMember {
@@ -804,6 +813,7 @@ export interface OrganizationMember {
   role: 'admin' | 'member';
   accessLevel: OrgAccessLevel; // Legacy: drives backwards-compatible defaults when permissions is null
   permissions?: MemberPermissions | null; // Granular per-feature permissions; null = derive from accessLevel
+  isAgent: boolean; // AI agent account (shown with an Agent badge; flagged in the audit log)
   invitedBy?: string;
   joinedAt: string;
 }
@@ -820,6 +830,23 @@ export interface OrganizationInvitation {
   expiresAt: string;
   createdAt: string;
   permissions?: MemberPermissions | null;
+  isAgent: boolean;
+}
+
+/** One row of public.audit_log: a change someone (or the system) made to org data */
+export interface AuditLogEntry {
+  id: number;
+  orgId?: string;
+  userId?: string; // undefined = system (e.g. the GoHighLevel webhook)
+  actorEmail?: string;
+  isAgent: boolean;
+  tableName: string;
+  recordId?: string;
+  recordLabel?: string;
+  action: 'insert' | 'update' | 'delete' | 'restore';
+  /** { column: { old?, new? } } in snake_case column names */
+  changes: Record<string, { old?: unknown; new?: unknown }> | null;
+  createdAt: string;
 }
 
 export interface ShoppingItem {

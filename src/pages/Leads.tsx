@@ -14,6 +14,8 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { deleteLead, getAllJobs, getAllLeadAppointments, getAllLeads, updateLead } from '../lib/db';
+import { useCanEdit } from '../hooks/useAreaAccess';
+import ViewOnlyNotice from '../components/ViewOnlyNotice';
 import { LEAD_DISPOSITION_REASONS, LEAD_STAGES } from '../lib/leadPipeline';
 import { applyLeadEdit } from '../lib/leadMutations';
 import type { AddressFieldSet } from '../lib/addressFields';
@@ -148,6 +150,8 @@ function appointmentBadgeClass(status?: LeadAppointment['status']): string {
 }
 
 export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
+  const canEdit = useCanEdit('leads');
+  const canCreateJobs = useCanEdit('jobs');
   const [leads, setLeads] = useState<Lead[]>([]);
   const [appointments, setAppointments] = useState<LeadAppointment[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -378,6 +382,7 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
           Refresh
         </button>
       </div>
+      {!canEdit && <ViewOnlyNotice className="mb-4" />}
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 mb-4 sm:mb-6">
         <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-3 sm:p-4">
@@ -483,7 +488,7 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
                           {lead.address && <div className="max-w-xs truncate">{lead.address}</div>}
                           <div>Last event {formatRelativeDate(lead.lastEventAt || lead.updatedAt)}</div>
                         </div>
-                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                        {canEdit && <div className="mt-3 flex flex-wrap items-center gap-2">
                           <button
                             type="button"
                             onClick={() => openEditLead(lead)}
@@ -506,7 +511,7 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
                             )}
                             Delete
                           </button>
-                        </div>
+                        </div>}
                       </td>
 
                       <td className="px-4 py-4">
@@ -518,7 +523,7 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
                       <td className="px-4 py-4 min-w-48">
                         <select
                           value={lead.stage}
-                          disabled={updatingLeadId === lead.id}
+                          disabled={!canEdit || updatingLeadId === lead.id}
                           onChange={(event) => handleLeadChange(lead, { stage: event.target.value as LeadStage })}
                           className={`w-full rounded-lg border-0 px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-gf-lime ${stageBadgeClass(lead.stage)}`}
                         >
@@ -533,7 +538,7 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
                       <td className="px-4 py-4 min-w-56">
                         <select
                           value={lead.dispositionReason || ''}
-                          disabled={!canSetDisposition || updatingLeadId === lead.id}
+                          disabled={!canEdit || !canSetDisposition || updatingLeadId === lead.id}
                           onChange={(event) =>
                             handleLeadChange(lead, {
                               dispositionReason: event.target.value
@@ -596,7 +601,7 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
                               {linkedJob.status}
                             </div>
                           </div>
-                        ) : (
+                        ) : canCreateJobs ? (
                           <button
                             type="button"
                             onClick={() => onNewJobFromLead(lead.id)}
@@ -605,6 +610,8 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
                             <Plus size={14} />
                             Create Job
                           </button>
+                        ) : (
+                          <span className="text-xs text-slate-400">No job</span>
                         )}
                       </td>
 
@@ -617,7 +624,7 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
         )}
       </div>
 
-      {editingLead && (
+      {canEdit && editingLead && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-3 sm:p-6">
           <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 sm:px-6 sm:py-4">

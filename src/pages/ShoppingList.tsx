@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plus, Trash2, ShoppingCart, CheckSquare } from 'lucide-react';
 import { getAllShoppingItems, addShoppingItem, updateShoppingItem, deleteShoppingItem } from '../lib/db';
+import { useCanEdit } from '../hooks/useAreaAccess';
+import ViewOnlyNotice from '../components/ViewOnlyNotice';
 import { ShoppingItem } from '../types';
 
 function generateId(): string {
@@ -8,6 +10,7 @@ function generateId(): string {
 }
 
 export default function ShoppingList() {
+  const canEdit = useCanEdit('inventory');
   const [items, setItems] = useState<ShoppingItem[]>([]);
   const [newItemName, setNewItemName] = useState('');
   const [loading, setLoading] = useState(true);
@@ -110,7 +113,7 @@ export default function ShoppingList() {
             {completed.length > 0 && ` · ${completed.length} completed`}
           </p>
         </div>
-        {completed.length > 0 && (
+        {canEdit && completed.length > 0 && (
           <button
             onClick={handleClearCompleted}
             className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
@@ -121,8 +124,10 @@ export default function ShoppingList() {
         )}
       </div>
 
+      {!canEdit && <ViewOnlyNotice className="mb-6" />}
+
       {/* Add item input */}
-      <div className="flex gap-2 mb-6">
+      {canEdit && <div className="flex gap-2 mb-6">
         <input
           ref={inputRef}
           type="text"
@@ -140,7 +145,7 @@ export default function ShoppingList() {
           <Plus size={16} />
           Add
         </button>
-      </div>
+      </div>}
 
       {loading ? (
         <p className="text-slate-500 text-sm">Loading...</p>
@@ -148,10 +153,10 @@ export default function ShoppingList() {
         <div className="text-center py-16 text-slate-400">
           <ShoppingCart size={40} className="mx-auto mb-3 opacity-30" />
           <p className="text-sm">Your shopping list is empty.</p>
-          <p className="text-xs mt-1">Add items above to get started.</p>
+          {canEdit && <p className="text-xs mt-1">Add items above to get started.</p>}
         </div>
       ) : (
-        <div className="space-y-1">
+        <fieldset disabled={!canEdit} className="space-y-1">
           {/* Pending items */}
           {pending.map(item => (
             <div
@@ -165,13 +170,13 @@ export default function ShoppingList() {
                 className="w-5 h-5 rounded border-slate-300 text-gf-lime focus:ring-gf-lime cursor-pointer flex-shrink-0"
               />
               <span className="flex-1 text-sm text-slate-900">{item.name}</span>
-              <button
+              {canEdit && <button
                 onClick={() => handleDelete(item.id)}
                 className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"
                 title="Delete"
               >
                 <Trash2 size={14} />
-              </button>
+              </button>}
             </div>
           ))}
 
@@ -197,18 +202,18 @@ export default function ShoppingList() {
                     className="w-5 h-5 rounded border-slate-300 text-gf-lime focus:ring-gf-lime cursor-pointer flex-shrink-0"
                   />
                   <span className="flex-1 text-sm text-slate-500 line-through">{item.name}</span>
-                  <button
+                  {canEdit && <button
                     onClick={() => handleDelete(item.id)}
                     className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"
                     title="Delete"
                   >
                     <Trash2 size={14} />
-                  </button>
+                  </button>}
                 </div>
               ))}
             </>
           )}
-        </div>
+        </fieldset>
       )}
     </div>
   );

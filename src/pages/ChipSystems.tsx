@@ -8,6 +8,8 @@ import {
 } from '../lib/db';
 import { ChipSystem } from '../types';
 import SaveButton from '../components/SaveButton';
+import { useCanEdit } from '../hooks/useAreaAccess';
+import ViewOnlyNotice from '../components/ViewOnlyNotice';
 import { useSaveFlash } from '../hooks/useSaveFlash';
 import { chipTypeOfSystem, distinctChipTypes, normalizeChipType } from '../lib/chipInventory';
 
@@ -33,6 +35,7 @@ const defaultSystemForm = {
 };
 
 export default function ChipSystems() {
+  const canEdit = useCanEdit('chipSystems');
   const [systems, setSystems] = useState<ChipSystem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showSystemForm, setShowSystemForm] = useState(false);
@@ -144,11 +147,12 @@ export default function ChipSystems() {
   return (
     <div className="p-6 md:p-8 max-w-4xl mx-auto">
       <h1 className="text-3xl font-bold text-slate-900 mb-8">Chip Systems</h1>
+      {!canEdit && <ViewOnlyNotice className="-mt-4 mb-6" />}
 
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-semibold text-slate-900">Your Systems</h3>
-          <button
+          {canEdit && <button
             onClick={() => {
               setEditingSystem(null);
               setSystemForm(defaultSystemForm);
@@ -158,13 +162,13 @@ export default function ChipSystems() {
           >
             <Plus size={18} />
             New System
-          </button>
+          </button>}
         </div>
 
         {systems.length === 0 ? (
           <div className="text-center py-8">
             <p className="text-slate-600 mb-4">No systems created yet</p>
-            <button
+            {canEdit && <button
               onClick={() => {
                 setEditingSystem(null);
                 setSystemForm(defaultSystemForm);
@@ -174,7 +178,7 @@ export default function ChipSystems() {
             >
               <Plus size={18} />
               Create System
-            </button>
+            </button>}
           </div>
         ) : (
           <div className="space-y-3">
@@ -205,7 +209,7 @@ export default function ChipSystems() {
                     </p>
                   )}
                 </div>
-                <div className="flex gap-2">
+                {canEdit && <div className="flex gap-2">
                   <button
                     onClick={() => handleSetDefault(system.id)}
                     title={system.isDefault ? 'Default system' : 'Set as default'}
@@ -228,14 +232,14 @@ export default function ChipSystems() {
                   >
                     <Trash2 size={18} />
                   </button>
-                </div>
+                </div>}
               </div>
             ))}
           </div>
         )}
 
       </div>
-      {showSystemForm && (
+      {canEdit && showSystemForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-3xl max-h-[90vh] overflow-y-auto bg-white rounded-xl shadow-xl border border-slate-200">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">

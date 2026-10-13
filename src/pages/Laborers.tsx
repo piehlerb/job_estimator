@@ -8,6 +8,8 @@ import {
 } from '../lib/db';
 import { Laborer } from '../types';
 import SaveButton from '../components/SaveButton';
+import { useCanEdit } from '../hooks/useAreaAccess';
+import ViewOnlyNotice from '../components/ViewOnlyNotice';
 import { useSaveFlash } from '../hooks/useSaveFlash';
 
 function generateId(): string {
@@ -15,6 +17,7 @@ function generateId(): string {
 }
 
 export default function Laborers() {
+  const canEdit = useCanEdit('laborers');
   const [laborers, setLaborers] = useState<Laborer[]>([]);
   const [loading, setLoading] = useState(true);
   const [showLaborerForm, setShowLaborerForm] = useState(false);
@@ -104,29 +107,30 @@ export default function Laborers() {
   return (
     <div className="p-6 md:p-8 max-w-4xl mx-auto">
       <h1 className="text-3xl font-bold text-slate-900 mb-8">Laborers</h1>
+      {!canEdit && <ViewOnlyNotice className="-mt-4 mb-6" />}
 
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-semibold text-slate-900">Your Laborers</h3>
-          <button
+          {canEdit && <button
             onClick={openAddForm}
             className="flex items-center gap-2 px-4 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors"
           >
             <Plus size={18} />
             New Laborer
-          </button>
+          </button>}
         </div>
 
         {laborers.length === 0 ? (
           <div className="text-center py-8">
             <p className="text-slate-600 mb-4">No laborers created yet</p>
-            <button
+            {canEdit && <button
               onClick={openAddForm}
               className="inline-flex items-center gap-2 px-4 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors"
             >
               <Plus size={18} />
               Create Laborer
-            </button>
+            </button>}
           </div>
         ) : (
           <div className="space-y-3">
@@ -142,6 +146,7 @@ export default function Laborers() {
                 <div className="flex items-center gap-4">
                   <button
                     onClick={() => handleToggleLaborerActive(laborer)}
+                    disabled={!canEdit}
                     className={`w-12 h-6 rounded-full transition-colors relative ${
                       laborer.isActive ? 'bg-green-500' : 'bg-slate-300'
                     }`}
@@ -159,7 +164,7 @@ export default function Laborers() {
                     </p>
                   </div>
                 </div>
-                <div className="flex gap-2">
+                {canEdit && <div className="flex gap-2">
                   <button
                     onClick={() => handleEditLaborer(laborer)}
                     className="p-2 text-gf-dark-green hover:bg-green-50 rounded-lg transition-colors"
@@ -177,14 +182,14 @@ export default function Laborers() {
                   >
                     <Trash2 size={18} />
                   </button>
-                </div>
+                </div>}
               </div>
             ))}
           </div>
         )}
       </div>
 
-      {showLaborerForm && (
+      {canEdit && showLaborerForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-xl">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">

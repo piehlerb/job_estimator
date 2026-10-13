@@ -238,6 +238,45 @@ export async function clearLastSyncTimestamp(): Promise<void> {
   }
 }
 
+// Stores this member could not read at the last check (see reconcileReadAccess)
+const READ_ACCESS_KEY = 'read_access';
+
+/**
+ * Keep the local cache in step with what this member may read. The database
+ * only returns rows from areas the member can see, so when that set changes
+ * (an admin edited their permissions, or this is the first run since reads
+ * were enforced):
+ * - cached copies of stores they can no longer read are dropped, and
+ * - the sync cursor is reset, because an incremental pull would skip older
+ *   rows of an area that just became visible.
+ * Call before sync resumes for the new org context.
+ */
+export async function reconcileReadAccess(unreadableStores: string[]): Promise<void> {
+  const fingerprint = [...unreadableStores].sort().join(',');
+  try {
+    const db = await openDB();
+    const previous = await new Promise<string | null>((resolve, reject) => {
+      const request = db.transaction('metadata', 'readonly').objectStore('metadata').get(READ_ACCESS_KEY);
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve(request.result?.unreadable ?? null);
+    });
+    if (previous === fingerprint) return;
+
+    const toClear = unreadableStores.filter((name) => db.objectStoreNames.contains(name));
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction([...toClear, 'metadata'], 'readwrite');
+      toClear.forEach((name) => tx.objectStore(name).clear());
+      tx.objectStore('metadata').put({ id: READ_ACCESS_KEY, unreadable: fingerprint, updatedAt: new Date().toISOString() });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+    await clearLastSyncTimestamp();
+    console.log(`[Sync] Read access changed; cleared ${toClear.length} store(s), next pull is full`);
+  } catch (error) {
+    console.error('[Sync] Error reconciling read access:', error);
+  }
+}
+
 /**
  * Save last sync timestamp to IndexedDB
  */

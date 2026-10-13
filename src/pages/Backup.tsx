@@ -9,8 +9,10 @@ import {
   parseImportFile,
 } from '../lib/backup';
 import { ExportData, ImportPreview, MergeLogEntry } from '../types';
+import { useCanEdit } from '../hooks/useAreaAccess';
 
 export default function Backup() {
+  const canEdit = useCanEdit('backup');
   const [exporting, setExporting] = useState(false);
   const [importData, setImportData] = useState<ExportData | null>(null);
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
@@ -72,6 +74,7 @@ export default function Backup() {
   };
 
   const handleImport = async () => {
+    if (!canEdit) return;
     if (!importData) return;
 
     setImporting(true);
@@ -123,8 +126,8 @@ export default function Backup() {
           </button>
         </div>
 
-        {/* Import Section */}
-        <div id="import-preview-section" className="p-6 bg-slate-50 border border-slate-200 rounded-lg">
+        {/* Import Section — restoring overwrites data, so it needs Edit */}
+        {canEdit && <div id="import-preview-section" className="p-6 bg-slate-50 border border-slate-200 rounded-lg">
           <h4 className="font-semibold text-slate-900 mb-2">Import Data</h4>
           <p className="text-sm text-slate-600 mb-4">
             Import data from a backup file. You'll see a preview of changes before applying them.
@@ -358,7 +361,7 @@ export default function Backup() {
               </button>
             </div>
           )}
-        </div>
+        </div>}
       </div>
     </div>
   );

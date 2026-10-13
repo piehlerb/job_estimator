@@ -11,6 +11,8 @@ import {
 } from '../lib/db';
 import { ChipSystem, BaseCoatColor } from '../types';
 import SaveButton from '../components/SaveButton';
+import { useCanEdit } from '../hooks/useAreaAccess';
+import ViewOnlyNotice from '../components/ViewOnlyNotice';
 import { useSaveFlash } from '../hooks/useSaveFlash';
 import { blendChipTypes, chipTypeLookup, chipTypeOfSystem, distinctChipTypes, sameChipType } from '../lib/chipInventory';
 
@@ -19,6 +21,7 @@ function generateId(): string {
 }
 
 export default function ChipBlends() {
+  const canEdit = useCanEdit('chipBlends');
   const [blends, setBlends] = useState<ChipBlend[]>([]);
   const [systems, setSystems] = useState<ChipSystem[]>([]);
   const [baseCoatColors, setBaseCoatColors] = useState<BaseCoatColor[]>([]);
@@ -195,21 +198,22 @@ export default function ChipBlends() {
           <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">Chip Blends</h1>
           <p className="text-slate-600 mt-1">Manage your chip blend master list</p>
         </div>
-        <button
+        {canEdit && <button
           onClick={openAddModal}
           disabled={isAdding || editingId !== null}
           className="flex items-center justify-center gap-2 px-4 py-2.5 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed"
         >
           <Plus size={20} />
           <span>Add Blend</span>
-        </button>
+        </button>}
       </div>
+      {!canEdit && <ViewOnlyNotice className="mb-4" />}
 
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
         {blends.length === 0 ? (
           <div className="p-8 text-center text-slate-500">
             <p>No chip blends yet.</p>
-            <p className="text-sm mt-1">Click "Add Blend" to create your first one.</p>
+            {canEdit && <p className="text-sm mt-1">Click "Add Blend" to create your first one.</p>}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -225,9 +229,9 @@ export default function ChipBlends() {
                   <th className="text-left px-4 sm:px-6 py-3 text-xs sm:text-sm font-semibold text-slate-900">
                     Base Coat Colors
                   </th>
-                  <th className="text-right px-4 sm:px-6 py-3 text-xs sm:text-sm font-semibold text-slate-900">
+                  {canEdit && <th className="text-right px-4 sm:px-6 py-3 text-xs sm:text-sm font-semibold text-slate-900">
                     Actions
-                  </th>
+                  </th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
@@ -242,7 +246,7 @@ export default function ChipBlends() {
                     <td className="px-4 sm:px-6 py-4">
                       <span className="text-xs sm:text-sm text-slate-600">{getBaseCoatColorNames(blend.baseCoatColorIds)}</span>
                     </td>
-                    <td className="px-4 sm:px-6 py-4">
+                    {canEdit && <td className="px-4 sm:px-6 py-4">
                       <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => openEditModal(blend)}
@@ -261,7 +265,7 @@ export default function ChipBlends() {
                           <Trash2 size={18} />
                         </button>
                       </div>
-                    </td>
+                    </td>}
                   </tr>
                 ))}
               </tbody>
@@ -276,7 +280,7 @@ export default function ChipBlends() {
         </div>
       )}
 
-      {(isAdding || editingId !== null) && (
+      {canEdit && (isAdding || editingId !== null) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">

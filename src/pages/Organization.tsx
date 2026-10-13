@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Building2, UserPlus, Users, Copy, Check, Trash2,
-  LogOut, ShieldCheck, Shield, Plus, RefreshCw, KeyRound, Lock
+  LogOut, ShieldCheck, Shield, Plus, RefreshCw, KeyRound, Lock, Bot
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -15,12 +15,15 @@ import {
   revokeInvitation,
   updateMemberRole,
   updateMemberPermissions,
+  updateMemberIsAgent,
   removeMember,
 } from '../lib/organizationService';
 import type { OrganizationMember, OrganizationInvitation, MemberPermissions } from '../types';
 import SaveButton from '../components/SaveButton';
 import { useSaveFlash } from '../hooks/useSaveFlash';
-import { FULL_PERMISSIONS, INVENTORY_ONLY_PERMISSIONS, permissionsFromAccessLevel } from '../lib/permissions';
+import { FULL_PERMISSIONS, NO_PERMISSIONS, PERMISSION_AREAS, areaAccess, permissionsFromAccessLevel } from '../lib/permissions';
+import PermissionsEditor from '../components/PermissionsEditor';
+import ActivityLog from '../components/ActivityLog';
 
 export default function Organization() {
   const { user, organization, orgRole, orgLoading, refreshOrganization } = useAuth();
@@ -43,6 +46,7 @@ export default function Organization() {
   const [newInviteRole, setNewInviteRole] = useState<'admin' | 'member'>('member');
   const [newInvitePermissions, setNewInvitePermissions] = useState<MemberPermissions>({ ...FULL_PERMISSIONS });
   const [showInvitePerms, setShowInvitePerms] = useState(false);
+  const [newInviteIsAgent, setNewInviteIsAgent] = useState(false);
   const [inviteLoading, setInviteLoading] = useState(false);
 
   // Copied state for invite codes
@@ -51,6 +55,7 @@ export default function Organization() {
   // Permissions editor modal state
   const [editingPermsMember, setEditingPermsMember] = useState<OrganizationMember | null>(null);
   const [draftPermissions, setDraftPermissions] = useState<MemberPermissions>(FULL_PERMISSIONS);
+  const [draftIsAgent, setDraftIsAgent] = useState(false);
   const [savingPerms, setSavingPerms] = useState(false);
   const { saved: permsSaved, flashSaved: flashPermsSaved } = useSaveFlash();
 
@@ -161,11 +166,13 @@ export default function Organization() {
         newInviteEmail || undefined,
         newInviteRole,
         newInviteRole === 'member' ? newInvitePermissions : null,
+        newInviteRole === 'member' && newInviteIsAgent,
       );
       setNewInviteEmail('');
       setNewInviteRole('member');
       setNewInvitePermissions({ ...FULL_PERMISSIONS });
       setShowInvitePerms(false);
+      setNewInviteIsAgent(false);
       await loadOrgData();
     } catch (err: any) {
       setMgmtError(err.message ?? 'Failed to generate invite.');
@@ -208,6 +215,7 @@ export default function Organization() {
   const openPermissionsEditor = (member: OrganizationMember) => {
     const initial = member.permissions ?? permissionsFromAccessLevel(member.accessLevel ?? 'full');
     setDraftPermissions({ ...initial });
+    setDraftIsAgent(member.isAgent);
     setEditingPermsMember(member);
   };
 
@@ -221,6 +229,9 @@ export default function Organization() {
     setMgmtError('');
     try {
       await updateMemberPermissions(organization.id, editingPermsMember.userId, draftPermissions);
+      if (draftIsAgent !== editingPermsMember.isAgent) {
+        await updateMemberIsAgent(organization.id, editingPermsMember.userId, draftIsAgent);
+      }
       await loadOrgData();
       flashPermsSaved(() => setEditingPermsMember(null));
     } catch (err: any) {
@@ -232,28 +243,14 @@ export default function Organization() {
 
   const summarizePermissions = (m: OrganizationMember): string => {
     const p = m.permissions ?? permissionsFromAccessLevel(m.accessLevel ?? 'full');
-    const parts: string[] = [];
-    if (p.jobs === 'write') parts.push('Jobs: Write');
-    else if (p.jobs === 'read') parts.push('Jobs: Read');
-    if (p.calendar === 'full') parts.push('Calendar');
-    else if (p.calendar === 'install') parts.push('Calendar: Install');
-    if (p.inventory) parts.push('Inventory');
-    if (p.reporting) parts.push('Reporting');
-    const others = [
-      p.customers && 'Customers',
-      p.referralAssociates && 'Referrals',
-      p.products && 'Products',
-      p.chipSystems && 'Systems',
-      p.chipBlends && 'Blends',
-      p.laborers && 'Laborers',
-      p.costs && 'Costs',
-      p.pricing && 'Pricing',
-      p.settings && 'Settings',
-      p.backup && 'Backup',
-    ].filter(Boolean) as string[];
-    if (others.length >= 8) parts.push('All admin');
-    else if (others.length > 0) parts.push(`+${others.length}`);
-    return parts.length === 0 ? 'No access' : parts.join(' · ');
+    const levels = PERMISSION_AREAS.map((area) => areaAccess(p, area));
+    const edit = levels.filter((l) => l === 'write').length;
+    const view = levels.filter((l) => l === 'read').length;
+    if (edit === levels.length) return 'Full access';
+    if (edit === 0 && view === 0) return 'No access';
+    return [edit > 0 && `Edit ${edit}`, view > 0 && `View ${view}`, `Hidden ${levels.length - edit - view}`]
+      .filter(Boolean)
+      .join(' · ');
   };
 
   // =====================================================
@@ -514,6 +511,11 @@ export default function Organization() {
                     <tr key={member.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-4 py-3 font-medium text-slate-800">
                         {member.email}
+                        {member.isAgent && (
+                          <span className="ml-2 inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700">
+                            <Bot size={10} /> Agent
+                          </span>
+                        )}
                         {isSelf && (
                           <span className="ml-2 text-xs text-slate-400">(you)</span>
                         )}
@@ -636,6 +638,30 @@ export default function Organization() {
               </button>
             </div>
 
+            {newInviteRole === 'member' && (
+              <label className="flex items-start gap-2 text-sm text-slate-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={newInviteIsAgent}
+                  onChange={(e) => {
+                    setNewInviteIsAgent(e.target.checked);
+                    // Agents start with nothing; grant access area by area
+                    if (e.target.checked) {
+                      setNewInvitePermissions({ ...NO_PERMISSIONS });
+                      setShowInvitePerms(true);
+                    }
+                  }}
+                  className="mt-0.5 rounded border-slate-300 text-gf-lime focus:ring-gf-lime"
+                />
+                <span>
+                  This invite is for an AI agent
+                  <span className="block text-xs text-slate-500">
+                    The agent signs up with its own login, gets an Agent badge, and its changes are flagged in the activity log.
+                  </span>
+                </span>
+              </label>
+            )}
+
             {/* Collapsible permissions — member role only */}
             {newInviteRole === 'member' && (
               <div className="border-t border-slate-200 pt-3">
@@ -649,83 +675,8 @@ export default function Organization() {
                 </button>
 
                 {showInvitePerms && (
-                  <div className="mt-3 space-y-4">
-                    {/* Presets */}
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setNewInvitePermissions({ ...FULL_PERMISSIONS })}
-                        className="flex-1 px-3 py-1.5 text-xs font-medium bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors"
-                      >
-                        Preset: Full Access
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setNewInvitePermissions({ ...INVENTORY_ONLY_PERMISSIONS })}
-                        className="flex-1 px-3 py-1.5 text-xs font-medium bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors"
-                      >
-                        Preset: Inventory Only
-                      </button>
-                    </div>
-
-                    {/* Jobs */}
-                    <div>
-                      <label className="block text-xs font-medium text-slate-600 mb-1">Jobs</label>
-                      <select
-                        value={newInvitePermissions.jobs}
-                        onChange={(e) => setNewInvitePermissions({ ...newInvitePermissions, jobs: e.target.value as MemberPermissions['jobs'] })}
-                        className="w-full text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-gf-electric/40"
-                      >
-                        <option value="none">No access</option>
-                        <option value="read">Read only (Job Summary)</option>
-                        <option value="write">Read &amp; write (full job page)</option>
-                      </select>
-                    </div>
-
-                    {/* Calendar */}
-                    <div>
-                      <label className="block text-xs font-medium text-slate-600 mb-1">Calendar</label>
-                      <select
-                        value={newInvitePermissions.calendar}
-                        onChange={(e) => setNewInvitePermissions({ ...newInvitePermissions, calendar: e.target.value as MemberPermissions['calendar'] })}
-                        className="w-full text-sm border border-slate-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-gf-electric/40"
-                      >
-                        <option value="none">No access</option>
-                        <option value="install">Install calendar only (Won jobs)</option>
-                        <option value="full">Full calendar (all statuses)</option>
-                      </select>
-                    </div>
-
-                    {/* Other pages */}
-                    <div>
-                      <label className="block text-xs font-medium text-slate-600 mb-2">Other Pages</label>
-                      <div className="grid grid-cols-2 gap-1">
-                        {([
-                          ['inventory', 'Inventory & Shopping'],
-                          ['reporting', 'Reporting'],
-                          ['customers', 'Customers'],
-                          ['referralAssociates', 'Referral Associates'],
-                          ['products', 'Products'],
-                          ['chipSystems', 'Chip Systems'],
-                          ['chipBlends', 'Chip Blends'],
-                          ['laborers', 'Laborers'],
-                          ['costs', 'Costs'],
-                          ['pricing', 'Pricing'],
-                          ['settings', 'Settings'],
-                          ['backup', 'Backup'],
-                        ] as const).map(([key, label]) => (
-                          <label key={key} className="flex items-center gap-2 text-xs text-slate-700 px-2 py-1 rounded hover:bg-slate-100 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={newInvitePermissions[key]}
-                              onChange={(e) => setNewInvitePermissions({ ...newInvitePermissions, [key]: e.target.checked })}
-                              className="rounded border-slate-300 text-gf-lime focus:ring-gf-lime"
-                            />
-                            <span>{label}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
+                  <div className="mt-3">
+                    <PermissionsEditor value={newInvitePermissions} onChange={setNewInvitePermissions} />
                   </div>
                 )}
               </div>
@@ -755,6 +706,11 @@ export default function Organization() {
                         }`}>
                           {inv.role}
                         </span>
+                        {inv.isAgent && (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium rounded-full px-2 py-0.5 text-violet-700 bg-violet-50">
+                            <Bot size={10} /> agent
+                          </span>
+                        )}
                         {inv.role === 'member' && inv.permissions && (
                           <span className="text-xs font-medium rounded-full px-2 py-0.5 text-gf-dark-green bg-green-50">
                             custom permissions
@@ -796,6 +752,9 @@ export default function Organization() {
         </section>
       )}
 
+      {/* Activity — Admin only */}
+      {isAdmin && <ActivityLog orgId={organization.id} members={members} />}
+
       {/* Permissions Editor Modal */}
       {editingPermsMember && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={closePermissionsEditor}>
@@ -813,83 +772,20 @@ export default function Organization() {
               </button>
             </div>
 
-            <div className="p-6 space-y-5">
-              {/* Quick presets */}
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setDraftPermissions({ ...FULL_PERMISSIONS })}
-                  className="flex-1 px-3 py-2 text-sm font-medium bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors"
-                >
-                  Preset: Full Access
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDraftPermissions({ ...INVENTORY_ONLY_PERMISSIONS })}
-                  className="flex-1 px-3 py-2 text-sm font-medium bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors"
-                >
-                  Preset: Inventory Only
-                </button>
-              </div>
-
-              {/* Jobs */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Jobs</label>
-                <select
-                  value={draftPermissions.jobs}
-                  onChange={(e) => setDraftPermissions({ ...draftPermissions, jobs: e.target.value as MemberPermissions['jobs'] })}
-                  className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-gf-electric/40"
-                >
-                  <option value="none">No access</option>
-                  <option value="read">Read only (Job Summary)</option>
-                  <option value="write">Read &amp; write (full job page)</option>
-                </select>
-              </div>
-
-              {/* Calendar */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Calendar</label>
-                <select
-                  value={draftPermissions.calendar}
-                  onChange={(e) => setDraftPermissions({ ...draftPermissions, calendar: e.target.value as MemberPermissions['calendar'] })}
-                  className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-gf-electric/40"
-                >
-                  <option value="none">No access</option>
-                  <option value="install">Install calendar only (Won jobs)</option>
-                  <option value="full">Full calendar (all statuses)</option>
-                </select>
-              </div>
-
-              {/* Other features */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Other Pages</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {([
-                    ['inventory', 'Inventory & Shopping'],
-                    ['reporting', 'Reporting'],
-                    ['customers', 'Customers'],
-                    ['referralAssociates', 'Referral Associates'],
-                    ['products', 'Products'],
-                    ['chipSystems', 'Chip Systems'],
-                    ['chipBlends', 'Chip Blends'],
-                    ['laborers', 'Laborers'],
-                    ['costs', 'Costs'],
-                    ['pricing', 'Pricing'],
-                    ['settings', 'Settings'],
-                    ['backup', 'Backup'],
-                  ] as const).map(([key, label]) => (
-                    <label key={key} className="flex items-center gap-2 text-sm text-slate-700 px-2 py-1.5 rounded hover:bg-slate-50 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={draftPermissions[key]}
-                        onChange={(e) => setDraftPermissions({ ...draftPermissions, [key]: e.target.checked })}
-                        className="rounded border-slate-300 text-gf-lime focus:ring-gf-lime"
-                      />
-                      <span>{label}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
+            <div className="p-6 space-y-4">
+              <label className="flex items-start gap-2 text-sm text-slate-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={draftIsAgent}
+                  onChange={(e) => setDraftIsAgent(e.target.checked)}
+                  className="mt-0.5 rounded border-slate-300 text-gf-lime focus:ring-gf-lime"
+                />
+                <span>
+                  This member is an AI agent
+                  <span className="block text-xs text-slate-500">Shows an Agent badge and flags its changes in the activity log.</span>
+                </span>
+              </label>
+              <PermissionsEditor value={draftPermissions} onChange={setDraftPermissions} />
             </div>
 
             <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-end gap-2">

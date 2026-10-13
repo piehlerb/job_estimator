@@ -55,8 +55,11 @@ Rules:
 
 - Never edit a migration that has been applied — add a new one.
 - Don't run schema SQL in the dashboard SQL Editor; it bypasses the history.
-- New org-scoped tables need RLS policies in the same shape as the existing ones
-  (see the "Org-aware" policies and `org_can_write()` in the baseline).
+- New org-scoped tables need RLS policies in the same shape as the existing ones:
+  reads through `org_can_read(org_id, '{areas}')`, writes through
+  `org_can_write(org_id, '{areas}')` (see `20261013170000_area_permission_levels.sql`),
+  plus the `audit_row_change` trigger (see `20261013170100_audit_log.sql`). Add the
+  table to `STORE_READ_AREAS` in `src/lib/permissions.ts` too.
 
 ## Setting up a new database
 

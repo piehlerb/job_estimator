@@ -3,6 +3,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { getAllProducts, addProduct, updateProduct, deleteProduct } from '../lib/db';
 import { Product } from '../types';
 import SaveButton from '../components/SaveButton';
+import { useCanEdit } from '../hooks/useAreaAccess';
+import ViewOnlyNotice from '../components/ViewOnlyNotice';
 import { useSaveFlash } from '../hooks/useSaveFlash';
 
 function generateId(): string {
@@ -10,6 +12,7 @@ function generateId(): string {
 }
 
 export default function Products() {
+  const canEdit = useCanEdit('products');
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
@@ -121,15 +124,16 @@ export default function Products() {
           <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">Products</h1>
           <p className="text-sm sm:text-base text-slate-600 mt-1">Manage your product catalog</p>
         </div>
-        <button
+        {canEdit && <button
           type="button"
           onClick={openAddForm}
           className="flex items-center gap-2 px-4 py-2 bg-gf-lime text-white rounded-lg font-medium hover:bg-gf-dark-green transition-colors text-sm"
         >
           <Plus size={16} />
           Add Product
-        </button>
+        </button>}
       </div>
+      {!canEdit && <ViewOnlyNotice className="mb-4" />}
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-4 sm:mb-6">
@@ -168,7 +172,7 @@ export default function Products() {
         ) : filteredProducts.length === 0 ? (
           <div className="p-8 text-center text-slate-600">
             {products.length === 0
-              ? 'No products yet. Click "Add Product" to create one.'
+              ? canEdit ? 'No products yet. Click "Add Product" to create one.' : 'No products yet.'
               : 'No products match the current search.'}
           </div>
         ) : (
@@ -188,9 +192,9 @@ export default function Products() {
                   <th className="px-4 lg:px-6 py-3 text-right text-sm font-semibold text-slate-700">
                     Margin
                   </th>
-                  <th className="px-4 lg:px-6 py-3 text-right text-sm font-semibold text-slate-700">
+                  {canEdit && <th className="px-4 lg:px-6 py-3 text-right text-sm font-semibold text-slate-700">
                     Actions
-                  </th>
+                  </th>}
                 </tr>
               </thead>
               <tbody>
@@ -220,7 +224,7 @@ export default function Products() {
                           {formatCurrency(margin)} ({marginPct.toFixed(0)}%)
                         </span>
                       </td>
-                      <td className="px-4 lg:px-6 py-4 text-right">
+                      {canEdit && <td className="px-4 lg:px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-1">
                           <button
                             type="button"
@@ -239,7 +243,7 @@ export default function Products() {
                             <Trash2 size={16} />
                           </button>
                         </div>
-                      </td>
+                      </td>}
                     </tr>
                   );
                 })}
@@ -250,7 +254,7 @@ export default function Products() {
       </div>
 
       {/* Add/Edit modal */}
-      {showForm && (
+      {canEdit && showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">

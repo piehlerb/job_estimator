@@ -15,6 +15,8 @@ import {
 } from '../lib/db';
 import { BaseCoatColor, DiscountConfig, DiscountMode, TagDiscount, CommunicationTemplate, AutoReminderRule } from '../types';
 import SaveButton from '../components/SaveButton';
+import { useCanEdit } from '../hooks/useAreaAccess';
+import ViewOnlyNotice from '../components/ViewOnlyNotice';
 import { useSaveFlash } from '../hooks/useSaveFlash';
 
 function generateId(): string {
@@ -43,6 +45,7 @@ function toRuleDraft(rule: AutoReminderRule): AutoReminderRuleDraft {
 }
 
 export default function Settings() {
+  const canEdit = useCanEdit('settings');
   // The stored record is deliberately not held in state: saves go through
   // updatePricing, which re-reads it, so there is no snapshot to go stale.
   const [baseCoatColors, setBaseCoatColors] = useState<BaseCoatColor[]>([]);
@@ -495,7 +498,10 @@ export default function Settings() {
   return (
     <div className="p-6 md:p-8 max-w-5xl mx-auto space-y-6">
       <h1 className="text-3xl font-bold text-slate-900">Settings</h1>
+      {!canEdit && <ViewOnlyNotice />}
 
+      {/* Org settings need Edit; communication templates are each user's own */}
+      <fieldset disabled={!canEdit} className="space-y-6 min-w-0">
       {/* Pricing Controls */}
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
         <h3 className="text-lg font-semibold text-slate-900 mb-2">Pricing Controls</h3>
@@ -966,6 +972,8 @@ export default function Settings() {
         )}
       </div>
 
+      </fieldset>
+
       {/* Communication Templates */}
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
         <div className="flex items-center justify-between mb-4">
@@ -1060,6 +1068,7 @@ export default function Settings() {
         )}
       </div>
 
+      <fieldset disabled={!canEdit} className="space-y-6 min-w-0">
       {/* Reminder Defaults */}
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
         <h3 className="text-lg font-semibold text-slate-900 mb-1">Reminder Defaults</h3>
@@ -1216,6 +1225,7 @@ export default function Settings() {
           />
         </div>
       </div>
+      </fieldset>
     </div>
   );
 }

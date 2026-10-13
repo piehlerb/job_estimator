@@ -6,8 +6,9 @@
  */
 
 import { supabase } from './supabase';
-import type { Organization, OrganizationMember, OrganizationInvitation, OrgAccessLevel, MemberPermissions } from '../types';
+import type { AuditLogEntry, Organization, OrganizationMember, OrganizationInvitation, OrgAccessLevel, MemberPermissions } from '../types';
 import type { Json, Tables } from '../types/database';
+import { normalizePermissions } from './permissions';
 
 // =====================================================
 // HELPERS
@@ -46,7 +47,7 @@ function permissionsToJson(permissions: MemberPermissions | null | undefined): J
 }
 
 function permissionsFromJson(value: Json | null): MemberPermissions | null {
-  return (value as unknown as MemberPermissions | null) ?? null;
+  return normalizePermissions(value);
 }
 
 function mapOrg(row: OrganizationRow): Organization {
@@ -68,6 +69,7 @@ function mapMember(row: Tables<'organization_members'>): OrganizationMember {
     role: row.role as OrganizationMember['role'],
     accessLevel: (row.access_level as OrgAccessLevel) ?? 'full',
     permissions: permissionsFromJson(row.permissions),
+    isAgent: row.is_agent ?? false,
     invitedBy: row.invited_by ?? undefined,
     joinedAt: row.joined_at,
   };
@@ -86,6 +88,7 @@ function mapInvitation(row: Tables<'organization_invitations'>): OrganizationInv
     expiresAt: row.expires_at,
     createdAt: row.created_at,
     permissions: permissionsFromJson(row.permissions),
+    isAgent: row.is_agent ?? false,
   };
 }
 
@@ -264,6 +267,7 @@ export async function generateInviteCode(
   email?: string,
   role: 'admin' | 'member' = 'member',
   permissions?: MemberPermissions | null,
+  isAgent = false,
 ): Promise<OrganizationInvitation> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
@@ -276,6 +280,7 @@ export async function generateInviteCode(
       role,
       invited_by: user.id,
       permissions: permissionsToJson(permissions),
+      is_agent: isAgent,
     })
     .select()
     .single();
@@ -368,6 +373,23 @@ export async function updateMemberPermissions(
 }
 
 // =====================================================
+// UPDATE: Mark a member as an AI agent (or not)
+// =====================================================
+export async function updateMemberIsAgent(
+  orgId: string,
+  userId: string,
+  isAgent: boolean
+): Promise<void> {
+  const { error } = await supabase
+    .from('organization_members')
+    .update({ is_agent: isAgent })
+    .eq('org_id', orgId)
+    .eq('user_id', userId);
+
+  if (error) throw new Error(error.message);
+}
+
+// =====================================================
 // DELETE: Remove a member
 // =====================================================
 export async function removeMember(orgId: string, userId: string): Promise<void> {
@@ -413,4 +435,51 @@ async function migrateMyDataToOrg(orgId: string): Promise<void> {
     // Data can be synced manually later.
     console.warn('[Org] Data migration to org failed:', error.message);
   }
+}
+
+// =====================================================
+// QUERY: Activity (audit) log — admins only, enforced by RLS
+// =====================================================
+export interface AuditLogFilters {
+  /** A member's user id, or 'system' for changes with no signed-in user (GHL webhook) */
+  actor?: string;
+  tableNames?: string[];
+  agentsOnly?: boolean;
+  since?: string; // ISO timestamp
+  before?: number; // Entry id to page backwards from
+}
+
+export const AUDIT_PAGE_SIZE = 50;
+
+export async function getAuditLog(orgId: string, filters: AuditLogFilters = {}): Promise<AuditLogEntry[]> {
+  let query = supabase
+    .from('audit_log')
+    .select('*')
+    .eq('org_id', orgId)
+    .order('id', { ascending: false })
+    .limit(AUDIT_PAGE_SIZE);
+
+  if (filters.actor === 'system') query = query.is('user_id', null);
+  else if (filters.actor) query = query.eq('user_id', filters.actor);
+  if (filters.tableNames?.length) query = query.in('table_name', filters.tableNames);
+  if (filters.agentsOnly) query = query.eq('is_agent', true);
+  if (filters.since) query = query.gte('created_at', filters.since);
+  if (filters.before !== undefined) query = query.lt('id', filters.before);
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    orgId: row.org_id ?? undefined,
+    userId: row.user_id ?? undefined,
+    actorEmail: row.actor_email ?? undefined,
+    isAgent: row.is_agent,
+    tableName: row.table_name,
+    recordId: row.record_id ?? undefined,
+    recordLabel: row.record_label ?? undefined,
+    action: row.action as AuditLogEntry['action'],
+    changes: (row.changes as AuditLogEntry['changes']) ?? null,
+    createdAt: row.created_at,
+  }));
 }

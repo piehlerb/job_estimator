@@ -12,8 +12,8 @@ import {
   getPendingInviteCode,
   joinPendingOrganizationInvite,
 } from '../lib/organizationService';
-import { setSyncOrgContext, clearSyncOrgContext, clearLastSyncTimestamp } from '../lib/sync';
-import { resolvePermissions, FULL_PERMISSIONS } from '../lib/permissions';
+import { setSyncOrgContext, clearSyncOrgContext, clearLastSyncTimestamp, reconcileReadAccess } from '../lib/sync';
+import { resolvePermissions, unreadableStores, FULL_PERMISSIONS } from '../lib/permissions';
 import type { Organization, OrgAccessLevel, MemberPermissions } from '../types';
 
 interface AuthContextType {
@@ -90,6 +90,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setOrgRole(result.role);
         setOrgAccessLevel(result.accessLevel);
         setMemberPermissions(result.permissions);
+        // Before sync resumes: drop data this member can no longer read
+        await reconcileReadAccess(unreadableStores(resolvePermissions({
+          hasOrg: true,
+          role: result.role,
+          accessLevel: result.accessLevel,
+          permissions: result.permissions,
+        })));
         setSyncOrgContext(result.org.id);
         if (lastSyncedOrgRef.current !== undefined && lastSyncedOrgRef.current !== result.org.id) {
           // Org context changed — reset the sync cursor so the next pull is full,
@@ -102,6 +109,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setOrgRole(null);
         setOrgAccessLevel(null);
         setMemberPermissions(null);
+        await reconcileReadAccess([]);
         setSyncOrgContext(null);
         if (lastSyncedOrgRef.current !== undefined && lastSyncedOrgRef.current !== null) {
           await clearLastSyncTimestamp();

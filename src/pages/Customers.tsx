@@ -4,6 +4,8 @@ import { getAllCustomers, addCustomer, updateCustomer, deleteCustomer, getAllJob
 import { Customer, Job, JobStatus } from '../types';
 import SaveButton from '../components/SaveButton';
 import { useSaveFlash } from '../hooks/useSaveFlash';
+import { useCanEdit } from '../hooks/useAreaAccess';
+import ViewOnlyNotice from '../components/ViewOnlyNotice';
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -22,6 +24,7 @@ interface CustomerWithStats extends Customer {
 const ALL_STATUSES: JobStatus[] = ['Pending', 'Verbal', 'Won', 'Lost'];
 
 export default function Customers() {
+  const canEdit = useCanEdit('customers');
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
@@ -201,15 +204,16 @@ export default function Customers() {
           <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">Customers</h1>
           <p className="text-sm sm:text-base text-slate-600 mt-1">Manage your customer list</p>
         </div>
-        <button
+        {canEdit && <button
           type="button"
           onClick={openAddForm}
           className="flex items-center gap-2 px-4 py-2 bg-gf-lime text-white rounded-lg font-medium hover:bg-gf-dark-green transition-colors text-sm"
         >
           <Plus size={16} />
           Add Customer
-        </button>
+        </button>}
       </div>
+      {!canEdit && <ViewOnlyNotice className="mb-4" />}
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-4 sm:mb-6">
@@ -266,7 +270,7 @@ export default function Customers() {
         ) : filteredCustomers.length === 0 ? (
           <div className="p-8 text-center text-slate-600">
             {customers.length === 0
-              ? 'No customers yet. Click "Add Customer" to create one.'
+              ? canEdit ? 'No customers yet. Click "Add Customer" to create one.' : 'No customers yet.'
               : 'No customers match the current search.'}
           </div>
         ) : (
@@ -366,6 +370,7 @@ export default function Customers() {
                               <ChevronDown size={16} />
                             )}
                           </button>
+                          {canEdit && <>
                           <button
                             type="button"
                             onClick={() => openEditForm(customer)}
@@ -382,6 +387,7 @@ export default function Customers() {
                           >
                             <Trash2 size={16} />
                           </button>
+                          </>}
                         </div>
                       </td>
                     </tr>
@@ -444,7 +450,7 @@ export default function Customers() {
       </div>
 
       {/* Add/Edit modal */}
-      {showForm && (
+      {canEdit && showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
