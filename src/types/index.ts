@@ -162,6 +162,7 @@ export type LeadStage =
   | 'New'
   | 'Contact Attempted'
   | 'Engaged'
+  | 'Call Booked'
   | 'Estimate Booked'
   | 'Estimate Completed'
   | 'Quoted'
@@ -227,6 +228,16 @@ export interface GhlWebhookEvent {
  */
 export type AddressParseTier = 'A' | 'A!' | 'B' | 'C' | 'D' | 'M';
 
+export type LeadContactChannel = 'call' | 'text';
+
+/** One call or text made to a lead, kept in Lead.contactLog */
+export interface LeadContactAttempt {
+  id: string;
+  channel: LeadContactChannel;
+  /** When the call or text happened (ISO timestamp) */
+  at: string;
+}
+
 export interface Lead {
   id: string;
   ghlContactId?: string;
@@ -263,6 +274,8 @@ export interface Lead {
   stage: LeadStage;
   dispositionReason?: LeadDispositionReason;
   dispositionNotes?: string;
+  /** Calls and texts made to the lead, in any order. Null on leads never contacted. */
+  contactLog?: LeadContactAttempt[] | null;
   closedAt?: string;
   customerId?: string;
   createdAt: string;

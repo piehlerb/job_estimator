@@ -5,6 +5,8 @@ import {
   Edit2,
   ExternalLink,
   Filter,
+  MessageSquare,
+  Phone,
   Plus,
   RefreshCw,
   Search,
@@ -18,12 +20,29 @@ import { useCanEdit } from '../hooks/useAreaAccess';
 import ViewOnlyNotice from '../components/ViewOnlyNotice';
 import { LEAD_DISPOSITION_REASONS, LEAD_STAGES } from '../lib/leadPipeline';
 import { applyLeadEdit } from '../lib/leadMutations';
+import {
+  fromDateTimeLocalValue,
+  logLeadContact,
+  matchesLastContactedFilter,
+  sortedContactLog,
+  summarizeLeadContacts,
+  toDateTimeLocalValue,
+  type LastContactedFilter,
+} from '../lib/leadContacts';
 import type { AddressFieldSet } from '../lib/addressFields';
 import { parseAddress } from '../lib/addressParse';
 import AddressFieldsEditor from '../components/AddressFieldsEditor';
 import SaveButton from '../components/SaveButton';
 import { useSaveFlash } from '../hooks/useSaveFlash';
-import type { Job, Lead, LeadAppointment, LeadDispositionReason, LeadStage } from '../types';
+import type {
+  Job,
+  Lead,
+  LeadAppointment,
+  LeadContactAttempt,
+  LeadContactChannel,
+  LeadDispositionReason,
+  LeadStage,
+} from '../types';
 
 interface LeadsProps {
   onNewJobFromLead: (leadId: string) => void;
@@ -32,6 +51,18 @@ interface LeadsProps {
 
 const TERMINAL_STAGES = new Set<LeadStage>(['Won', 'Lost', 'Disqualified']);
 const DISPOSITION_STAGES = new Set<LeadStage>(['Lost', 'Disqualified']);
+
+const LAST_CONTACTED_OPTIONS: { value: string; label: string; filter: LastContactedFilter }[] = [
+  { value: 'any', label: 'Any contact date', filter: { kind: 'any' } },
+  { value: 'never', label: 'Never contacted', filter: { kind: 'never' } },
+  { value: 'today', label: 'Contacted today', filter: { kind: 'within', days: 1 } },
+  { value: 'within7', label: 'Contacted in last 7 days', filter: { kind: 'within', days: 7 } },
+  { value: 'within30', label: 'Contacted in last 30 days', filter: { kind: 'within', days: 30 } },
+  { value: 'older3', label: 'Last contact 3+ days ago', filter: { kind: 'olderThan', days: 3 } },
+  { value: 'older7', label: 'Last contact 7+ days ago', filter: { kind: 'olderThan', days: 7 } },
+  { value: 'older14', label: 'Last contact 14+ days ago', filter: { kind: 'olderThan', days: 14 } },
+  { value: 'range', label: 'Last contact between...', filter: { kind: 'range' } },
+];
 
 type LeadEditForm = {
   name: string;
@@ -44,6 +75,7 @@ type LeadEditForm = {
   dispositionReason: LeadDispositionReason | '';
   dispositionNotes: string;
   addressFields: AddressFieldSet;
+  contactLog: LeadContactAttempt[];
 };
 
 const EMPTY_LEAD_FORM: LeadEditForm = {
@@ -57,6 +89,7 @@ const EMPTY_LEAD_FORM: LeadEditForm = {
   dispositionReason: '',
   addressFields: {},
   dispositionNotes: '',
+  contactLog: [],
 };
 
 function getLeadDisplayName(lead: Lead): string {
@@ -83,6 +116,7 @@ function formFromLead(lead: Lead): LeadEditForm {
       tier: lead.addressParseTier,
       verifiedAt: lead.addressVerifiedAt,
     },
+    contactLog: sortedContactLog(lead),
   };
 }
 
@@ -119,6 +153,8 @@ function stageBadgeClass(stage: LeadStage): string {
       return 'bg-red-100 text-red-800';
     case 'Disqualified':
       return 'bg-slate-200 text-slate-700';
+    case 'Call Booked':
+      return 'bg-cyan-100 text-cyan-800';
     case 'Estimate Booked':
     case 'Estimate Completed':
       return 'bg-blue-100 text-blue-800';
@@ -159,6 +195,9 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
   const [query, setQuery] = useState('');
   const [stageFilter, setStageFilter] = useState<LeadStage | 'all'>('all');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
+  const [lastContactedOption, setLastContactedOption] = useState('any');
+  const [contactedFrom, setContactedFrom] = useState('');
+  const [contactedTo, setContactedTo] = useState('');
   const [updatingLeadId, setUpdatingLeadId] = useState<string | null>(null);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [editForm, setEditForm] = useState<LeadEditForm>(EMPTY_LEAD_FORM);
@@ -219,12 +258,21 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
       .sort((a, b) => a.localeCompare(b));
   }, [leads]);
 
+  const lastContactedFilter = useMemo((): LastContactedFilter => {
+    if (lastContactedOption === 'range') {
+      return { kind: 'range', from: contactedFrom || undefined, to: contactedTo || undefined };
+    }
+    return LAST_CONTACTED_OPTIONS.find((option) => option.value === lastContactedOption)?.filter ?? { kind: 'any' };
+  }, [lastContactedOption, contactedFrom, contactedTo]);
+
   const filteredLeads = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
+    const now = new Date();
     return leads
       .filter((lead) => !lead.deleted)
       .filter((lead) => stageFilter === 'all' || lead.stage === stageFilter)
       .filter((lead) => sourceFilter === 'all' || (lead.source || 'Unknown') === sourceFilter)
+      .filter((lead) => matchesLastContactedFilter(lead, lastContactedFilter, now))
       .filter((lead) => {
         if (!normalizedQuery) return true;
         return [
@@ -244,7 +292,7 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
         const bDate = new Date(b.lastEventAt || b.updatedAt || b.createdAt).getTime();
         return bDate - aDate;
       });
-  }, [leads, query, stageFilter, sourceFilter]);
+  }, [leads, query, stageFilter, sourceFilter, lastContactedFilter]);
 
   const totals = useMemo(() => {
     const booked = filteredLeads.filter((lead) =>
@@ -253,7 +301,7 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
     const won = filteredLeads.filter((lead) => lead.stage === 'Won').length;
     const disqualified = filteredLeads.filter((lead) => lead.stage === 'Disqualified').length;
     const pending = filteredLeads.filter((lead) =>
-      ['New', 'Contact Attempted', 'Engaged'].includes(lead.stage)
+      ['New', 'Contact Attempted', 'Engaged', 'Call Booked'].includes(lead.stage)
     ).length;
     return {
       total: filteredLeads.length,
@@ -263,6 +311,18 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
       disqualified,
     };
   }, [filteredLeads]);
+
+  const saveLeadInline = async (nextLead: Lead) => {
+    setUpdatingLeadId(nextLead.id);
+    try {
+      await updateLead(nextLead);
+      setLeads((current) => current.map((item) => (item.id === nextLead.id ? nextLead : item)));
+    } catch (error) {
+      console.error('Error updating lead:', error);
+    } finally {
+      setUpdatingLeadId(null);
+    }
+  };
 
   const handleLeadChange = async (lead: Lead, patch: Partial<Lead>) => {
     const now = new Date().toISOString();
@@ -279,16 +339,11 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
       nextLead.dispositionNotes = undefined;
     }
 
-    setUpdatingLeadId(lead.id);
-    try {
-      await updateLead(nextLead);
-      setLeads((current) => current.map((item) => (item.id === lead.id ? nextLead : item)));
-    } catch (error) {
-      console.error('Error updating lead:', error);
-    } finally {
-      setUpdatingLeadId(null);
-    }
+    await saveLeadInline(nextLead);
   };
+
+  const handleLogContact = (lead: Lead, channel: LeadContactChannel) =>
+    saveLeadInline(logLeadContact(lead, channel));
 
   const openEditLead = (lead: Lead) => {
     setEditingLead(lead);
@@ -310,6 +365,27 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
       ...(!DISPOSITION_STAGES.has(stage)
         ? { dispositionReason: '' as const, dispositionNotes: '' }
         : {}),
+    }));
+  };
+
+  const addEditContact = (channel: LeadContactChannel) => {
+    setEditForm((current) => ({
+      ...current,
+      contactLog: [{ id: crypto.randomUUID(), channel, at: new Date().toISOString() }, ...current.contactLog],
+    }));
+  };
+
+  const updateEditContact = (id: string, patch: Partial<LeadContactAttempt>) => {
+    setEditForm((current) => ({
+      ...current,
+      contactLog: current.contactLog.map((attempt) => (attempt.id === id ? { ...attempt, ...patch } : attempt)),
+    }));
+  };
+
+  const removeEditContact = (id: string) => {
+    setEditForm((current) => ({
+      ...current,
+      contactLog: current.contactLog.filter((attempt) => attempt.id !== id),
     }));
   };
 
@@ -364,6 +440,7 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
   };
 
   const editCanSetDisposition = DISPOSITION_STAGES.has(editForm.stage);
+  const editContacts = summarizeLeadContacts(editForm);
 
   return (
     <div className="p-3 sm:p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
@@ -408,7 +485,7 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
       </div>
 
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-3 sm:p-4 md:p-6 mb-4 sm:mb-6">
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px_220px]">
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_200px_200px_220px]">
           <label className="relative block">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
@@ -449,7 +526,41 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
               </option>
             ))}
           </select>
+
+          <label className="relative block">
+            <Phone size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <select
+              value={lastContactedOption}
+              onChange={(event) => setLastContactedOption(event.target.value)}
+              className="w-full appearance-none rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-gf-lime"
+            >
+              {LAST_CONTACTED_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
+
+        {lastContactedOption === 'range' && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-slate-600">
+            <span>Last contacted from</span>
+            <input
+              type="date"
+              value={contactedFrom}
+              onChange={(event) => setContactedFrom(event.target.value)}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-gf-lime"
+            />
+            <span>to</span>
+            <input
+              type="date"
+              value={contactedTo}
+              onChange={(event) => setContactedTo(event.target.value)}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-gf-lime"
+            />
+          </div>
+        )}
       </div>
 
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
@@ -465,6 +576,7 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
                   <th className="px-4 py-3 text-left font-semibold text-slate-600">Lead</th>
                   <th className="px-4 py-3 text-left font-semibold text-slate-600">Source</th>
                   <th className="px-4 py-3 text-left font-semibold text-slate-600">Stage</th>
+                  <th className="px-4 py-3 text-left font-semibold text-slate-600">Contact</th>
                   <th className="px-4 py-3 text-left font-semibold text-slate-600">Disposition</th>
                   <th className="px-4 py-3 text-left font-semibold text-slate-600">Appointment</th>
                   <th className="px-4 py-3 text-left font-semibold text-slate-600">Job</th>
@@ -477,6 +589,7 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
                   const canSetDisposition = DISPOSITION_STAGES.has(lead.stage);
                   const displayName = getLeadDisplayName(lead);
                   const isLeadBusy = updatingLeadId === lead.id || deletingLeadId === lead.id;
+                  const contacts = summarizeLeadContacts(lead);
 
                   return (
                     <tr key={lead.id} className="align-top hover:bg-slate-50/60">
@@ -533,6 +646,51 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
                             </option>
                           ))}
                         </select>
+                      </td>
+
+                      <td className="px-4 py-4 min-w-44">
+                        <div className="flex items-center gap-3 text-sm font-medium text-slate-800">
+                          <span className="inline-flex items-center gap-1" title="Calls">
+                            <Phone size={13} className="text-slate-400" />
+                            {contacts.calls}
+                          </span>
+                          <span className="inline-flex items-center gap-1" title="Texts">
+                            <MessageSquare size={13} className="text-slate-400" />
+                            {contacts.texts}
+                          </span>
+                        </div>
+                        <div
+                          className="mt-1 text-xs text-slate-500"
+                          title={contacts.lastContactedAt ? formatDateTime(contacts.lastContactedAt) : undefined}
+                        >
+                          {contacts.lastContactedAt
+                            ? `Last ${formatRelativeDate(contacts.lastContactedAt)}`
+                            : 'Not contacted yet'}
+                        </div>
+                        {canEdit && (
+                          <div className="mt-2 flex gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleLogContact(lead, 'call')}
+                              disabled={isLeadBusy}
+                              title="Log a call made now"
+                              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              <Plus size={12} />
+                              Call
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleLogContact(lead, 'text')}
+                              disabled={isLeadBusy}
+                              title="Log a text sent now"
+                              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              <Plus size={12} />
+                              Text
+                            </button>
+                          </div>
+                        )}
                       </td>
 
                       <td className="px-4 py-4 min-w-56">
@@ -765,6 +923,72 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
                     className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-gf-lime disabled:bg-slate-100 disabled:text-slate-400"
                   />
                 </label>
+
+                <div className="sm:col-span-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs font-semibold uppercase text-slate-500">
+                      Contact History
+                      {` · ${editContacts.calls} ${editContacts.calls === 1 ? 'call' : 'calls'}, ${editContacts.texts} ${editContacts.texts === 1 ? 'text' : 'texts'}`}
+                    </span>
+                    <div className="flex gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => addEditContact('call')}
+                        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100"
+                      >
+                        <Plus size={12} />
+                        Call
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => addEditContact('text')}
+                        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100"
+                      >
+                        <Plus size={12} />
+                        Text
+                      </button>
+                    </div>
+                  </div>
+                  {editForm.contactLog.length === 0 ? (
+                    <p className="mt-2 text-sm text-slate-500">No calls or texts logged yet.</p>
+                  ) : (
+                    <ul className="mt-2 divide-y divide-slate-100 rounded-lg border border-slate-200">
+                      {editForm.contactLog.map((attempt) => (
+                        <li key={attempt.id} className="flex flex-wrap items-center gap-2 px-3 py-2">
+                          <select
+                            value={attempt.channel}
+                            onChange={(event) =>
+                              updateEditContact(attempt.id, { channel: event.target.value as LeadContactChannel })
+                            }
+                            aria-label="Contact type"
+                            className="rounded-lg border border-slate-300 px-2 py-1 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-gf-lime"
+                          >
+                            <option value="call">Call</option>
+                            <option value="text">Text</option>
+                          </select>
+                          <input
+                            type="datetime-local"
+                            value={toDateTimeLocalValue(attempt.at)}
+                            onChange={(event) => {
+                              const at = fromDateTimeLocalValue(event.target.value);
+                              if (at) updateEditContact(attempt.id, { at });
+                            }}
+                            aria-label="When"
+                            className="min-w-0 flex-1 rounded-lg border border-slate-300 px-2 py-1 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-gf-lime"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeEditContact(attempt.id)}
+                            title="Remove"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
               </div>
 
               <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:justify-end">
