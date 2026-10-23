@@ -39,6 +39,9 @@ interface JobMaterialRow {
   chipType?: string;
   chipLbs: number;
   moistureMitigationGallons: number;
+  // Share of each coat's gallons that goes on the floor (1 = no verticals)
+  baseFloorShare: number;
+  topFloorShare: number;
 }
 
 const TOTALS_PART_ORDER: Record<CoatingPart, number> = { topA: 0, topB: 1, baseA: 2, baseB: 3 };
@@ -65,20 +68,40 @@ interface MaterialRowProps {
   unit: string;
   required: number;
   onHand: number;
+  floorShare?: number; // Coating only: share of `required` that goes on the floor
 }
 
-function MaterialRow({ label, unit, required, onHand }: MaterialRowProps) {
+function MaterialRow({ label, unit, required, onHand, floorShare }: MaterialRowProps) {
   const diff = onHand - required;
   return (
     <tr className="border-b border-slate-100">
       <td className="py-2 px-4 text-slate-700">{label}</td>
       <td className="py-2 px-4 text-right text-slate-500 text-xs">{unit}</td>
-      <td className="py-2 px-4 text-right">{required.toFixed(2)}</td>
+      <td className="py-2 px-4 text-right">
+        {required.toFixed(2)}
+        {floorShare !== undefined && <SurfaceSplit gallons={required} floorShare={floorShare} />}
+      </td>
       <td className="py-2 px-4 text-right">{onHand.toFixed(2)}</td>
       <td className={`py-2 px-4 text-right font-semibold ${diff < 0 ? 'text-red-600' : 'text-green-600'}`}>
         {diff >= 0 ? '+' : ''}{diff.toFixed(2)}
       </td>
     </tr>
+  );
+}
+
+/** Fraction of a coat's gallons on the floor; 1 when the job has no verticals. */
+function floorShareOf(floorGallons: number, verticalGallons: number): number {
+  const total = floorGallons + verticalGallons;
+  return total > 0 ? floorGallons / total : 1;
+}
+
+/** 'Floor 2.10 · Vert 0.40' under a coating quantity; nothing when it is all floor. */
+function SurfaceSplit({ gallons, floorShare }: { gallons: number; floorShare: number }) {
+  if (!(floorShare < 1) || !(gallons > 0)) return null;
+  return (
+    <div className="text-[11px] text-slate-400 tabular-nums whitespace-nowrap">
+      Floor {(gallons * floorShare).toFixed(2)} · Vert {(gallons * (1 - floorShare)).toFixed(2)}
+    </div>
   );
 }
 
@@ -256,6 +279,8 @@ export default function JobSummaryModal({
         chipType: jobChipType(job, chipTypeForSystem),
         chipLbs,
         moistureMitigationGallons,
+        baseFloorShare: floorShareOf(calc.baseFloorGallons, calc.baseVerticalGallons),
+        topFloorShare: floorShareOf(calc.topFloorGallons, calc.topVerticalGallons),
       };
     });
   }, [filteredJobs, currentCosts, currentPricing, chipTypeForSystem]);
@@ -265,12 +290,14 @@ export default function JobSummaryModal({
     const activeRows = jobMaterials.filter((r) => !ignoredJobIds.has(r.job.id));
 
     // Aggregate resolved coating lines across active jobs, keyed by SKU key
-    const coatingByKey = new Map<string, { key: string; part: CoatingPart; variant?: string; color?: string; label: string; gallons: number }>();
+    const coatingByKey = new Map<string, { key: string; part: CoatingPart; variant?: string; color?: string; label: string; gallons: number; floorGallons: number }>();
     for (const r of activeRows) {
       for (const line of r.materials.coating) {
+        const floorGallons = line.gallons * (line.part === 'baseA' || line.part === 'baseB' ? r.baseFloorShare : r.topFloorShare);
         const existing = coatingByKey.get(line.key);
         if (existing) {
           existing.gallons += line.gallons;
+          existing.floorGallons += floorGallons;
         } else {
           coatingByKey.set(line.key, {
             key: line.key,
@@ -279,6 +306,7 @@ export default function JobSummaryModal({
             color: line.color,
             label: line.label,
             gallons: line.gallons,
+            floorGallons,
           });
         }
       }
@@ -514,9 +542,8 @@ export default function JobSummaryModal({
                 ) : (
                   jobMaterials.map((row) => {
                     const ignored = ignoredJobIds.has(row.job.id);
-                    const baseAGallons = row.materials.coating
-                      .filter((l) => l.part === 'baseA')
-                      .reduce((s, l) => s + l.gallons, 0);
+                    const sumGallons = (lines: ResolvedCoatingLine[]) => lines.reduce((s, l) => s + l.gallons, 0);
+                    const baseAGallons = sumGallons(row.materials.coating.filter((l) => l.part === 'baseA'));
                     const baseBLines = row.materials.coating.filter((l) => l.part === 'baseB');
                     const topALines = row.materials.coating.filter((l) => l.part === 'topA');
                     const topBLines = row.materials.coating.filter((l) => l.part === 'topB');
@@ -573,21 +600,31 @@ export default function JobSummaryModal({
                         <td className="py-3 px-3">
                           <span className={statusBadgeClass(row.job.status)}>{row.job.status}</span>
                         </td>
-                        <td className="py-3 px-3 text-right tabular-nums">{baseAGallons.toFixed(2)}</td>
+                        <td className="py-3 px-3 text-right tabular-nums">
+                          {baseAGallons.toFixed(2)}
+                          <SurfaceSplit gallons={baseAGallons} floorShare={row.baseFloorShare} />
+                        </td>
                         <td className="py-3 px-3 text-slate-600 whitespace-nowrap">
                           {baseBLines.length > 0 ? (
                             <span>{baseBLines.map(formatBaseBLine).join(', ')}</span>
                           ) : (
                             <span className="text-slate-400">–</span>
                           )}
+                          <SurfaceSplit gallons={sumGallons(baseBLines)} floorShare={row.baseFloorShare} />
                           {row.materials.warnings.length > 0 && (
                             <div className="text-xs text-amber-600" title={row.materials.warnings.join(' ')}>
                               {row.materials.warnings.join(' ')}
                             </div>
                           )}
                         </td>
-                        <td className="py-3 px-3 text-right tabular-nums whitespace-nowrap">{formatTopCell(topALines)}</td>
-                        <td className="py-3 px-3 text-right tabular-nums whitespace-nowrap">{formatTopCell(topBLines)}</td>
+                        <td className="py-3 px-3 text-right tabular-nums whitespace-nowrap">
+                          {formatTopCell(topALines)}
+                          <SurfaceSplit gallons={sumGallons(topALines)} floorShare={row.topFloorShare} />
+                        </td>
+                        <td className="py-3 px-3 text-right tabular-nums whitespace-nowrap">
+                          {formatTopCell(topBLines)}
+                          <SurfaceSplit gallons={sumGallons(topBLines)} floorShare={row.topFloorShare} />
+                        </td>
                         <td className="py-3 px-3 text-right tabular-nums">
                           {row.moistureMitigationGallons > 0 ? row.moistureMitigationGallons.toFixed(2) : <span className="text-slate-400">-</span>}
                         </td>
@@ -681,6 +718,7 @@ export default function JobSummaryModal({
                       label={line.label}
                       unit="gal"
                       required={line.gallons}
+                      floorShare={line.floorGallons / line.gallons}
                       onHand={coatingOnHand(line.part, line.variant, line.color)}
                     />
                   ) : null
