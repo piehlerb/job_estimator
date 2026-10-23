@@ -31,10 +31,10 @@ import {
   saveChipInventory,
   saveTintInventory,
 } from '../lib/db';
-import { BaseColor, ChipSystem, Costs, Pricing, Job, JobCalculation, JobStatus, Laborer, InstallDaySchedule, ActualDaySchedule, ActualCosts, ChipInventory, CoatingRemovalType, Product, JobProduct, BaseCoatColor, JobReminder, JobFollowUp, TintInventory, CommunicationTemplate, JobEvaluation, InventoryActualsApplied, MiscInventory, Lead, JobMaterialAllocation } from '../types';
+import { BaseColor, ChipSystem, Costs, Pricing, Job, JobCalculation, SpreadRateOverrides, SpreadRates, JobStatus, Laborer, InstallDaySchedule, ActualDaySchedule, ActualCosts, ChipInventory, CoatingRemovalType, Product, JobProduct, BaseCoatColor, JobReminder, JobFollowUp, TintInventory, CommunicationTemplate, JobEvaluation, InventoryActualsApplied, MiscInventory, Lead, JobMaterialAllocation } from '../types';
 import { coatingSkuId, findCoatingSku, DEFAULT_COATING_SKUS } from '../lib/coatingSkus';
 import { resolveJobMaterials, defaultBaseComponents, sharesValid } from '../lib/materialAllocation';
-import { calculateJobOutputs, calculateActualCosts } from '../lib/calculations';
+import { calculateJobOutputs, calculateActualCosts, cleanSpreadRateOverrides, defaultSpreadRates } from '../lib/calculations';
 import InstallDayScheduleComponent from '../components/InstallDaySchedule';
 import ActualDayScheduleComponent from '../components/ActualDaySchedule';
 import { convertLegacyJobToSchedule } from '../lib/jobMigration';
@@ -166,6 +166,15 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
   const [topAllocation, setTopAllocation] = useState<Array<{ variant: string; sharePct: number }>>([]);
   const [baseAllocation, setBaseAllocation] = useState<Array<{ variant: string; color: string; sharePct: number; tintColor: string }>>([]);
   const [allocationError, setAllocationError] = useState('');
+
+  // Spread rate overrides (sqft/gal per coat); blank = system default
+  const [showSpreadSection, setShowSpreadSection] = useState(false);
+  const [spreadOverrides, setSpreadOverrides] = useState<Record<keyof SpreadRates, string>>({
+    baseFloor: '',
+    baseVertical: '',
+    topFloor: '',
+    topVertical: '',
+  });
   const [activeTab, setActiveTab] = useState<'details' | 'reminders' | 'actuals'>('details');
   const [currentStep, setCurrentStep] = useState(0);
   const STEP_LABELS = ['Customer', 'Measure', 'System', 'Price'] as const;
@@ -175,6 +184,10 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
   const [actualMaterials, setActualMaterials] = useState({
     actualBaseCoatGallons: '',
     actualTopCoatGallons: '',
+    actualBaseCoatFloorGallons: '',
+    actualBaseCoatVerticalGallons: '',
+    actualTopCoatFloorGallons: '',
+    actualTopCoatVerticalGallons: '',
     actualCyclo1Gallons: '',
     actualTintOz: '',
     actualChipBoxes: '',
@@ -291,7 +304,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
 
   useEffect(() => {
     calculateCosts();
-  }, [formData, systems, costs, pricing, activeLaborers, installSchedule, existingJob, jobProducts]);
+  }, [formData, systems, costs, pricing, activeLaborers, installSchedule, existingJob, jobProducts, spreadOverrides]);
 
   // Reactively compute actual costs when actuals change
   useEffect(() => {
@@ -344,6 +357,37 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
     () => jobProducts.reduce((sum, p) => sum + p.quantity * p.unitCost, 0),
     [jobProducts]
   );
+
+  const buildSpreadRateOverrides = (): SpreadRateOverrides | undefined =>
+    cleanSpreadRateOverrides({
+      baseFloor: parseFloat(spreadOverrides.baseFloor),
+      baseVertical: parseFloat(spreadOverrides.baseVertical),
+      topFloor: parseFloat(spreadOverrides.topFloor),
+      topVertical: parseFloat(spreadOverrides.topVertical),
+    });
+
+  // Actual coating split: once floor or vertical is entered, the total follows their sum.
+  const COAT_SPLIT_FIELDS = {
+    base: { total: 'actualBaseCoatGallons', floor: 'actualBaseCoatFloorGallons', vertical: 'actualBaseCoatVerticalGallons' },
+    top: { total: 'actualTopCoatGallons', floor: 'actualTopCoatFloorGallons', vertical: 'actualTopCoatVerticalGallons' },
+  } as const;
+
+  const coatHasSplit = (coat: keyof typeof COAT_SPLIT_FIELDS) => {
+    const fields = COAT_SPLIT_FIELDS[coat];
+    return actualMaterials[fields.floor].trim() !== '' || actualMaterials[fields.vertical].trim() !== '';
+  };
+
+  const handleCoatSplitChange = (coat: keyof typeof COAT_SPLIT_FIELDS, surface: 'floor' | 'vertical', value: string) => {
+    const fields = COAT_SPLIT_FIELDS[coat];
+    setActualMaterials(prev => {
+      const next = { ...prev, [fields[surface]]: value };
+      if (next[fields.floor].trim() !== '' || next[fields.vertical].trim() !== '') {
+        const sum = (parseFloat(next[fields.floor]) || 0) + (parseFloat(next[fields.vertical]) || 0);
+        next[fields.total] = sum > 0 ? String(Math.round(sum * 1000) / 1000) : '';
+      }
+      return next;
+    });
+  };
 
   // ── Material allocation helpers ──────────────────────────────────────────
   const buildAllocationOverride = (): JobMaterialAllocation | undefined => {
@@ -764,6 +808,10 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
           setActualMaterials({
             actualBaseCoatGallons: job.actualBaseCoatGallons?.toString() || '',
             actualTopCoatGallons: job.actualTopCoatGallons?.toString() || '',
+            actualBaseCoatFloorGallons: job.actualBaseCoatFloorGallons?.toString() || '',
+            actualBaseCoatVerticalGallons: job.actualBaseCoatVerticalGallons?.toString() || '',
+            actualTopCoatFloorGallons: job.actualTopCoatFloorGallons?.toString() || '',
+            actualTopCoatVerticalGallons: job.actualTopCoatVerticalGallons?.toString() || '',
             actualCyclo1Gallons: job.actualCyclo1Gallons?.toString() || '',
             actualTintOz: job.actualTintOz?.toString() || '',
             actualChipBoxes: job.actualChipBoxes?.toString() || '',
@@ -773,6 +821,15 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
             actualExpenseAdjustment: job.actualExpenseAdjustment?.toString() || '',
             actualExpenseAdjustmentNotes: job.actualExpenseAdjustmentNotes || '',
           });
+          if (job.spreadRateOverrides) {
+            setSpreadOverrides({
+              baseFloor: job.spreadRateOverrides.baseFloor?.toString() || '',
+              baseVertical: job.spreadRateOverrides.baseVertical?.toString() || '',
+              topFloor: job.spreadRateOverrides.topFloor?.toString() || '',
+              topVertical: job.spreadRateOverrides.topVertical?.toString() || '',
+            });
+            setShowSpreadSection(true);
+          }
           // Load products from existing job
           if (job.products && job.products.length > 0) {
             setJobProducts(job.products);
@@ -923,6 +980,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
       disableGasHeater: formData.disableGasHeater,
       installSchedule: installSchedule.length > 0 ? installSchedule : undefined,
       tags: formData.tags.split(',').map((t) => t.trim()).filter(Boolean),
+      spreadRateOverrides: buildSpreadRateOverrides(),
     };
 
     const calc = calculateJobOutputs(inputs, systemToUse, costsToUse, laborersToUse, pricingToUse);
@@ -1499,6 +1557,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
         disableGasHeater: job.disableGasHeater || false,
         installSchedule: job.installSchedule,
         tags: job.tags,
+        spreadRateOverrides: job.spreadRateOverrides,
       };
       const calc = calculateJobOutputs(inputs, sys, c, job.laborersSnapshot, p);
       totalCosts += calc.totalCosts;
@@ -2069,6 +2128,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
         coatingRemoval: formData.coatingRemoval,
         moistureMitigation: formData.moistureMitigation,
         disableGasHeater: formData.disableGasHeater,
+        spreadRateOverrides: buildSpreadRateOverrides(),
         // Actual pricing breakdown
         actualDiscount: parseFloat(formData.actualDiscount) || undefined,
         actualCrackPrice: parseFloat(formData.actualCrackPrice) || undefined,
@@ -2084,6 +2144,11 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
         actualInstallSchedule: actualInstallSchedule.length > 0 ? actualInstallSchedule : undefined,
         actualBaseCoatGallons: parseFloat(actualMaterials.actualBaseCoatGallons) || undefined,
         actualTopCoatGallons: parseFloat(actualMaterials.actualTopCoatGallons) || undefined,
+        actualBaseCoatFloorGallons: parseFloat(actualMaterials.actualBaseCoatFloorGallons) || undefined,
+        actualBaseCoatVerticalGallons: parseFloat(actualMaterials.actualBaseCoatVerticalGallons) || undefined,
+        actualTopCoatFloorGallons: parseFloat(actualMaterials.actualTopCoatFloorGallons) || undefined,
+        actualTopCoatVerticalGallons: parseFloat(actualMaterials.actualTopCoatVerticalGallons) || undefined,
+        excludeFromSpreadReport: existingJob?.excludeFromSpreadReport,
         actualCyclo1Gallons: parseFloat(actualMaterials.actualCyclo1Gallons) || undefined,
         actualTintOz: parseFloat(actualMaterials.actualTintOz) || undefined,
         actualChipBoxes: parseFloat(actualMaterials.actualChipBoxes) || undefined,
@@ -2960,6 +3025,77 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
             )}
           </div>
 
+          {/* Spread Rates (collapsible) */}
+          {calculation && usedSystem && (() => {
+            const defaults = defaultSpreadRates(usedSystem, usedPricing);
+            const hasOverride = !!buildSpreadRateOverrides();
+            const hasVerticals = (parseFloat(formData.verticalFootage) || 0) > 0;
+            const rows: Array<{ key: keyof SpreadRates; label: string; gallons: number }> = [
+              { key: 'baseFloor', label: 'Base Coat – Floor', gallons: calculation.baseFloorGallons },
+              { key: 'baseVertical', label: 'Base Coat – Vertical', gallons: calculation.baseVerticalGallons },
+              { key: 'topFloor', label: 'Top Coat – Floor', gallons: calculation.topFloorGallons },
+              { key: 'topVertical', label: 'Top Coat – Vertical', gallons: calculation.topVerticalGallons },
+            ];
+            return (
+              <div className="rounded-lg border border-slate-200 mt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowSpreadSection(!showSpreadSection)}
+                  className={`w-full flex items-center justify-between px-3 sm:px-4 py-3 text-left bg-gf-lime/15 hover:bg-gf-lime/25 transition-colors ${showSpreadSection ? 'rounded-t-lg' : 'rounded-lg'}`}
+                >
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-xs sm:text-sm font-semibold text-gf-dark-green uppercase tracking-wide">Spread Rates</h4>
+                    {hasOverride && (
+                      <span className="px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-700 rounded-full">
+                        Override
+                      </span>
+                    )}
+                  </div>
+                  {showSpreadSection ? <ChevronUp size={16} className="text-slate-400" /> : <ChevronDown size={16} className="text-slate-400" />}
+                </button>
+
+                {showSpreadSection && (
+                  <div className="px-3 sm:px-4 pb-3 sm:pb-4 border-t border-slate-200">
+                    <p className="text-xs text-slate-500 mt-3 mb-3">
+                      Square feet per gallon, per coat. Leave blank to use the {usedSystem.name} default. Changes here update the estimated gallons and material cost for this job.
+                    </p>
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                      {rows.map(({ key, label, gallons }) => {
+                        const isVertical = key === 'baseVertical' || key === 'topVertical';
+                        return (
+                          <div key={key} className={isVertical && !hasVerticals ? 'opacity-60' : ''}>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">{label}</label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="1"
+                              placeholder={defaults[key] > 0 ? defaults[key].toFixed(0) : '—'}
+                              value={spreadOverrides[key]}
+                              onChange={(e) => setSpreadOverrides(prev => ({ ...prev, [key]: e.target.value }))}
+                              className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime ${spreadOverrides[key].trim() ? 'border-amber-400 bg-amber-50' : 'border-slate-300'}`}
+                            />
+                            <p className="text-[11px] text-slate-400 mt-1">
+                              Default {defaults[key] > 0 ? defaults[key].toFixed(0) : '—'} · {gallons.toFixed(2)} gal
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {hasOverride && (
+                      <button
+                        type="button"
+                        onClick={() => setSpreadOverrides({ baseFloor: '', baseVertical: '', topFloor: '', topVertical: '' })}
+                        className="mt-3 text-xs font-medium text-slate-600 hover:text-slate-900 underline"
+                      >
+                        Reset to system defaults
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
           {/* Material Allocation (collapsible) */}
           {resolvedMaterials && (
             <div className="rounded-lg border border-slate-200 mt-4">
@@ -3531,6 +3667,9 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
                   <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
                     <p className="text-xs text-slate-500">Base Gallons</p>
                     <p className="text-sm sm:text-base md:text-lg font-semibold">{calculation.baseGallons.toFixed(2)}</p>
+                    {calculation.baseVerticalGallons > 0 && (
+                      <p className="text-[11px] text-slate-500">Floor {calculation.baseFloorGallons.toFixed(2)} · Vert {calculation.baseVerticalGallons.toFixed(2)}</p>
+                    )}
                   </div>
                   <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
                     <p className="text-xs text-slate-500">Base Cost</p>
@@ -3539,6 +3678,9 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
                   <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
                     <p className="text-xs text-slate-500">Top Gallons</p>
                     <p className="text-sm sm:text-base md:text-lg font-semibold">{calculation.topGallons.toFixed(2)}</p>
+                    {calculation.topVerticalGallons > 0 && (
+                      <p className="text-[11px] text-slate-500">Floor {calculation.topFloorGallons.toFixed(2)} · Vert {calculation.topVerticalGallons.toFixed(2)}</p>
+                    )}
                   </div>
                   <div className="bg-white p-2 sm:p-3 rounded border border-slate-200">
                     <p className="text-xs text-slate-500">Top Cost</p>
@@ -4026,37 +4168,93 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
               <div className="rounded-lg border border-slate-200 p-4 sm:p-5 bg-slate-50">
                 <h3 className="text-sm sm:text-base font-semibold text-slate-900 mb-1">Actual Materials Used</h3>
                 <p className="text-xs text-slate-500 mb-4">Enter quantities actually consumed. Estimated amounts shown as reference.</p>
+                {(parseFloat(formData.verticalFootage) || 0) > 0 && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    {([
+                      { coat: 'base', title: 'Base Coat', est: calculation && { floor: calculation.baseFloorGallons, vertical: calculation.baseVerticalGallons, total: calculation.baseGallons } },
+                      { coat: 'top', title: 'Top Coat', est: calculation && { floor: calculation.topFloorGallons, vertical: calculation.topVerticalGallons, total: calculation.topGallons } },
+                    ] as const).map(({ coat, title, est }) => {
+                      const fields = COAT_SPLIT_FIELDS[coat];
+                      const split = coatHasSplit(coat);
+                      return (
+                        <div key={coat} className="rounded-lg border border-slate-200 bg-white p-3">
+                          <p className="text-xs font-semibold text-slate-700 mb-2">{title} (gal)</p>
+                          <div className="grid grid-cols-3 gap-2">
+                            {(['floor', 'vertical'] as const).map((surface) => (
+                              <div key={surface}>
+                                <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                                  {surface === 'floor' ? 'Floor' : 'Vertical'}
+                                  {est && <span className="ml-1 text-slate-400 font-normal">est. {est[surface].toFixed(1)}</span>}
+                                </label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.1"
+                                  placeholder={est ? est[surface].toFixed(1) : '0'}
+                                  value={actualMaterials[fields[surface]]}
+                                  onChange={(e) => handleCoatSplitChange(coat, surface, e.target.value)}
+                                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime"
+                                />
+                              </div>
+                            ))}
+                            <div>
+                              <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                                Total
+                                {est && <span className="ml-1 text-slate-400 font-normal">est. {est.total.toFixed(1)}</span>}
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.1"
+                                placeholder={est ? est.total.toFixed(1) : '0'}
+                                value={actualMaterials[fields.total]}
+                                readOnly={split}
+                                title={split ? 'Floor + vertical' : undefined}
+                                onChange={(e) => setActualMaterials(prev => ({ ...prev, [fields.total]: e.target.value }))}
+                                className={`w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime ${split ? 'bg-slate-100 text-slate-600' : ''}`}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Base Coat (gal)
-                      {calculation && <span className="ml-1 text-slate-400 font-normal">est. {calculation.baseGallons.toFixed(1)}</span>}
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.1"
-                      placeholder={calculation ? calculation.baseGallons.toFixed(1) : '0'}
-                      value={actualMaterials.actualBaseCoatGallons}
-                      onChange={(e) => setActualMaterials(prev => ({ ...prev, actualBaseCoatGallons: e.target.value }))}
-                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Top Coat (gal)
-                      {calculation && <span className="ml-1 text-slate-400 font-normal">est. {calculation.topGallons.toFixed(1)}</span>}
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.1"
-                      placeholder={calculation ? calculation.topGallons.toFixed(1) : '0'}
-                      value={actualMaterials.actualTopCoatGallons}
-                      onChange={(e) => setActualMaterials(prev => ({ ...prev, actualTopCoatGallons: e.target.value }))}
-                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime"
-                    />
-                  </div>
+                  {!((parseFloat(formData.verticalFootage) || 0) > 0) && (
+                    <>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">
+                          Base Coat (gal)
+                          {calculation && <span className="ml-1 text-slate-400 font-normal">est. {calculation.baseGallons.toFixed(1)}</span>}
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.1"
+                          placeholder={calculation ? calculation.baseGallons.toFixed(1) : '0'}
+                          value={actualMaterials.actualBaseCoatGallons}
+                          onChange={(e) => setActualMaterials(prev => ({ ...prev, actualBaseCoatGallons: e.target.value }))}
+                          className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">
+                          Top Coat (gal)
+                          {calculation && <span className="ml-1 text-slate-400 font-normal">est. {calculation.topGallons.toFixed(1)}</span>}
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.1"
+                          placeholder={calculation ? calculation.topGallons.toFixed(1) : '0'}
+                          value={actualMaterials.actualTopCoatGallons}
+                          onChange={(e) => setActualMaterials(prev => ({ ...prev, actualTopCoatGallons: e.target.value }))}
+                          className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime"
+                        />
+                      </div>
+                    </>
+                  )}
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
                       Cyclo1 (gal)

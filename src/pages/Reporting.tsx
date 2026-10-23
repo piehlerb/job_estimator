@@ -1,12 +1,13 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import { getAllAdSpend, getAllJobs, getAllLaborers, getAllLeadAppointments, getAllLeads, getCosts, getDefaultCosts, getPricing, getDefaultPricing, setAdSpend, deleteAdSpend } from '../lib/db';
+import { getAllAdSpend, getAllJobs, getAllLaborers, getAllLeadAppointments, getAllLeads, getCosts, getDefaultCosts, getPricing, getDefaultPricing, setAdSpend, deleteAdSpend, updateJob } from '../lib/db';
 import { calculateJobOutputs, calculateActualCosts, getActualLaborerHours } from '../lib/calculations';
 import { ActualCosts, AdSpend, Costs, Job, JobCalculation, JobStatus, Laborer, Lead, LeadAppointment, Pricing } from '../types';
 import { loadAllHistoricalJobsFromSupabase } from '../lib/sync';
 import ZipGeographyReport from '../components/ZipGeographyReport';
 import LeadTrackingReport from '../components/LeadTrackingReport';
 import LeadCreatedDateReport from '../components/LeadCreatedDateReport';
+import SpreadRateReport from '../components/SpreadRateReport';
 import { localToday, toLocalDateString } from '../lib/dateUtils';
 import { useCanEdit } from '../hooks/useAreaAccess';
 
@@ -57,7 +58,7 @@ interface EmployeeHoursRow {
 const ALL_STATUSES: JobStatus[] = ['Pending', 'Verbal', 'Won', 'Lost'];
 type DateRangePreset = 'all' | '30d' | '90d' | 'ytd' | 'custom';
 type DateFieldMode = 'install' | 'created';
-type ReportView = 'tags' | 'monthly-won' | 'employee-hours' | 'expenses' | 'lead-tracking' | 'leads-by-created-date' | 'zip-geography';
+type ReportView = 'tags' | 'monthly-won' | 'employee-hours' | 'expenses' | 'spread-rates' | 'lead-tracking' | 'leads-by-created-date' | 'zip-geography';
 
 function getDefaultEmpStart() {
   const d = new Date();
@@ -76,6 +77,7 @@ interface ReportingProps {
 
 export default function Reporting({ onEditJob }: ReportingProps) {
   const canEditSpend = useCanEdit('reporting');
+  const canEditJobs = useCanEdit('jobs');
   const [jobsWithCalc, setJobsWithCalc] = useState<JobWithCalc[]>([]);
   const [allLaborers, setAllLaborers] = useState<Laborer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -166,6 +168,7 @@ export default function Reporting({ onEditJob }: ReportingProps) {
             moistureMitigation: job.moistureMitigation || false,
             installSchedule: job.installSchedule,
             tags: job.tags,
+            spreadRateOverrides: job.spreadRateOverrides,
           },
           job.systemSnapshot,
           mergedCosts,
@@ -563,6 +566,20 @@ export default function Reporting({ onEditJob }: ReportingProps) {
     setAdSpendRecords((prev) => [...prev.filter((r) => r.id !== saved.id), saved]);
   };
 
+  // ==================== SPREAD RATES ====================
+
+  // Flip a job's "ignore in spread report" flag and save it on the job
+  const handleToggleSpreadExclude = async (job: Job) => {
+    const updated: Job = {
+      ...job,
+      excludeFromSpreadReport: job.excludeFromSpreadReport ? undefined : true,
+      updatedAt: new Date().toISOString(),
+      synced: false,
+    };
+    await updateJob(updated);
+    setJobsWithCalc((prev) => prev.map((row) => (row.job.id === job.id ? { ...row, job: updated } : row)));
+  };
+
   // ==================== HANDLERS ====================
 
   const handleStatusToggle = (status: JobStatus) => {
@@ -623,6 +640,7 @@ export default function Reporting({ onEditJob }: ReportingProps) {
           { id: 'monthly-won', label: 'Monthly Won Jobs' },
           { id: 'employee-hours', label: 'Employee Hours' },
           { id: 'expenses', label: 'Expenses' },
+          { id: 'spread-rates', label: 'Spread Rates' },
           { id: 'lead-tracking', label: 'Lead Tracking' },
           { id: 'leads-by-created-date', label: 'Leads by Date' },
           { id: 'zip-geography', label: 'ZIP Geography' },
@@ -1223,6 +1241,15 @@ export default function Reporting({ onEditJob }: ReportingProps) {
                 )}
               </div>
             </>
+          )}
+
+          {/* ===== SPREAD RATES ===== */}
+          {activeView === 'spread-rates' && (
+            <SpreadRateReport
+              jobs={jobsWithCalc}
+              onEditJob={onEditJob}
+              onToggleExclude={canEditJobs ? handleToggleSpreadExclude : undefined}
+            />
           )}
 
           {/* ===== ZIP GEOGRAPHY ===== */}

@@ -225,6 +225,7 @@ export default function JobSummaryModal({
           moistureMitigation: job.moistureMitigation || false,
           tags: job.tags,
           installSchedule: job.installSchedule,
+          spreadRateOverrides: job.spreadRateOverrides,
         },
         job.systemSnapshot,
         mergedCosts,
