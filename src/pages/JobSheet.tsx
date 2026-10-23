@@ -35,16 +35,18 @@ interface MaterialCardProps {
   label: string;
   value: string;
   unit: string;
+  detail?: string;
   overridden?: boolean;
 }
 
-function MaterialCard({ label, value, unit, overridden }: MaterialCardProps) {
+function MaterialCard({ label, value, unit, detail, overridden }: MaterialCardProps) {
   if (overridden) {
     return (
       <div className="bg-amber-50 border-2 border-amber-400 p-3 rounded-lg text-center">
         <span className="text-xs text-amber-900 font-semibold block">{label}</span>
         <span className="text-xl font-bold text-amber-900">{value}</span>
         <span className="text-xs text-amber-900 block">{unit}</span>
+        {detail && <span className="text-[11px] text-amber-900 font-medium block mt-0.5">{detail}</span>}
         <span className="mt-1 inline-block px-1.5 py-0.5 rounded bg-amber-200 text-amber-900 text-[10px] font-bold uppercase tracking-wide">
           Override
         </span>
@@ -56,8 +58,17 @@ function MaterialCard({ label, value, unit, overridden }: MaterialCardProps) {
       <span className="text-xs text-gf-dark-green block">{label}</span>
       <span className="text-xl font-bold text-gf-dark-green">{value}</span>
       <span className="text-xs text-gf-dark-green block">{unit}</span>
+      {detail && <span className="text-[11px] text-gf-dark-green font-medium block mt-0.5">{detail}</span>}
     </div>
   );
+}
+
+/** 'Floor 2.1 · Vert 0.4 gal' — a coating line's gallons split by where they go. */
+function surfaceSplitDetail(gallons: number, floorGallons: number, verticalGallons: number): string | undefined {
+  const total = floorGallons + verticalGallons;
+  if (!(verticalGallons > 0) || !(total > 0)) return undefined;
+  const floorShare = floorGallons / total;
+  return `Floor ${(gallons * floorShare).toFixed(1)} · Vert ${(gallons * (1 - floorShare)).toFixed(1)} gal`;
 }
 
 export default function JobSheet({ jobId, onBack }: JobSheetProps) {
@@ -98,6 +109,7 @@ export default function JobSheet({ jobId, onBack }: JobSheetProps) {
             moistureMitigation: loadedJob.moistureMitigation || false,
             installSchedule: loadedJob.installSchedule,
             tags: loadedJob.tags,
+            spreadRateOverrides: loadedJob.spreadRateOverrides,
           },
           loadedJob.systemSnapshot,
           loadedJob.costsSnapshot,
@@ -222,29 +234,46 @@ export default function JobSheet({ jobId, onBack }: JobSheetProps) {
               {/* System Spread Rate Assumptions */}
               <div>
                 <h3 className="text-sm font-semibold text-slate-900 mb-2 border-b border-slate-200 pb-1">Spread Rate Assumptions</h3>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <p>
-                    <span className="text-slate-500">Base Coat:</span>{' '}
-                    <span className="font-medium">{job.systemSnapshot.baseSpread} sqft/gal</span>
-                    <span className="text-slate-400"> × {job.systemSnapshot.baseCoats ?? 1} coat{(job.systemSnapshot.baseCoats ?? 1) !== 1 ? 's' : ''}</span>
-                  </p>
-                  <p>
-                    <span className="text-slate-500">Top Coat:</span>{' '}
-                    <span className="font-medium">{job.systemSnapshot.topSpread} sqft/gal</span>
-                    <span className="text-slate-400"> × {job.systemSnapshot.topCoats ?? 1} coat{(job.systemSnapshot.topCoats ?? 1) !== 1 ? 's' : ''}</span>
-                  </p>
-                  {(job.systemSnapshot.cyclo1Spread > 0) && (
-                    <p>
-                      <span className="text-slate-500">Cyclo1:</span>{' '}
-                      <span className="font-medium">{job.systemSnapshot.cyclo1Spread} sqft/gal</span>
-                      <span className="text-slate-400"> × {job.systemSnapshot.cyclo1Coats ?? 1} coat{(job.systemSnapshot.cyclo1Coats ?? 1) !== 1 ? 's' : ''}</span>
-                    </p>
-                  )}
-                  <p>
-                    <span className="text-slate-500">Chip:</span>{' '}
-                    <span className="font-medium">{job.systemSnapshot.feetPerLb} sqft/lb</span>
-                  </p>
-                </div>
+                {calculation && (() => {
+                  const overrides = job.spreadRateOverrides ?? {};
+                  const hasVerticals = job.verticalFootage > 0;
+                  const coatSuffix = (coats: number) => ` × ${coats} coat${coats !== 1 ? 's' : ''}`;
+                  const rate = (key: keyof typeof calculation.spreadRates) => (
+                    <span className="font-medium">
+                      {calculation.spreadRates[key].toFixed(0)}
+                      {overrides[key] ? <span className="ml-1 text-amber-700 text-xs font-semibold">(job)</span> : null}
+                    </span>
+                  );
+                  const baseCoats = job.systemSnapshot.baseCoats ?? 1;
+                  const topCoats = job.systemSnapshot.topCoats ?? 1;
+                  return (
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <p>
+                        <span className="text-slate-500">Base Coat:</span>{' '}
+                        {rate('baseFloor')}
+                        {hasVerticals && <> <span className="text-slate-400">/</span> {rate('baseVertical')} <span className="text-slate-400">vert</span></>}
+                        <span className="text-slate-400"> sqft/gal{coatSuffix(baseCoats)}</span>
+                      </p>
+                      <p>
+                        <span className="text-slate-500">Top Coat:</span>{' '}
+                        {rate('topFloor')}
+                        {hasVerticals && <> <span className="text-slate-400">/</span> {rate('topVertical')} <span className="text-slate-400">vert</span></>}
+                        <span className="text-slate-400"> sqft/gal{coatSuffix(topCoats)}</span>
+                      </p>
+                      {(job.systemSnapshot.cyclo1Spread > 0) && (
+                        <p>
+                          <span className="text-slate-500">Cyclo1:</span>{' '}
+                          <span className="font-medium">{job.systemSnapshot.cyclo1Spread} sqft/gal</span>
+                          <span className="text-slate-400">{coatSuffix(job.systemSnapshot.cyclo1Coats ?? 1)}</span>
+                        </p>
+                      )}
+                      <p>
+                        <span className="text-slate-500">Chip:</span>{' '}
+                        <span className="font-medium">{job.systemSnapshot.feetPerLb} sqft/lb</span>
+                      </p>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Options - only show enabled options */}
@@ -327,6 +356,9 @@ export default function JobSheet({ jobId, onBack }: JobSheetProps) {
                           label={coatingCardLabel(line, (partLineCount[line.part] || 0) > 1)}
                           value={line.gallons.toFixed(1)}
                           unit={`gal / ${(line.gallons * 128).toFixed(0)} oz`}
+                          detail={line.part === 'baseA' || line.part === 'baseB'
+                            ? surfaceSplitDetail(line.gallons, calculation.baseFloorGallons, calculation.baseVerticalGallons)
+                            : surfaceSplitDetail(line.gallons, calculation.topFloorGallons, calculation.topVerticalGallons)}
                           overridden={coatingOverridden(line)}
                         />
                       ))}

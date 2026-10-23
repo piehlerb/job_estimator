@@ -642,6 +642,8 @@ export type Database = {
           actual_abrasion_resistance_price: number | null
           actual_anti_slip_price: number | null
           actual_base_coat_gallons: number | null
+          actual_base_coat_floor_gallons: number | null
+          actual_base_coat_vertical_gallons: number | null
           actual_chip_boxes: number | null
           actual_coating_removal_price: number | null
           actual_crack_price: number | null
@@ -658,6 +660,8 @@ export type Database = {
           actual_slab_temp: number | null
           actual_tint_oz: number | null
           actual_top_coat_gallons: number | null
+          actual_top_coat_floor_gallons: number | null
+          actual_top_coat_vertical_gallons: number | null
           actual_vertical_price: number | null
           actual_vertical_price_per_sqft: number | null
           address_parse_tier: string | null
@@ -683,6 +687,7 @@ export type Database = {
           disable_gas_heater: boolean | null
           estimate_date: string | null
           evaluation: Json | null
+          exclude_from_spread_report: boolean | null
           floor_footage: number
           follow_ups: Json | null
           google_drive_folder_id: string | null
@@ -709,6 +714,7 @@ export type Database = {
           probability: number | null
           products: Json | null
           reminders: Json | null
+          spread_rate_overrides: Json | null
           status: string
           synced: boolean
           synced_at: string | null
@@ -727,6 +733,8 @@ export type Database = {
           actual_abrasion_resistance_price?: number | null
           actual_anti_slip_price?: number | null
           actual_base_coat_gallons?: number | null
+          actual_base_coat_floor_gallons?: number | null
+          actual_base_coat_vertical_gallons?: number | null
           actual_chip_boxes?: number | null
           actual_coating_removal_price?: number | null
           actual_crack_price?: number | null
@@ -743,6 +751,8 @@ export type Database = {
           actual_slab_temp?: number | null
           actual_tint_oz?: number | null
           actual_top_coat_gallons?: number | null
+          actual_top_coat_floor_gallons?: number | null
+          actual_top_coat_vertical_gallons?: number | null
           actual_vertical_price?: number | null
           actual_vertical_price_per_sqft?: number | null
           address_parse_tier?: string | null
@@ -768,6 +778,7 @@ export type Database = {
           disable_gas_heater?: boolean | null
           estimate_date?: string | null
           evaluation?: Json | null
+          exclude_from_spread_report?: boolean | null
           floor_footage: number
           follow_ups?: Json | null
           google_drive_folder_id?: string | null
@@ -794,6 +805,7 @@ export type Database = {
           probability?: number | null
           products?: Json | null
           reminders?: Json | null
+          spread_rate_overrides?: Json | null
           status: string
           synced?: boolean
           synced_at?: string | null
@@ -812,6 +824,8 @@ export type Database = {
           actual_abrasion_resistance_price?: number | null
           actual_anti_slip_price?: number | null
           actual_base_coat_gallons?: number | null
+          actual_base_coat_floor_gallons?: number | null
+          actual_base_coat_vertical_gallons?: number | null
           actual_chip_boxes?: number | null
           actual_coating_removal_price?: number | null
           actual_crack_price?: number | null
@@ -828,6 +842,8 @@ export type Database = {
           actual_slab_temp?: number | null
           actual_tint_oz?: number | null
           actual_top_coat_gallons?: number | null
+          actual_top_coat_floor_gallons?: number | null
+          actual_top_coat_vertical_gallons?: number | null
           actual_vertical_price?: number | null
           actual_vertical_price_per_sqft?: number | null
           address_parse_tier?: string | null
@@ -853,6 +869,7 @@ export type Database = {
           disable_gas_heater?: boolean | null
           estimate_date?: string | null
           evaluation?: Json | null
+          exclude_from_spread_report?: boolean | null
           floor_footage?: number
           follow_ups?: Json | null
           google_drive_folder_id?: string | null
@@ -879,6 +896,7 @@ export type Database = {
           probability?: number | null
           products?: Json | null
           reminders?: Json | null
+          spread_rate_overrides?: Json | null
           status?: string
           synced?: boolean
           synced_at?: string | null

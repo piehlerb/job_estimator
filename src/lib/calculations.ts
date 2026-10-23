@@ -1,4 +1,4 @@
-import { ChipSystem, Costs, Laborer, JobCalculation, InstallDaySchedule, ActualDaySchedule, ActualLaborerHours, ActualCosts, Pricing, CoatingRemovalType, JobProduct } from '../types/index.js';
+import { ChipSystem, Costs, Laborer, JobCalculation, InstallDaySchedule, ActualDaySchedule, ActualLaborerHours, ActualCosts, Pricing, CoatingRemovalType, JobProduct, SpreadRateOverrides, SpreadRates } from '../types/index.js';
 
 interface JobInputs {
   products?: JobProduct[];
@@ -21,6 +21,7 @@ interface JobInputs {
   disableGasHeater?: boolean;
   installSchedule?: InstallDaySchedule[]; // Optional per-day schedule
   tags?: string[]; // Job tags, used for tag-based discount calculation
+  spreadRateOverrides?: SpreadRateOverrides; // Job-level spread rates; absent = system defaults
 }
 
 /**
@@ -69,6 +70,73 @@ function computeSuggestedDiscount(
   return 0;
 }
 
+/** An override counts only when it is a positive number; anything else falls back to the default. */
+function validSpreadOverride(value: number | undefined): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0;
+}
+
+/**
+ * The spread rates (sqft per gallon per coat) a system uses by default. Vertical
+ * surfaces take more material, so their default rate is the floor rate divided
+ * by `pricing.verticalSpreadUsageMultiplier` (default 1.25).
+ */
+export function defaultSpreadRates(
+  system: Pick<ChipSystem, 'baseSpread' | 'topSpread'>,
+  pricing: Pick<Pricing, 'verticalSpreadUsageMultiplier'>
+): SpreadRates {
+  const multiplier = pricing.verticalSpreadUsageMultiplier ?? 1.25;
+  const vertical = (spread: number) => (multiplier > 0 && spread > 0 ? spread / multiplier : 0);
+  return {
+    baseFloor: system.baseSpread > 0 ? system.baseSpread : 0,
+    baseVertical: vertical(system.baseSpread),
+    topFloor: system.topSpread > 0 ? system.topSpread : 0,
+    topVertical: vertical(system.topSpread),
+  };
+}
+
+/** Default spread rates with the job's overrides applied on top. */
+export function resolveSpreadRates(
+  system: Pick<ChipSystem, 'baseSpread' | 'topSpread'>,
+  pricing: Pick<Pricing, 'verticalSpreadUsageMultiplier'>,
+  overrides?: SpreadRateOverrides
+): SpreadRates {
+  const defaults = defaultSpreadRates(system, pricing);
+  return {
+    baseFloor: validSpreadOverride(overrides?.baseFloor) ? overrides.baseFloor : defaults.baseFloor,
+    baseVertical: validSpreadOverride(overrides?.baseVertical) ? overrides.baseVertical : defaults.baseVertical,
+    topFloor: validSpreadOverride(overrides?.topFloor) ? overrides.topFloor : defaults.topFloor,
+    topVertical: validSpreadOverride(overrides?.topVertical) ? overrides.topVertical : defaults.topVertical,
+  };
+}
+
+/**
+ * Drops blank or non-positive entries so only real overrides are stored.
+ * Returns undefined when nothing is left.
+ */
+export function cleanSpreadRateOverrides(overrides?: SpreadRateOverrides): SpreadRateOverrides | undefined {
+  if (!overrides) return undefined;
+  const cleaned: SpreadRateOverrides = {};
+  (['baseFloor', 'baseVertical', 'topFloor', 'topVertical'] as const).forEach((key) => {
+    const value = overrides[key];
+    if (validSpreadOverride(value)) cleaned[key] = value;
+  });
+  return Object.keys(cleaned).length > 0 ? cleaned : undefined;
+}
+
+/** Base and top coat counts for a system, honoring the legacy doubleBroadcast flag. */
+export function systemCoats(system: Pick<ChipSystem, 'baseCoats' | 'topCoats'>): { baseCoats: number; topCoats: number } {
+  const legacyDoubleBroadcast = (system as unknown as { doubleBroadcast?: boolean }).doubleBroadcast;
+  return {
+    baseCoats: Math.max(system.baseCoats ?? 1, 0),
+    topCoats: Math.max(system.topCoats ?? (legacyDoubleBroadcast ? 2 : 1), 0),
+  };
+}
+
+/** Gallons for `sqft` at `spread` sqft/gal per coat; zero when the rate is unset. */
+function coatGallons(sqft: number, spread: number, coats: number): number {
+  return spread > 0 ? (sqft / spread) * coats : 0;
+}
+
 /** Shipping on purchased goods: `shippingFactor` is a percentage (5 = 5%). */
 export function calculateShippingCost(purchasedCost: number, shippingFactor: number | undefined): number {
   return purchasedCost * ((shippingFactor ?? 0) / 100);
@@ -105,9 +173,7 @@ export function calculateJobOutputs(
     feetPerLb,
     boxCost,
     baseSpread,
-    baseCoats,
     topSpread,
-    topCoats,
     cyclo1Spread,
     cyclo1Coats,
   } = system;
@@ -145,23 +211,24 @@ export function calculateJobOutputs(
   // Chip cost
   const chipCost = chipNeeded * boxCost;
 
-  const verticalSpreadUsageMultiplier = pricing.verticalSpreadUsageMultiplier ?? 1.25;
+  // Spread rates per surface: system defaults (vertical = floor rate / vertical spread
+  // usage multiplier) unless the job overrides them.
+  const spreadRates = resolveSpreadRates({ baseSpread, topSpread }, pricing, inputs.spreadRateOverrides);
 
-  // Base gallons: floor / baseSpread + (vertical / baseSpread) * vertical spread usage multiplier
-  const normalizedBaseCoats = Math.max(baseCoats ?? 1, 0);
-  const baseGallons = baseSpread > 0
-    ? ((floorFootage / baseSpread) + ((verticalFootage / baseSpread) * verticalSpreadUsageMultiplier)) * normalizedBaseCoats
-    : 0;
+  const { baseCoats: normalizedBaseCoats, topCoats: normalizedTopCoats } = systemCoats(system);
+
+  // Base gallons: (floor / floor rate + vertical / vertical rate) × base coats
+  const baseFloorGallons = coatGallons(floorFootage, spreadRates.baseFloor, normalizedBaseCoats);
+  const baseVerticalGallons = coatGallons(verticalFootage, spreadRates.baseVertical, normalizedBaseCoats);
+  const baseGallons = baseFloorGallons + baseVerticalGallons;
 
   // Base cost
   const baseCost = baseGallons * baseCostPerGal;
 
   // Top gallons: spread-based gallons multiplied by configured top coats
-  const legacyDoubleBroadcast = (system as unknown as { doubleBroadcast?: boolean }).doubleBroadcast;
-  const normalizedTopCoats = Math.max(topCoats ?? (legacyDoubleBroadcast ? 2 : 1), 0);
-  const topGallons = topSpread > 0
-    ? ((floorFootage / topSpread) + ((verticalFootage / topSpread) * verticalSpreadUsageMultiplier)) * normalizedTopCoats
-    : 0;
+  const topFloorGallons = coatGallons(floorFootage, spreadRates.topFloor, normalizedTopCoats);
+  const topVerticalGallons = coatGallons(verticalFootage, spreadRates.topVertical, normalizedTopCoats);
+  const topGallons = topFloorGallons + topVerticalGallons;
 
   // Top cost
   const topCost = topGallons * topCostPerGal;
@@ -352,9 +419,14 @@ export function calculateJobOutputs(
     chipPoundsNeeded,
     chipCost,
     baseGallons,
+    baseFloorGallons,
+    baseVerticalGallons,
     baseCost,
     topGallons,
+    topFloorGallons,
+    topVerticalGallons,
     topCost,
+    spreadRates,
     crackFillGallons,
     crackFillCost,
     cyclo1Needed,

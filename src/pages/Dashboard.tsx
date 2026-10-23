@@ -190,6 +190,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
             coatingRemoval: job.coatingRemoval || 'None',
             moistureMitigation: job.moistureMitigation || false,
             tags: job.tags,
+            spreadRateOverrides: job.spreadRateOverrides,
           },
           job.systemSnapshot,
           mergedCosts,

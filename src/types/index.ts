@@ -455,6 +455,26 @@ export interface InventoryActualsApplied {
   resolvedLines?: InventoryActualResolvedLine[]; // complete resolved deduction lines; authoritative for reversal
 }
 
+/**
+ * Per-job spread rate overrides, in sqft per gallon per coat. A field left out
+ * uses the system default (vertical defaults to the floor rate divided by
+ * Pricing.verticalSpreadUsageMultiplier).
+ */
+export interface SpreadRateOverrides {
+  baseFloor?: number;
+  baseVertical?: number;
+  topFloor?: number;
+  topVertical?: number;
+}
+
+/** Spread rates a job's estimate actually uses, in sqft per gallon per coat. */
+export interface SpreadRates {
+  baseFloor: number;
+  baseVertical: number;
+  topFloor: number;
+  topVertical: number;
+}
+
 export interface Job {
   id: string;
   name: string;
@@ -513,6 +533,7 @@ export interface Job {
   coatingRemoval?: CoatingRemovalType; // Type of coating removal needed
   moistureMitigation?: boolean; // Whether moisture mitigation is needed
   disableGasHeater?: boolean; // If true, gas heater cost is forced to zero
+  spreadRateOverrides?: SpreadRateOverrides; // Job-level spread rate assumptions (absent = system defaults)
   // Actual pricing breakdown (editable, persisted)
   actualDiscount?: number;
   actualCrackPrice?: number;
@@ -526,8 +547,14 @@ export interface Job {
   actualMoistureMitigationPrice?: number;
   // Actual job execution data (only relevant for Won jobs)
   actualInstallSchedule?: ActualDaySchedule[];
-  actualBaseCoatGallons?: number;
-  actualTopCoatGallons?: number;
+  actualBaseCoatGallons?: number; // Total base coat used; the sum of the floor/vertical split when one is recorded
+  actualTopCoatGallons?: number;  // Total top coat used; the sum of the floor/vertical split when one is recorded
+  // Where the coating went, for spread rate tracking. Absent on jobs recorded as a total only.
+  actualBaseCoatFloorGallons?: number;
+  actualBaseCoatVerticalGallons?: number;
+  actualTopCoatFloorGallons?: number;
+  actualTopCoatVerticalGallons?: number;
+  excludeFromSpreadReport?: boolean; // Leave this job out of the spread rate report
   actualCyclo1Gallons?: number;
   actualTintOz?: number;         // Combined base + top tint, in oz
   actualChipBoxes?: number;
@@ -642,9 +669,14 @@ export interface JobCalculation {
   chipPoundsNeeded: number; // unrounded lbs before boxing
   chipCost: number;
   baseGallons: number;
+  baseFloorGallons: number;
+  baseVerticalGallons: number;
   baseCost: number;
   topGallons: number;
+  topFloorGallons: number;
+  topVerticalGallons: number;
   topCost: number;
+  spreadRates: SpreadRates; // Effective spread rates after job overrides
   crackFillGallons: number;
   crackFillCost: number;
   cyclo1Needed: number;
