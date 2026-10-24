@@ -140,11 +140,11 @@ function InventoryAfterJob({ lines, ignored }: { lines: ProjectedLine[]; ignored
               <td className="py-1 pr-6 text-slate-700">{line.label}</td>
               <td className="py-1 pr-6 text-slate-500">{line.unit}</td>
               <td className="py-1 pr-6 text-right tabular-nums">{formatQty(line.before, line.unit)}</td>
-              <td className="py-1 pr-6 text-right tabular-nums">
-                −{formatQty(line.fromInventory, line.unit)}
-                {line.fromReclaim > 0 && (
+              <td className={`py-1 pr-6 text-right tabular-nums ${line.needed > line.before ? 'text-red-600' : ''}`}>
+                −{formatQty(line.needed, line.unit)}
+                {line.reclaimed > 0 && (
                   <span className="block text-[11px] text-gf-dark-green">
-                    {formatQty(line.fromReclaim, line.unit)} more covered by reclaim
+                    +{formatQty(line.reclaimed, line.unit)} reclaimed
                   </span>
                 )}
               </td>
@@ -319,41 +319,21 @@ export default function JobSummaryModal({
 
     const moistureMitigation = activeRows.reduce((s, r) => s + r.moistureMitigationGallons, 0);
 
-    // Sequential chip reclaim simulation: reclaim from Job N feeds into Job N+1
+    // Reclaimed chip goes back into inventory after each job, so the net chip
+    // required is what the jobs use less what they reclaim (matches the
+    // running balance in each job's Inventory After Job)
     const reclaimRate = (currentPricing.chipReclaimRate ?? 0) / 100;
 
     // Group jobs by blend + chip type (each is its own inventory item, shared by
-    // every system using that chip) in chronological order (activeRows inherits
-    // filteredJobs sort)
-    const chipBuckets = new Map<
-      string,
-      { blend: string; chipType?: string; lbsList: number[]; required: number }
-    >();
+    // every system using that chip)
+    const chipBuckets = new Map<string, { blend: string; chipType?: string; required: number }>();
     for (const r of activeRows) {
       if (r.chipBlend && r.chipLbs > 0) {
         const key = chipInventoryKey(r.chipBlend, r.chipType);
-        const bucket = chipBuckets.get(key) ?? {
-          blend: r.chipBlend,
-          chipType: r.chipType,
-          lbsList: [],
-          required: 0,
-        };
-        bucket.lbsList.push(r.chipLbs);
+        const bucket = chipBuckets.get(key) ?? { blend: r.chipBlend, chipType: r.chipType, required: 0 };
+        bucket.required += r.chipLbs * (1 - reclaimRate);
         chipBuckets.set(key, bucket);
       }
-    }
-
-    // For each bucket, simulate sequential reclaim to compute net required from inventory
-    for (const bucket of chipBuckets.values()) {
-      let requiredFromInventory = 0;
-      let reclaimPool = 0;
-      for (const lbs of bucket.lbsList) {
-        const useFromReclaim = Math.min(lbs, reclaimPool);
-        const useFromInventory = lbs - useFromReclaim;
-        requiredFromInventory += useFromInventory;
-        reclaimPool = reclaimPool - useFromReclaim + lbs * reclaimRate;
-      }
-      bucket.required = requiredFromInventory;
     }
 
     // Aggregate resolved tint lines by color
@@ -734,7 +714,7 @@ export default function JobSummaryModal({
                   />
                 )}
 
-                {/* Chip by blend + system — required accounts for sequential reclaim */}
+                {/* Chip by blend + system — required is net of reclaim */}
                 {totals.chipTotals.map((chip) => {
                   if (chip.required === 0) return null;
                   return (
