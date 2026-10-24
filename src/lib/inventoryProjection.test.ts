@@ -72,6 +72,21 @@ describe('projectInventoryAfterJobs', () => {
     assert.equal(c.after, 36.25);
   });
 
+  test('reclaimed chip is added to what is left after the job', () => {
+    const result = projectInventoryAfterJobs(
+      [
+        { id: 'a', needs: [chip(150, 160)] },
+        { id: 'b', needs: [chip(40, 160)] },
+      ],
+      0.5
+    );
+    // 160 - 150 = 10 left, + 75 reclaimed = 85
+    assert.equal(result.get('a')![0].after, 85);
+    // 85 - 40 = 45 left, + 20 reclaimed = 65
+    assert.equal(result.get('b')![0].before, 85);
+    assert.equal(result.get('b')![0].after, 65);
+  });
+
   test('non-chip materials are never offset by reclaim', () => {
     const result = projectInventoryAfterJobs(
       [
