@@ -50,7 +50,7 @@ describe('projectInventoryAfterJobs', () => {
     assert.equal(lines[0].after, 5);
   });
 
-  test('reclaimed chip from earlier jobs offsets inventory draw', () => {
+  test('reclaimed chip goes back into inventory after each job', () => {
     const result = projectInventoryAfterJobs(
       [
         { id: 'a', needs: [chip(40)] },
@@ -59,19 +59,17 @@ describe('projectInventoryAfterJobs', () => {
       ],
       0.25
     );
+    // 40 used, 10 reclaimed
     const a = result.get('a')![0];
-    assert.equal(a.fromReclaim, 0);
-    assert.equal(a.after, 60);
-    // 10 lbs reclaimed from job a
+    assert.equal(a.needed, 40);
+    assert.equal(a.reclaimed, 10);
+    assert.equal(a.after, 70);
     const b = result.get('b')![0];
-    assert.equal(b.fromReclaim, 10);
-    assert.equal(b.fromInventory, 30);
-    assert.equal(b.after, 30);
-    // 10 lbs reclaimed from job b covers all of job c
+    assert.equal(b.before, 70);
+    assert.equal(b.after, 40);
     const c = result.get('c')![0];
-    assert.equal(c.fromReclaim, 5);
-    assert.equal(c.fromInventory, 0);
-    assert.equal(c.after, 30);
+    assert.equal(c.reclaimed, 1.25);
+    assert.equal(c.after, 36.25);
   });
 
   test('non-chip materials are never offset by reclaim', () => {
@@ -82,7 +80,7 @@ describe('projectInventoryAfterJobs', () => {
       ],
       0.5
     );
-    assert.equal(result.get('b')![0].fromReclaim, 0);
+    assert.equal(result.get('b')![0].reclaimed, 0);
     assert.equal(result.get('b')![0].after, 2);
   });
 });

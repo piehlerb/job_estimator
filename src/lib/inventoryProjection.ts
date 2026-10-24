@@ -6,8 +6,8 @@
  * every job shows what is left once it and every earlier job are done.
  *
  * Chip lines are reclaimable: a share of the chip each job uses (the reclaim
- * rate) is recovered and spent first on the next job using the same chip, the
- * same sequential simulation the Job Summary totals use.
+ * rate) is recovered once the job is done and goes back into inventory, so it
+ * is available to every later job using the same chip.
  */
 
 export type ProjectionUnit = 'gal' | 'lbs' | 'oz';
@@ -18,7 +18,7 @@ export interface ProjectionNeed {
   unit: ProjectionUnit;
   amount: number; // Quantity this job needs
   onHand: number; // Starting inventory for this key (read the first time the key appears)
-  reclaimable?: boolean; // Chip: reclaimed chip from earlier jobs offsets inventory draw
+  reclaimable?: boolean; // Chip: part of what the job uses is reclaimed back into inventory
 }
 
 export interface ProjectionJob {
@@ -30,11 +30,10 @@ export interface ProjectedLine {
   key: string;
   label: string;
   unit: ProjectionUnit;
-  needed: number;
-  fromReclaim: number; // Part of `needed` covered by reclaimed chip
-  fromInventory: number; // Part of `needed` drawn from inventory
+  needed: number; // Drawn from inventory for this job
+  reclaimed: number; // Returned to inventory after this job (chip reclaim)
   before: number; // Inventory before this job
-  after: number; // Inventory after this job (negative = short)
+  after: number; // Inventory after this job, net of reclaim (negative = short)
 }
 
 export function projectInventoryAfterJobs(
@@ -42,7 +41,6 @@ export function projectInventoryAfterJobs(
   reclaimRate = 0
 ): Map<string, ProjectedLine[]> {
   const balance = new Map<string, number>();
-  const reclaimPool = new Map<string, number>();
   const result = new Map<string, ProjectedLine[]>();
 
   for (const job of jobs) {
@@ -58,22 +56,15 @@ export function projectInventoryAfterJobs(
     const lines: ProjectedLine[] = [];
     for (const need of merged.values()) {
       const before = balance.has(need.key) ? balance.get(need.key)! : need.onHand;
-      let fromReclaim = 0;
-      if (need.reclaimable) {
-        const pool = reclaimPool.get(need.key) ?? 0;
-        fromReclaim = Math.min(need.amount, pool);
-        reclaimPool.set(need.key, pool - fromReclaim + need.amount * reclaimRate);
-      }
-      const fromInventory = need.amount - fromReclaim;
-      const after = before - fromInventory;
+      const reclaimed = need.reclaimable ? need.amount * reclaimRate : 0;
+      const after = before - need.amount + reclaimed;
       balance.set(need.key, after);
       lines.push({
         key: need.key,
         label: need.label,
         unit: need.unit,
         needed: need.amount,
-        fromReclaim,
-        fromInventory,
+        reclaimed,
         before,
         after,
       });

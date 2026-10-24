@@ -140,11 +140,11 @@ function InventoryAfterJob({ lines, ignored }: { lines: ProjectedLine[]; ignored
               <td className="py-1 pr-6 text-slate-700">{line.label}</td>
               <td className="py-1 pr-6 text-slate-500">{line.unit}</td>
               <td className="py-1 pr-6 text-right tabular-nums">{formatQty(line.before, line.unit)}</td>
-              <td className="py-1 pr-6 text-right tabular-nums">
-                −{formatQty(line.fromInventory, line.unit)}
-                {line.fromReclaim > 0 && (
+              <td className={`py-1 pr-6 text-right tabular-nums ${line.needed > line.before ? 'text-red-600' : ''}`}>
+                −{formatQty(line.needed, line.unit)}
+                {line.reclaimed > 0 && (
                   <span className="block text-[11px] text-gf-dark-green">
-                    {formatQty(line.fromReclaim, line.unit)} more covered by reclaim
+                    +{formatQty(line.reclaimed, line.unit)} reclaimed
                   </span>
                 )}
               </td>
