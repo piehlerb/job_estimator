@@ -18,6 +18,7 @@ import SaveButton from '../components/SaveButton';
 import { useCanEdit } from '../hooks/useAreaAccess';
 import ViewOnlyNotice from '../components/ViewOnlyNotice';
 import { useSaveFlash } from '../hooks/useSaveFlash';
+import { type CoatingUnit, resolveCoatingUnit } from '../lib/coatingUnits';
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -88,6 +89,7 @@ export default function Settings() {
     staleContactDays: '',
     defaultReminderDays: '',
     defaultReminderTime: '',
+    actualCoatingUnit: 'gallons' as CoatingUnit,
   });
 
   // Discount config state
@@ -135,6 +137,7 @@ export default function Settings() {
         staleContactDays: (mergedPricing.staleContactDays ?? 30).toString(),
         defaultReminderDays: (mergedPricing.defaultReminderDays ?? 7).toString(),
         defaultReminderTime: mergedPricing.defaultReminderTime ?? '05:00',
+        actualCoatingUnit: resolveCoatingUnit(mergedPricing.actualCoatingUnit),
       });
       setAutoReminderRules((mergedPricing.autoReminderRules ?? []).map(toRuleDraft));
 
@@ -171,6 +174,7 @@ export default function Settings() {
         staleContactDays: '30',
         defaultReminderDays: '7',
         defaultReminderTime: '05:00',
+        actualCoatingUnit: 'gallons',
       });
       setAutoReminderRules([]);
       setDiscountMode('per_sqft');
@@ -244,6 +248,7 @@ export default function Settings() {
         staleContactDays: parseFloat(form.staleContactDays) || 30,
         defaultReminderDays: parseInt(form.defaultReminderDays) || 7,
         defaultReminderTime: form.defaultReminderTime || '05:00',
+        actualCoatingUnit: form.actualCoatingUnit,
       });
 
       pricingFlash.flashSaved();
@@ -1069,6 +1074,39 @@ export default function Settings() {
       </div>
 
       <fieldset disabled={!canEdit} className="space-y-6 min-w-0">
+      {/* Job Actuals */}
+      <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
+        <h3 className="text-lg font-semibold text-slate-900 mb-1">Job Actuals</h3>
+        <p className="text-sm text-slate-600 mb-4">How the crew records what was used on a job.</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-semibold text-slate-900 mb-2">Base &amp; Top Coat Unit</label>
+            <select
+              value={form.actualCoatingUnit}
+              onChange={(e) => setForm({ ...form, actualCoatingUnit: resolveCoatingUnit(e.target.value) })}
+              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime focus:border-transparent"
+            >
+              <option value="gallons">Gallons</option>
+              <option value="ounces">Ounces</option>
+            </select>
+            <p className="text-xs text-slate-500 mt-1">
+              Enter actual base and top coat in this unit. Amounts are stored in gallons, so jobs already recorded show correctly in either unit (1 gal = 128 oz).
+            </p>
+          </div>
+        </div>
+        <div className="pt-4">
+          <SaveButton
+            type="button"
+            saving={saving}
+            saved={pricingFlash.saved}
+            onClick={() => handleSavePricing()}
+            label="Save Settings"
+            icon={null}
+            className="px-6 py-2 rounded-lg font-semibold disabled:opacity-50"
+          />
+        </div>
+      </div>
+
       {/* Reminder Defaults */}
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
         <h3 className="text-lg font-semibold text-slate-900 mb-1">Reminder Defaults</h3>

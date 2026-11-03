@@ -62,6 +62,7 @@ import { stageForLinkedJobStatus } from '../lib/leadPipeline';
 import { ensureCustomerPersistence } from '../lib/customerPersistence';
 import { localToday, toLocalDateString, timestampToLocalDateString } from '../lib/dateUtils';
 import { buildAutoReminders } from '../lib/autoReminders';
+import { type CoatingUnit, resolveCoatingUnit, coatingUnitLabel, coatingUnitStep, gallonsToInput, inputToGallons, formatCoatingEstimate } from '../lib/coatingUnits';
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -181,6 +182,9 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
 
   // Actuals state (for Won jobs)
   const [actualInstallSchedule, setActualInstallSchedule] = useState<ActualDaySchedule[]>([]);
+  // Base/top coat actuals below are held in this unit (the org's setting when
+  // the job loaded) and converted to gallons when calculated or saved.
+  const [coatUnit, setCoatUnit] = useState<CoatingUnit>('gallons');
   const [actualMaterials, setActualMaterials] = useState({
     actualBaseCoatGallons: '',
     actualTopCoatGallons: '',
@@ -326,8 +330,8 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
       {
         actualSchedule: actualInstallSchedule,
         products: jobProducts,
-        actualBaseCoatGallons: parseFloat(actualMaterials.actualBaseCoatGallons) || 0,
-        actualTopCoatGallons: parseFloat(actualMaterials.actualTopCoatGallons) || 0,
+        actualBaseCoatGallons: inputToGallons(actualMaterials.actualBaseCoatGallons, coatUnit) ?? 0,
+        actualTopCoatGallons: inputToGallons(actualMaterials.actualTopCoatGallons, coatUnit) ?? 0,
         actualCyclo1Gallons: parseFloat(actualMaterials.actualCyclo1Gallons) || 0,
         actualTintOz: parseFloat(actualMaterials.actualTintOz) || 0,
         actualChipBoxes: parseFloat(actualMaterials.actualChipBoxes) || 0,
@@ -346,7 +350,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
       laborersToUse
     );
     setActualCalculation(calc);
-  }, [actualInstallSchedule, actualMaterials, formData.totalPrice, formData.installDays, formData.installDate, formData.travelDistance, formData.disableGasHeater, existingJob, activeLaborers, costs, pricing, jobProducts]);
+  }, [actualInstallSchedule, actualMaterials, coatUnit, formData.totalPrice, formData.installDays, formData.installDate, formData.travelDistance, formData.disableGasHeater, existingJob, activeLaborers, costs, pricing, jobProducts]);
 
 
   const productsTotalPrice = useMemo(
@@ -684,6 +688,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
         // Merge with defaults to ensure new fields have values
         setPricing({ ...getDefaultPricing(), ...storedPricing });
       }
+      setCoatUnit(resolveCoatingUnit(storedPricing?.actualCoatingUnit));
 
       if (!jobId) {
         const defaultSystem = allSystems.find((s) => s.isDefault);
@@ -805,13 +810,15 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
           ) {
             actualsInitialized.current = true;
           }
+          // Stored in gallons; shown in the org's entry unit
+          const unit = resolveCoatingUnit(storedPricing?.actualCoatingUnit);
           setActualMaterials({
-            actualBaseCoatGallons: job.actualBaseCoatGallons?.toString() || '',
-            actualTopCoatGallons: job.actualTopCoatGallons?.toString() || '',
-            actualBaseCoatFloorGallons: job.actualBaseCoatFloorGallons?.toString() || '',
-            actualBaseCoatVerticalGallons: job.actualBaseCoatVerticalGallons?.toString() || '',
-            actualTopCoatFloorGallons: job.actualTopCoatFloorGallons?.toString() || '',
-            actualTopCoatVerticalGallons: job.actualTopCoatVerticalGallons?.toString() || '',
+            actualBaseCoatGallons: gallonsToInput(job.actualBaseCoatGallons, unit),
+            actualTopCoatGallons: gallonsToInput(job.actualTopCoatGallons, unit),
+            actualBaseCoatFloorGallons: gallonsToInput(job.actualBaseCoatFloorGallons, unit),
+            actualBaseCoatVerticalGallons: gallonsToInput(job.actualBaseCoatVerticalGallons, unit),
+            actualTopCoatFloorGallons: gallonsToInput(job.actualTopCoatFloorGallons, unit),
+            actualTopCoatVerticalGallons: gallonsToInput(job.actualTopCoatVerticalGallons, unit),
             actualCyclo1Gallons: job.actualCyclo1Gallons?.toString() || '',
             actualTintOz: job.actualTintOz?.toString() || '',
             actualChipBoxes: job.actualChipBoxes?.toString() || '',
@@ -2142,12 +2149,12 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
         actualMoistureMitigationPrice: parseFloat(formData.actualMoistureMitigationPrice) || undefined,
         // Actual execution data
         actualInstallSchedule: actualInstallSchedule.length > 0 ? actualInstallSchedule : undefined,
-        actualBaseCoatGallons: parseFloat(actualMaterials.actualBaseCoatGallons) || undefined,
-        actualTopCoatGallons: parseFloat(actualMaterials.actualTopCoatGallons) || undefined,
-        actualBaseCoatFloorGallons: parseFloat(actualMaterials.actualBaseCoatFloorGallons) || undefined,
-        actualBaseCoatVerticalGallons: parseFloat(actualMaterials.actualBaseCoatVerticalGallons) || undefined,
-        actualTopCoatFloorGallons: parseFloat(actualMaterials.actualTopCoatFloorGallons) || undefined,
-        actualTopCoatVerticalGallons: parseFloat(actualMaterials.actualTopCoatVerticalGallons) || undefined,
+        actualBaseCoatGallons: inputToGallons(actualMaterials.actualBaseCoatGallons, coatUnit),
+        actualTopCoatGallons: inputToGallons(actualMaterials.actualTopCoatGallons, coatUnit),
+        actualBaseCoatFloorGallons: inputToGallons(actualMaterials.actualBaseCoatFloorGallons, coatUnit),
+        actualBaseCoatVerticalGallons: inputToGallons(actualMaterials.actualBaseCoatVerticalGallons, coatUnit),
+        actualTopCoatFloorGallons: inputToGallons(actualMaterials.actualTopCoatFloorGallons, coatUnit),
+        actualTopCoatVerticalGallons: inputToGallons(actualMaterials.actualTopCoatVerticalGallons, coatUnit),
         excludeFromSpreadReport: existingJob?.excludeFromSpreadReport,
         actualCyclo1Gallons: parseFloat(actualMaterials.actualCyclo1Gallons) || undefined,
         actualTintOz: parseFloat(actualMaterials.actualTintOz) || undefined,
@@ -4178,19 +4185,19 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
                       const split = coatHasSplit(coat);
                       return (
                         <div key={coat} className="rounded-lg border border-slate-200 bg-white p-3">
-                          <p className="text-xs font-semibold text-slate-700 mb-2">{title} (gal)</p>
+                          <p className="text-xs font-semibold text-slate-700 mb-2">{title} ({coatingUnitLabel(coatUnit)})</p>
                           <div className="grid grid-cols-3 gap-2">
                             {(['floor', 'vertical'] as const).map((surface) => (
                               <div key={surface}>
                                 <label className="block text-[11px] font-medium text-slate-600 mb-1">
                                   {surface === 'floor' ? 'Floor' : 'Vertical'}
-                                  {est && <span className="ml-1 text-slate-400 font-normal">est. {est[surface].toFixed(1)}</span>}
+                                  {est && <span className="ml-1 text-slate-400 font-normal">est. {formatCoatingEstimate(est[surface], coatUnit)}</span>}
                                 </label>
                                 <input
                                   type="number"
                                   min="0"
-                                  step="0.1"
-                                  placeholder={est ? est[surface].toFixed(1) : '0'}
+                                  step={coatingUnitStep(coatUnit)}
+                                  placeholder={est ? formatCoatingEstimate(est[surface], coatUnit) : '0'}
                                   value={actualMaterials[fields[surface]]}
                                   onChange={(e) => handleCoatSplitChange(coat, surface, e.target.value)}
                                   className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime"
@@ -4200,13 +4207,13 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
                             <div>
                               <label className="block text-[11px] font-medium text-slate-600 mb-1">
                                 Total
-                                {est && <span className="ml-1 text-slate-400 font-normal">est. {est.total.toFixed(1)}</span>}
+                                {est && <span className="ml-1 text-slate-400 font-normal">est. {formatCoatingEstimate(est.total, coatUnit)}</span>}
                               </label>
                               <input
                                 type="number"
                                 min="0"
-                                step="0.1"
-                                placeholder={est ? est.total.toFixed(1) : '0'}
+                                step={coatingUnitStep(coatUnit)}
+                                placeholder={est ? formatCoatingEstimate(est.total, coatUnit) : '0'}
                                 value={actualMaterials[fields.total]}
                                 readOnly={split}
                                 title={split ? 'Floor + vertical' : undefined}
@@ -4225,14 +4232,14 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
                     <>
                       <div>
                         <label className="block text-xs font-semibold text-slate-700 mb-1">
-                          Base Coat (gal)
-                          {calculation && <span className="ml-1 text-slate-400 font-normal">est. {calculation.baseGallons.toFixed(1)}</span>}
+                          Base Coat ({coatingUnitLabel(coatUnit)})
+                          {calculation && <span className="ml-1 text-slate-400 font-normal">est. {formatCoatingEstimate(calculation.baseGallons, coatUnit)}</span>}
                         </label>
                         <input
                           type="number"
                           min="0"
-                          step="0.1"
-                          placeholder={calculation ? calculation.baseGallons.toFixed(1) : '0'}
+                          step={coatingUnitStep(coatUnit)}
+                          placeholder={calculation ? formatCoatingEstimate(calculation.baseGallons, coatUnit) : '0'}
                           value={actualMaterials.actualBaseCoatGallons}
                           onChange={(e) => setActualMaterials(prev => ({ ...prev, actualBaseCoatGallons: e.target.value }))}
                           className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime"
@@ -4240,14 +4247,14 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
                       </div>
                       <div>
                         <label className="block text-xs font-semibold text-slate-700 mb-1">
-                          Top Coat (gal)
-                          {calculation && <span className="ml-1 text-slate-400 font-normal">est. {calculation.topGallons.toFixed(1)}</span>}
+                          Top Coat ({coatingUnitLabel(coatUnit)})
+                          {calculation && <span className="ml-1 text-slate-400 font-normal">est. {formatCoatingEstimate(calculation.topGallons, coatUnit)}</span>}
                         </label>
                         <input
                           type="number"
                           min="0"
-                          step="0.1"
-                          placeholder={calculation ? calculation.topGallons.toFixed(1) : '0'}
+                          step={coatingUnitStep(coatUnit)}
+                          placeholder={calculation ? formatCoatingEstimate(calculation.topGallons, coatUnit) : '0'}
                           value={actualMaterials.actualTopCoatGallons}
                           onChange={(e) => setActualMaterials(prev => ({ ...prev, actualTopCoatGallons: e.target.value }))}
                           className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime"

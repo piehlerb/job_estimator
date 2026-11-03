@@ -1350,6 +1350,7 @@ export type Database = {
       pricing: {
         Row: {
           abrasion_resistance_price_per_sqft: number
+          actual_coating_unit: string | null
           anti_slip_price_per_sqft: number
           auto_reminder_rules: Json | null
           chip_reclaim_rate: number | null
@@ -1386,6 +1387,7 @@ export type Database = {
         }
         Insert: {
           abrasion_resistance_price_per_sqft?: number
+          actual_coating_unit?: string | null
           anti_slip_price_per_sqft?: number
           auto_reminder_rules?: Json | null
           chip_reclaim_rate?: number | null
@@ -1422,6 +1424,7 @@ export type Database = {
         }
         Update: {
           abrasion_resistance_price_per_sqft?: number
+          actual_coating_unit?: string | null
           anti_slip_price_per_sqft?: number
           auto_reminder_rules?: Json | null
           chip_reclaim_rate?: number | null
