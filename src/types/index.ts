@@ -111,6 +111,7 @@ export interface Pricing {
   defaultReminderDays?: number; // Days from today for default reminder date (default 7)
   defaultReminderTime?: string; // Default reminder time in HH:mm format (default "05:00")
   autoReminderRules?: AutoReminderRule[]; // Reminders added automatically to new jobs
+  actualCoatingUnit?: 'gallons' | 'ounces'; // Unit for entering actual base/top coat, Cyclo1 and MVB on jobs (default gallons); always stored as gallons
   createdAt: string;
   updatedAt: string;
 }
