@@ -182,7 +182,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
 
   // Actuals state (for Won jobs)
   const [actualInstallSchedule, setActualInstallSchedule] = useState<ActualDaySchedule[]>([]);
-  // Base/top coat actuals below are held in this unit (the org's setting when
+  // Base/top coat, Cyclo1 and MVB actuals below are held in this unit (the org's setting when
   // the job loaded) and converted to gallons when calculated or saved.
   const [coatUnit, setCoatUnit] = useState<CoatingUnit>('gallons');
   const [actualMaterials, setActualMaterials] = useState({
@@ -332,11 +332,11 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
         products: jobProducts,
         actualBaseCoatGallons: inputToGallons(actualMaterials.actualBaseCoatGallons, coatUnit) ?? 0,
         actualTopCoatGallons: inputToGallons(actualMaterials.actualTopCoatGallons, coatUnit) ?? 0,
-        actualCyclo1Gallons: parseFloat(actualMaterials.actualCyclo1Gallons) || 0,
+        actualCyclo1Gallons: inputToGallons(actualMaterials.actualCyclo1Gallons, coatUnit) ?? 0,
         actualTintOz: parseFloat(actualMaterials.actualTintOz) || 0,
         actualChipBoxes: parseFloat(actualMaterials.actualChipBoxes) || 0,
         actualCrackRepairOz: parseFloat(actualMaterials.actualCrackRepairOz) || 0,
-        actualMoistureMitigationGallons: parseFloat(actualMaterials.actualMoistureMitigationGallons) || 0,
+        actualMoistureMitigationGallons: inputToGallons(actualMaterials.actualMoistureMitigationGallons, coatUnit) ?? 0,
         chipBoxCost,
         totalPrice: parseFloat(formData.totalPrice) || 0,
         installDays: parseFloat(formData.installDays) || 1,
@@ -810,7 +810,7 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
           ) {
             actualsInitialized.current = true;
           }
-          // Stored in gallons; shown in the org's entry unit
+          // Coatings are stored in gallons; shown in the org's entry unit
           const unit = resolveCoatingUnit(storedPricing?.actualCoatingUnit);
           setActualMaterials({
             actualBaseCoatGallons: gallonsToInput(job.actualBaseCoatGallons, unit),
@@ -819,11 +819,11 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
             actualBaseCoatVerticalGallons: gallonsToInput(job.actualBaseCoatVerticalGallons, unit),
             actualTopCoatFloorGallons: gallonsToInput(job.actualTopCoatFloorGallons, unit),
             actualTopCoatVerticalGallons: gallonsToInput(job.actualTopCoatVerticalGallons, unit),
-            actualCyclo1Gallons: job.actualCyclo1Gallons?.toString() || '',
+            actualCyclo1Gallons: gallonsToInput(job.actualCyclo1Gallons, unit),
             actualTintOz: job.actualTintOz?.toString() || '',
             actualChipBoxes: job.actualChipBoxes?.toString() || '',
             actualCrackRepairOz: job.actualCrackRepairOz?.toString() || '',
-            actualMoistureMitigationGallons: job.actualMoistureMitigationGallons?.toString() || '',
+            actualMoistureMitigationGallons: gallonsToInput(job.actualMoistureMitigationGallons, unit),
             actualSlabTemp: job.actualSlabTemp?.toString() || '',
             actualExpenseAdjustment: job.actualExpenseAdjustment?.toString() || '',
             actualExpenseAdjustmentNotes: job.actualExpenseAdjustmentNotes || '',
@@ -2156,11 +2156,11 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
         actualTopCoatFloorGallons: inputToGallons(actualMaterials.actualTopCoatFloorGallons, coatUnit),
         actualTopCoatVerticalGallons: inputToGallons(actualMaterials.actualTopCoatVerticalGallons, coatUnit),
         excludeFromSpreadReport: existingJob?.excludeFromSpreadReport,
-        actualCyclo1Gallons: parseFloat(actualMaterials.actualCyclo1Gallons) || undefined,
+        actualCyclo1Gallons: inputToGallons(actualMaterials.actualCyclo1Gallons, coatUnit),
         actualTintOz: parseFloat(actualMaterials.actualTintOz) || undefined,
         actualChipBoxes: parseFloat(actualMaterials.actualChipBoxes) || undefined,
         actualCrackRepairOz: parseFloat(actualMaterials.actualCrackRepairOz) || undefined,
-        actualMoistureMitigationGallons: parseFloat(actualMaterials.actualMoistureMitigationGallons) || undefined,
+        actualMoistureMitigationGallons: inputToGallons(actualMaterials.actualMoistureMitigationGallons, coatUnit),
         actualSlabTemp: parseFloat(actualMaterials.actualSlabTemp) || undefined,
         inventoryActualsApplied: existingJob?.inventoryActualsApplied,
         actualExpenseAdjustment: parseFloat(actualMaterials.actualExpenseAdjustment) || undefined,
@@ -4264,14 +4264,14 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
                   )}
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Cyclo1 (gal)
-                      {calculation && <span className="ml-1 text-slate-400 font-normal">est. {calculation.cyclo1Needed.toFixed(1)}</span>}
+                      Cyclo1 ({coatingUnitLabel(coatUnit)})
+                      {calculation && <span className="ml-1 text-slate-400 font-normal">est. {formatCoatingEstimate(calculation.cyclo1Needed, coatUnit)}</span>}
                     </label>
                     <input
                       type="number"
                       min="0"
-                      step="0.1"
-                      placeholder={calculation ? calculation.cyclo1Needed.toFixed(1) : '0'}
+                      step={coatingUnitStep(coatUnit)}
+                      placeholder={calculation ? formatCoatingEstimate(calculation.cyclo1Needed, coatUnit) : '0'}
                       value={actualMaterials.actualCyclo1Gallons}
                       onChange={(e) => setActualMaterials(prev => ({ ...prev, actualCyclo1Gallons: e.target.value }))}
                       className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime"
@@ -4324,14 +4324,14 @@ export default function JobForm({ jobId, leadId, onBack, onEditJob, onViewJobShe
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      MVB (gal)
-                      {calculation && <span className="ml-1 text-slate-400 font-normal">est. {calculation.moistureMitigationGallons.toFixed(1)}</span>}
+                      MVB ({coatingUnitLabel(coatUnit)})
+                      {calculation && <span className="ml-1 text-slate-400 font-normal">est. {formatCoatingEstimate(calculation.moistureMitigationGallons, coatUnit)}</span>}
                     </label>
                     <input
                       type="number"
                       min="0"
-                      step="0.1"
-                      placeholder={calculation ? calculation.moistureMitigationGallons.toFixed(1) : '0'}
+                      step={coatingUnitStep(coatUnit)}
+                      placeholder={calculation ? formatCoatingEstimate(calculation.moistureMitigationGallons, coatUnit) : '0'}
                       value={actualMaterials.actualMoistureMitigationGallons}
                       onChange={(e) => setActualMaterials(prev => ({ ...prev, actualMoistureMitigationGallons: e.target.value }))}
                       className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gf-lime"

@@ -1,7 +1,8 @@
 /**
- * Units for entering actual base/top coat usage on a job.
+ * Units for entering actual coating usage on a job: base coat, top coat,
+ * Cyclo1 and MVB (moisture mitigation).
  *
- * Jobs always store actual coating in gallons; the unit setting only changes
+ * Jobs always store these actuals in gallons; the unit setting only changes
  * what the crew types and sees in the Actuals tab. Converting at the form's
  * edges keeps every job saved before the setting existed correct, and keeps
  * inventory, cost and spread rate math unit-free.

@@ -1080,7 +1080,7 @@ export default function Settings() {
         <p className="text-sm text-slate-600 mb-4">How the crew records what was used on a job.</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-semibold text-slate-900 mb-2">Base &amp; Top Coat Unit</label>
+            <label className="block text-sm font-semibold text-slate-900 mb-2">Coating Unit</label>
             <select
               value={form.actualCoatingUnit}
               onChange={(e) => setForm({ ...form, actualCoatingUnit: resolveCoatingUnit(e.target.value) })}
@@ -1090,7 +1090,7 @@ export default function Settings() {
               <option value="ounces">Ounces</option>
             </select>
             <p className="text-xs text-slate-500 mt-1">
-              Enter actual base and top coat in this unit. Amounts are stored in gallons, so jobs already recorded show correctly in either unit (1 gal = 128 oz).
+              Enter actual base coat, top coat, Cyclo1 and MVB in this unit. Amounts are stored in gallons, so jobs already recorded show correctly in either unit (1 gal = 128 oz).
             </p>
           </div>
         </div>
