@@ -69,10 +69,11 @@ interface MaterialRowProps {
   required: number;
   onHand: number;
   floorShare?: number; // Coating only: share of `required` that goes on the floor
+  reclaimed?: number; // Chip only: part of `required` reclaimed back into inventory
 }
 
-function MaterialRow({ label, unit, required, onHand, floorShare }: MaterialRowProps) {
-  const diff = onHand - required;
+function MaterialRow({ label, unit, required, onHand, floorShare, reclaimed = 0 }: MaterialRowProps) {
+  const diff = onHand - required + reclaimed;
   return (
     <tr className="border-b border-slate-100">
       <td className="py-2 px-4 text-slate-700">{label}</td>
@@ -80,6 +81,11 @@ function MaterialRow({ label, unit, required, onHand, floorShare }: MaterialRowP
       <td className="py-2 px-4 text-right">
         {required.toFixed(2)}
         {floorShare !== undefined && <SurfaceSplit gallons={required} floorShare={floorShare} />}
+        {reclaimed > 0 && (
+          <div className="text-[11px] text-gf-dark-green tabular-nums whitespace-nowrap">
+            +{reclaimed.toFixed(2)} reclaimed
+          </div>
+        )}
       </td>
       <td className="py-2 px-4 text-right">{onHand.toFixed(2)}</td>
       <td className={`py-2 px-4 text-right font-semibold ${diff < 0 ? 'text-red-600' : 'text-green-600'}`}>
@@ -319,9 +325,9 @@ export default function JobSummaryModal({
 
     const moistureMitigation = activeRows.reduce((s, r) => s + r.moistureMitigationGallons, 0);
 
-    // Reclaimed chip goes back into inventory after each job, so the net chip
-    // required is what the jobs use less what they reclaim (matches the
-    // running balance in each job's Inventory After Job)
+    // Required is the chip the jobs use (the sum of the per-job Chip column).
+    // Reclaimed chip goes back into inventory after each job, so it is added
+    // back in the Difference (matches the last job's Inventory After Job)
     const reclaimRate = (currentPricing.chipReclaimRate ?? 0) / 100;
 
     // Group jobs by blend + chip type (each is its own inventory item, shared by
@@ -331,7 +337,7 @@ export default function JobSummaryModal({
       if (r.chipBlend && r.chipLbs > 0) {
         const key = chipInventoryKey(r.chipBlend, r.chipType);
         const bucket = chipBuckets.get(key) ?? { blend: r.chipBlend, chipType: r.chipType, required: 0 };
-        bucket.required += r.chipLbs * (1 - reclaimRate);
+        bucket.required += r.chipLbs;
         chipBuckets.set(key, bucket);
       }
     }
@@ -349,6 +355,7 @@ export default function JobSummaryModal({
         key,
         label: bucket.chipType ? `${bucket.blend} (${bucket.chipType})` : bucket.blend,
         required: bucket.required,
+        reclaimed: bucket.required * reclaimRate,
         onHand: findChipInventoryItem(chipInventory, bucket.blend, bucket.chipType, chipTypeForSystem)?.pounds ?? 0,
       }))
       .sort((a, b) => a.label.localeCompare(b.label));
@@ -673,7 +680,7 @@ export default function JobSummaryModal({
               {' '}Difference = On Hand − Required.
               {totals.reclaimRate > 0 && (
                 <span className="ml-1 text-gf-dark-green font-medium">
-                  Chip quantities reflect {(totals.reclaimRate * 100).toFixed(0)}% reclaim rate.
+                  Chip Difference adds back {(totals.reclaimRate * 100).toFixed(0)}% reclaimed chip.
                 </span>
               )}
             </p>
@@ -714,7 +721,7 @@ export default function JobSummaryModal({
                   />
                 )}
 
-                {/* Chip by blend + system — required is net of reclaim */}
+                {/* Chip by blend + system — required is what the jobs use; reclaim is added back in the difference */}
                 {totals.chipTotals.map((chip) => {
                   if (chip.required === 0) return null;
                   return (
@@ -723,6 +730,7 @@ export default function JobSummaryModal({
                       label={`Chip — ${chip.label}`}
                       unit="lbs"
                       required={chip.required}
+                      reclaimed={chip.reclaimed}
                       onHand={chip.onHand}
                     />
                   );
