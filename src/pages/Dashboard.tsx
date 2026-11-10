@@ -1,6 +1,6 @@
-import { Plus, Trash2, FileText, Search, Bell, Check, X, ChevronDown, ChevronLeft, ChevronRight, Link, Shuffle, PhoneCall, SlidersHorizontal, Calendar, Clock, Wrench, FileSearch, AlertTriangle } from 'lucide-react';
-import { useState, useEffect, useMemo, useRef } from 'react';
-import { Star } from 'lucide-react';
+import { Plus, Trash2, FileText, Search, Bell, Check, X, ChevronDown, ChevronLeft, ChevronRight, Link, Shuffle, PhoneCall, SlidersHorizontal, Calendar, Wrench, FileSearch } from 'lucide-react';
+import { useState, useEffect, useMemo, useRef, Fragment } from 'react';
+import { Star, MoreHorizontal, Pencil } from 'lucide-react';
 import JobStarButton from '../components/JobStarButton';
 import { isHotJob, setJobHot } from '../lib/hotJobs';
 import { getJob } from '../lib/db';
@@ -31,6 +31,7 @@ interface ReminderItem {
   subject: string;
   details?: string;
   dueAt: string;
+  customerName?: string;
 }
 
 const ALL_STATUSES: JobStatus[] = ['Pending', 'Verbal', 'Won', 'Lost'];
@@ -107,9 +108,9 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
   const [nextReminderFor, setNextReminderFor] = useState<{ jobId: string; jobName: string; customerName?: string } | null>(null);
   const [nextReminderForm, setNextReminderForm] = useState({ subject: '', dueDate: '', dueTime: '', details: '' });
   const [commTemplates, setCommTemplates] = useState<CommunicationTemplate[]>([]);
-  const [overdueExpanded, setOverdueExpanded] = useState(true);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [showFilterSheet, setShowFilterSheet] = useState(false);
+  const [rowMenu, setRowMenu] = useState<{ jobId: string; top: number; right: number } | null>(null);
   const [dashboardPricing, setDashboardPricing] = useState<Pricing>(getDefaultPricing());
   const [loadingOlderJobs, setLoadingOlderJobs] = useState(false);
   const [olderJobsCursor, setOlderJobsCursor] = useState(() => getJobWorkingSetCutoff().date);
@@ -323,10 +324,11 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
     setTagMatchMode('any');
     setSearchQuery('');
     setSortBy('date');
+    setShowInactive(false);
   };
 
   // Filter and sort jobs
-  const filteredAndSortedJobs = useMemo(() => {
+  const jobsBeforeStatusFilter = useMemo(() => {
     let filtered = jobsWithCalc;
 
     // Hide Won jobs whose install date is 5+ days in the past (unless showing inactive)
@@ -345,13 +347,6 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
       filtered = filtered.filter(({ job }) =>
         (job.name || '').toLowerCase().includes(query) ||
         (job.customerName || '').toLowerCase().includes(query)
-      );
-    }
-
-    // Apply status filter
-    if (statusFilter.length > 0) {
-      filtered = filtered.filter(({ job }) =>
-        statusFilter.includes(job.status)
       );
     }
 
@@ -376,6 +371,23 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
       });
     }
 
+    return filtered;
+  }, [jobsWithCalc, searchQuery, probabilityFilter, chipBlendFilter, selectedTagFilters, tagMatchMode, showInactive]);
+
+  // Per-status counts for the status chips (reflect every filter except status itself)
+  const statusCounts = useMemo(() => {
+    const counts: Record<JobStatus, number> = { Pending: 0, Verbal: 0, Won: 0, Lost: 0 };
+    for (const { job } of jobsBeforeStatusFilter) {
+      if (job.status in counts) counts[job.status]++;
+    }
+    return counts;
+  }, [jobsBeforeStatusFilter]);
+
+  const filteredAndSortedJobs = useMemo(() => {
+    const filtered = statusFilter.length > 0
+      ? jobsBeforeStatusFilter.filter(({ job }) => statusFilter.includes(job.status))
+      : jobsBeforeStatusFilter;
+
     // Sort
     return [...filtered].sort((a, b) => {
       switch (sortBy) {
@@ -391,7 +403,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
           return new Date(b.job.createdAt).getTime() - new Date(a.job.createdAt).getTime();
       }
     });
-  }, [jobsWithCalc, searchQuery, statusFilter, probabilityFilter, chipBlendFilter, selectedTagFilters, tagMatchMode, sortBy, showInactive]);
+  }, [jobsBeforeStatusFilter, statusFilter, sortBy]);
 
   type GroupDisplayItem = {
     type: 'group';
@@ -407,33 +419,41 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
   type DisplayItem = GroupDisplayItem | JobDisplayItem;
 
   const displayItems = useMemo((): DisplayItem[] => {
-    const groupMap = new Map<string, JobWithCalc[]>();
-    const ungrouped: JobWithCalc[] = [];
+    // Build rows in the already-sorted job order; a group takes the position of its first member
+    const items: DisplayItem[] = [];
+    const groups = new Map<string, GroupDisplayItem>();
 
     for (const jwc of filteredAndSortedJobs) {
-      if (jwc.job.groupId) {
-        const existing = groupMap.get(jwc.job.groupId) || [];
-        existing.push(jwc);
-        groupMap.set(jwc.job.groupId, existing);
+      const createdMs = new Date(jwc.job.createdAt).getTime();
+      if (!jwc.job.groupId) {
+        items.push({ type: 'job', jobWithCalc: jwc, sortKey: createdMs });
+        continue;
+      }
+      const group = groups.get(jwc.job.groupId);
+      if (group) {
+        group.jobs.push(jwc);
+        group.sortKey = Math.max(group.sortKey, createdMs);
+        group.aggregateTotalPrice += jwc.job.totalPrice;
+        group.aggregateTotalCosts += jwc.calc.totalCosts;
       } else {
-        ungrouped.push(jwc);
+        const created: GroupDisplayItem = {
+          type: 'group',
+          groupId: jwc.job.groupId,
+          groupType: jwc.job.groupType || 'alternative',
+          customerName: jwc.job.customerName || 'Unknown Customer',
+          jobs: [jwc],
+          sortKey: createdMs,
+          aggregateTotalPrice: jwc.job.totalPrice,
+          aggregateTotalCosts: jwc.calc.totalCosts,
+        };
+        groups.set(jwc.job.groupId, created);
+        items.push(created);
       }
     }
 
-    const items: DisplayItem[] = [];
-    for (const [groupId, jobs] of groupMap.entries()) {
-      const sortKey = Math.max(...jobs.map(j => new Date(j.job.createdAt).getTime()));
-      const customerName = jobs[0]?.job.customerName || 'Unknown Customer';
-      const groupType = jobs[0]?.job.groupType || 'alternative';
-      const aggregateTotalPrice = jobs.reduce((s, j) => s + j.job.totalPrice, 0);
-      const aggregateTotalCosts = jobs.reduce((s, j) => s + j.calc.totalCosts, 0);
-      items.push({ type: 'group', groupId, groupType, customerName, jobs, sortKey, aggregateTotalPrice, aggregateTotalCosts });
-    }
-    for (const jwc of ungrouped) {
-      items.push({ type: 'job', jobWithCalc: jwc, sortKey: new Date(jwc.job.createdAt).getTime() });
-    }
-    return items.sort((a, b) => b.sortKey - a.sortKey);
-  }, [filteredAndSortedJobs]);
+    // Price and margin sorts keep the job order; "Most recent" orders groups by their newest job
+    return sortBy === 'date' ? items.sort((a, b) => b.sortKey - a.sortKey) : items;
+  }, [filteredAndSortedJobs, sortBy]);
 
   const toggleGroup = (groupId: string) => {
     setExpandedGroups(prev => {
@@ -443,30 +463,6 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
       return next;
     });
   };
-
-  const overdueReminders = useMemo(() => {
-    const todayStr = localToday();
-    const items: (ReminderItem & { customerName?: string })[] = [];
-
-    jobsWithCalc.forEach(({ job }) => {
-      if (job.status !== 'Pending') return;
-      (job.reminders || [])
-        .filter(r => !r.completed && r.dueDate <= todayStr)
-        .forEach(r => {
-          items.push({
-            reminderId: r.id,
-            jobId: job.id,
-            jobName: job.name || 'Untitled Job',
-            subject: r.subject,
-            details: r.details,
-            dueAt: r.dueAt,
-            customerName: job.customerName,
-          });
-        });
-    });
-
-    return items.sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime());
-  }, [jobsWithCalc]);
 
   const remindersByDue = useMemo((): ReminderItem[] => {
     const allReminders: ReminderItem[] = [];
@@ -482,6 +478,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
             subject: reminder.subject,
             details: reminder.details,
             dueAt: reminder.dueAt,
+            customerName: job.customerName,
           });
         });
     });
@@ -719,7 +716,9 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
     return count;
   }, [statusFilter, probabilityFilter, chipBlendFilter, selectedTagFilters]);
 
-  const isFiltered = activeFilterCount > 0 || !!searchQuery;
+  const isFiltered = activeFilterCount > 0 || !!searchQuery || showInactive;
+  // Filters that live behind the desktop "More filters" button (status has its own chips)
+  const moreFilterCount = (probabilityFilter > 0 ? 1 : 0) + (chipBlendFilter ? 1 : 0) + (selectedTagFilters.length > 0 ? 1 : 0);
 
   // Simplified read-only view for members without write access to jobs.
   // Shows just job name, status, install date, and customer address.
@@ -794,690 +793,625 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
     );
   }
 
+  // Shared list styling for the Contact, Today and Reminders tabs: cards on phones, plain rows on desktop
+  const LIST_CLASS = 'px-4 md:px-0 flex flex-col gap-2.5 md:gap-0';
+  const ROW_CLASS = 'w-full bg-white border border-slate-200 rounded-[14px] md:border-0 md:border-t md:border-slate-100 md:rounded-none px-4 py-3 min-h-[60px] flex items-center gap-3 text-left hover:bg-slate-50 active:bg-slate-50 transition-colors';
+  const listHeading = (label: string, count: number, icon?: React.ReactNode, tone = 'text-slate-900') => (
+    <h2 className={`flex items-center gap-2 px-4 pt-4 pb-2 md:py-2.5 md:bg-slate-50 md:border-t md:border-slate-200 md:first:border-t-0 text-[13px] font-extrabold ${tone}`}>
+      {icon}
+      <span>{label} · <span className="num">{count}</span></span>
+    </h2>
+  );
+
+  // Reminders split by urgency: before today, today, and later
+  const startOfTodayMs = new Date(localToday() + 'T00:00:00').getTime();
+  const startOfTomorrowMs = startOfTodayMs + 24 * 60 * 60 * 1000;
+  const dueMs = (reminder: ReminderItem) => new Date(reminder.dueAt).getTime();
+  const reminderGroups = [
+    { id: 'overdue' as const, label: 'Overdue', items: remindersByDue.filter(r => dueMs(r) < startOfTodayMs) },
+    { id: 'today' as const, label: 'Today', items: remindersByDue.filter(r => dueMs(r) >= startOfTodayMs && dueMs(r) < startOfTomorrowMs) },
+    { id: 'upcoming' as const, label: 'Upcoming', items: remindersByDue.filter(r => dueMs(r) >= startOfTomorrowMs) },
+  ].filter(group => group.items.length > 0);
+  const reminderDueText = (dueAt: string, group: 'overdue' | 'today' | 'upcoming') => {
+    const due = new Date(dueAt);
+    const time = due.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    if (group === 'today') return time;
+    if (group === 'upcoming') return `${due.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}, ${time}`;
+    const daysLate = Math.floor((startOfTodayMs - due.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+    return daysLate === 1 ? '1 day late' : `${daysLate} days late`;
+  };
+
+  const marginOf = (price: number, costs: number) => (price > 0 ? ((price - costs) / price) * 100 : 0);
+  const formatPrice = (value: number) => `$${value.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+  const formatJobDate = (job: Job) => {
+    if (job.estimateDate) {
+      const [y, m, d] = job.estimateDate.split('-').map(Number);
+      if (y && m && d) return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
+    return new Date(job.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+  const toggleHotJobsExpanded = () => {
+    const expanded = !hotJobsExpanded;
+    setHotJobsExpanded(expanded);
+    try { localStorage.setItem('dashboard_hot_jobs_expanded_v1', String(expanded)); } catch { /* Storage may be unavailable. */ }
+  };
+  const openRowMenu = (event: React.MouseEvent<HTMLButtonElement>, jobId: string) => {
+    event.stopPropagation();
+    const rect = event.currentTarget.getBoundingClientRect();
+    setRowMenu(prev => prev?.jobId === jobId ? null : { jobId, top: rect.bottom + 4, right: window.innerWidth - rect.right });
+  };
+  const rowMenuJob = rowMenu ? jobsWithCalc.find(({ job }) => job.id === rowMenu.jobId)?.job : undefined;
+
+  const tabs: { id: typeof viewMode; label: string; longLabel: string; count: number; alert?: boolean }[] = [
+    { id: 'jobs', label: 'Jobs', longLabel: 'Jobs', count: filteredAndSortedJobs.length },
+    { id: 'needs-contact', label: 'Contact', longLabel: 'Needs contact', count: needsContactJobs.length },
+    { id: 'today', label: 'Today', longLabel: 'Today', count: dayTotalCount },
+    { id: 'reminders', label: 'Reminders', longLabel: 'Reminders', count: remindersByDue.length, alert: remindersNeedingAttentionCount > 0 },
+  ];
+
+  const hotJobsEmptyText = loading ? 'Loading hot jobs…' : 'Star a job to pin it here for the whole team.';
+
+  // Desktop table row, shared by standalone jobs and jobs inside a group
+  const renderJobRow = ({ job, calc }: JobWithCalc, inGroup: boolean) => {
+    const marginPct = marginOf(job.totalPrice, calc.totalCosts);
+    const meta = [job.customerName, job.floorFootage ? `${job.floorFootage} ft²` : '', job.chipBlend].filter(Boolean).join(' · ');
+    return (
+      <tr key={job.id} className="border-t border-slate-100 hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => onEditJob(job.id)}>
+        <td className={`py-3 pr-4 ${inGroup ? 'pl-10' : 'pl-4'}`}>
+          <div className="text-[15px] font-bold text-slate-900">{job.name || 'Untitled Job'}</div>
+          <div className="mt-0.5 text-[13px] text-slate-600">
+            <span className="lg:hidden">{formatJobDate(job)}{meta ? ' · ' : ''}</span>{meta}
+          </div>
+        </td>
+        <td className="px-4 py-3">
+          <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${getStatusColor(job.status)}`}>{job.status}</span>
+        </td>
+        <td className="hidden lg:table-cell px-4 py-3 text-sm text-slate-700 whitespace-nowrap">{formatJobDate(job)}</td>
+        <td className="num px-4 py-3 text-right text-[15px] font-extrabold text-slate-900">{formatPrice(job.totalPrice)}</td>
+        <td className={`num px-4 py-3 text-right text-sm font-bold ${getMarginColor(marginPct)}`}>{marginPct.toFixed(0)}%</td>
+        <td className="px-2 py-1.5 text-right whitespace-nowrap">
+          {starButton(job)}
+          <button type="button" aria-label={`More actions for ${job.name || 'Untitled Job'}`} aria-haspopup="menu"
+            aria-expanded={rowMenu?.jobId === job.id} onClick={(e) => openRowMenu(e, job.id)}
+            className="inline-flex items-center justify-center w-11 h-11 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gf-lime">
+            <MoreHorizontal size={18} />
+          </button>
+        </td>
+      </tr>
+    );
+  };
+
+  // Mobile card, shared by standalone jobs and jobs inside a group
+  const renderJobCard = ({ job, calc }: JobWithCalc) => {
+    const marginPct = marginOf(job.totalPrice, calc.totalCosts);
+    const meta = [job.customerName, formatJobDate(job)].filter(Boolean).join(' · ');
+    return (
+      <div key={job.id} onClick={() => onEditJob(job.id)}
+        className="bg-white border border-slate-200 rounded-[14px] pl-4 pr-2 py-2 cursor-pointer active:bg-slate-50 transition-colors">
+        <div className="flex items-center gap-2">
+          <span className="min-w-0 flex-1 truncate text-base font-bold text-slate-900">{job.name || 'Untitled Job'}</span>
+          <span className="num shrink-0 text-[17px] font-extrabold text-slate-900">{formatPrice(job.totalPrice)}</span>
+          {canWriteJobs ? starButton(job) : <span className="w-2" />}
+        </div>
+        <div className="flex items-center gap-2 pr-2 pb-1.5 text-[13px] text-slate-600">
+          <span className={`shrink-0 px-2.5 py-0.5 rounded-full text-xs font-bold ${getStatusColor(job.status)}`}>{job.status}</span>
+          <span className="min-w-0 flex-1 truncate">{meta}</span>
+          <span className={`num shrink-0 font-bold ${getMarginColor(marginPct)}`}>{marginPct.toFixed(0)}% margin</span>
+        </div>
+      </div>
+    );
+  };
+
+  const loadOlderFooter = (hasMoreOlderJobs || olderJobsMessage) ? (
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-4 py-3.5 md:border-t md:border-slate-200 text-[13px] text-slate-600">
+      <span>{olderJobsMessage || `Showing ${filteredAndSortedJobs.length} of ${jobsWithCalc.length} loaded jobs`}</span>
+      {hasMoreOlderJobs && (
+        <button type="button" onClick={handleLoadOlderJobs} disabled={loadingOlderJobs}
+          className="min-h-11 md:min-h-9 px-3.5 rounded-lg bg-white border border-slate-300 text-[13px] font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-60 disabled:cursor-not-allowed">
+          {loadingOlderJobs ? 'Loading…' : 'Load older jobs'}
+        </button>
+      )}
+    </div>
+  ) : null;
+
   return (
-    <div className="max-w-7xl mx-auto">
-      {/* Mobile dark search bar — visually extends the Layout header */}
-      <div className="md:hidden bg-[#0a0a0a] px-4 pb-3">
-        <div className="text-[11px] text-slate-400 mb-2">{filteredAndSortedJobs.length} active jobs</div>
+    <div className="max-w-[1400px] mx-auto min-h-full bg-[#f6f7f9] md:bg-transparent md:px-5 lg:px-8 md:py-7">
+      {/* Mobile search — visually extends the dark Layout header */}
+      <div className="md:hidden bg-[#0a0a0a] px-4 pb-3.5">
         <div className="relative">
-          <Search size={16} className="absolute left-[13px] top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none" />
           <input
-            type="text"
+            type="search"
+            aria-label="Search jobs or customers"
             placeholder="Search jobs or customers"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-[#1c1c1c] border border-[#2a2a2a] text-white rounded-[11px] py-[11px] pl-[38px] pr-3.5 text-[15px] placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-gf-lime"
+            className="w-full h-11 bg-[#1c1c1c] border border-[#333] text-white rounded-[10px] pl-10 pr-3.5 text-[15px] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-gf-lime"
           />
         </div>
       </div>
 
-      {/* Sticky tabs + toolbar */}
-      <div className="sticky top-0 z-10">
-        <section aria-labelledby="hot-jobs-heading" className="border-b border-amber-200 bg-amber-50 px-4 md:px-6 py-3">
-          <div className="flex items-center justify-between gap-3">
-            <h2 id="hot-jobs-heading" className="flex items-center gap-2 text-sm font-bold text-amber-950">
-              <Star size={17} className="text-amber-600" fill="currentColor" /> Hot jobs
-              <span className="rounded-full bg-amber-200/60 px-2 py-0.5 text-xs">{hotJobs.length}</span>
-            </h2>
-            <span className="hidden md:block text-xs text-amber-800">Your team's priority list</span>
-            <button type="button" aria-expanded={hotJobsExpanded} aria-controls="hot-jobs-list"
-              onClick={() => {
-                const expanded = !hotJobsExpanded;
-                setHotJobsExpanded(expanded);
-                try { localStorage.setItem('dashboard_hot_jobs_expanded_v1', String(expanded)); } catch { /* Storage may be unavailable. */ }
-              }} className="md:hidden flex items-center gap-1 min-h-11 px-2 text-xs font-semibold text-amber-900">
-              {hotJobsExpanded ? 'Hide' : 'Show'}
-              <ChevronDown size={16} className={hotJobsExpanded ? 'rotate-180' : ''} />
-            </button>
-          </div>
-          {starError && <p role="alert" className="text-sm text-red-700 mt-2">{starError}</p>}
-          <div id="hot-jobs-list" className={`${hotJobsExpanded ? 'block' : 'hidden'} md:block mt-2`}>
-            {hotJobs.length === 0 ? (
-              <p className="text-xs text-amber-800">{loading ? 'Loading hot jobs…' : 'Star a job below to keep it here, across all dashboard views.'}</p>
-            ) : (
-              <ul className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 max-h-48 overflow-y-auto">
-                {hotJobs.map(({ job }) => (
-                  <li key={job.id} className="flex items-center gap-1 rounded-lg border border-amber-200 bg-white pl-3 pr-1">
-                    <button type="button" onClick={() => onEditJob(job.id)} className="min-w-0 flex-1 py-2 text-left rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500">
-                      <span className="block truncate text-sm font-bold text-slate-900">{job.name || 'Untitled Job'}</span>
-                      <span className="block truncate text-xs text-slate-500">{job.customerName || 'No customer'} · {job.status} · ${job.totalPrice.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
-                    </button>
-                    {starButton(job)}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </section>
-        {/* Desktop header row */}
-        <div className="hidden md:flex items-center justify-between px-6 py-3 bg-white border-b border-slate-200">
-          <div className="flex items-baseline gap-2.5">
-            <h2 className="text-xl font-bold text-slate-900">Dashboard</h2>
-            <span className="text-xs text-slate-400">{filteredAndSortedJobs.length}/{jobsWithCalc.length}</span>
-          </div>
-          {canWriteJobs && (
-            <button onClick={onNewJob} className="flex items-center gap-1.5 px-3 py-1.5 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors text-sm">
-              <Plus size={15} />
-              New Job
-            </button>
-          )}
+      {/* Desktop header */}
+      <div className="hidden md:flex flex-wrap items-center gap-4 mb-5">
+        <div className="flex-1 min-w-[200px]">
+          <h1 className="font-heading font-bold text-[28px] leading-tight text-slate-900">Dashboard</h1>
+          <p className="mt-1 text-sm text-slate-600">
+            {filteredAndSortedJobs.length === jobsWithCalc.length
+              ? `${jobsWithCalc.length} jobs`
+              : `${filteredAndSortedJobs.length} of ${jobsWithCalc.length} jobs shown`}
+          </p>
         </div>
-
-        {/* Tab bar */}
-        <div className="scrollbar-hide flex gap-1 bg-white border-b border-slate-200 px-2 overflow-x-auto">
-          <button
-            onClick={() => setViewMode('jobs')}
-            className={`flex-1 min-w-[78px] flex items-center justify-center gap-1.5 py-3 text-[13.5px] font-bold whitespace-nowrap transition-colors border-b-[2.5px] ${
-              viewMode === 'jobs'
-                ? 'text-gf-dark-green border-gf-lime'
-                : 'text-slate-400 border-transparent hover:text-slate-600'
-            }`}
-          >
-            Jobs
-            <span className={`num px-1.5 py-0.5 rounded-full text-[11px] font-extrabold ${
-              viewMode === 'jobs' ? 'bg-gf-lime/15 text-gf-dark-green' : 'bg-slate-100 text-slate-400'
-            }`}>{filteredAndSortedJobs.length}</span>
-          </button>
-          <button
-            onClick={() => setViewMode('needs-contact')}
-            className={`flex-1 min-w-[78px] flex items-center justify-center gap-1.5 py-3 text-[13.5px] font-bold whitespace-nowrap transition-colors border-b-[2.5px] ${
-              viewMode === 'needs-contact'
-                ? 'text-orange-600 border-orange-400'
-                : 'text-slate-400 border-transparent hover:text-slate-600'
-            }`}
-          >
-            Contact
-            {needsContactJobs.length > 0 && (
-              <span className={`num px-1.5 py-0.5 rounded-full text-[11px] font-extrabold ${
-                viewMode === 'needs-contact' ? 'bg-orange-100 text-orange-700' : 'bg-orange-50 text-orange-500'
-              }`}>{needsContactJobs.length}</span>
-            )}
-          </button>
-          <button
-            onClick={() => { setViewMode('today'); setSelectedDay(localToday()); }}
-            className={`flex-1 min-w-[78px] flex items-center justify-center gap-1.5 py-3 text-[13.5px] font-bold whitespace-nowrap transition-colors border-b-[2.5px] ${
-              viewMode === 'today'
-                ? 'text-blue-600 border-blue-400'
-                : 'text-slate-400 border-transparent hover:text-slate-600'
-            }`}
-          >
-            Today
-            {dayTotalCount > 0 && (
-              <span className={`num px-1.5 py-0.5 rounded-full text-[11px] font-extrabold ${
-                viewMode === 'today' ? 'bg-blue-100 text-blue-700' : 'bg-blue-50 text-blue-500'
-              }`}>{dayTotalCount}</span>
-            )}
-          </button>
-          <button
-            onClick={() => setViewMode('reminders')}
-            className={`flex-1 min-w-[78px] flex items-center justify-center gap-1.5 py-3 text-[13.5px] font-bold whitespace-nowrap transition-colors border-b-[2.5px] ${
-              viewMode === 'reminders'
-                ? 'text-red-600 border-red-400'
-                : 'text-slate-400 border-transparent hover:text-slate-600'
-            }`}
-          >
-            Reminders
-            {remindersByDue.length > 0 && (
-              <span className={`num min-w-[20px] px-1.5 py-0.5 rounded-full text-[11px] font-extrabold text-center ${
-                remindersNeedingAttentionCount > 0
-                  ? (viewMode === 'reminders' ? 'bg-red-100 text-red-700' : 'bg-red-50 text-red-500')
-                  : (viewMode === 'reminders' ? 'bg-slate-200 text-slate-600' : 'bg-slate-100 text-slate-400')
-              }`}>{remindersByDue.length}</span>
-            )}
-          </button>
+        <div className="relative flex-1 min-w-[240px] max-w-[420px]">
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+          <input
+            type="search"
+            aria-label="Search jobs or customers"
+            placeholder="Search jobs or customers"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full h-11 bg-white border border-slate-300 rounded-[10px] pl-10 pr-3.5 text-sm text-slate-900 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-gf-lime"
+          />
         </div>
-
-        {/* Find missing reminders button */}
-        {viewMode === 'reminders' && (
-          <div className="flex items-center justify-end px-4 md:px-6 py-2 bg-white border-b border-slate-100">
-            <button
-              type="button"
-              onClick={handleFindMissingReminders}
-              disabled={checkingMissingReminders}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-medium text-gf-dark-green bg-white border border-slate-200 rounded-lg hover:border-gf-lime hover:bg-green-50 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <Search size={14} />
-              {checkingMissingReminders ? 'Checking...' : 'Find Missing'}
-            </button>
-          </div>
-        )}
-
-        {/* Mobile toolbar (Jobs tab only) */}
-        {viewMode === 'jobs' && (
-          <div className="md:hidden flex items-center gap-2 px-4 py-[11px] bg-[#f8fafc]">
-            <button
-              onClick={() => setShowFilterSheet(true)}
-              className={`flex items-center gap-1.5 px-[13px] py-2 rounded-[10px] border text-[13px] font-bold transition-colors ${
-                activeFilterCount > 0
-                  ? 'bg-gf-lime/10 text-gf-dark-green border-gf-lime/40'
-                  : 'bg-white text-slate-600 border-slate-200'
-              }`}
-            >
-              <SlidersHorizontal size={14} />
-              Filters
-              {activeFilterCount > 0 && (
-                <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-gf-lime text-white text-[10px] font-bold">{activeFilterCount}</span>
-              )}
-            </button>
-            <button
-              onClick={() => setShowInactive(p => !p)}
-              className={`px-[13px] py-2 rounded-[10px] border text-[13px] font-bold transition-colors ${
-                showInactive ? 'bg-slate-700 text-white border-slate-700' : 'bg-white text-slate-600 border-slate-200'
-              }`}
-            >
-              Inactive
-            </button>
-            <div className="flex-1" />
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as 'date' | 'price' | 'margin')}
-              className="px-2.5 py-2 rounded-[10px] border border-slate-200 bg-white text-[13px] font-bold text-slate-600"
-            >
-              <option value="date">Recent</option>
-              <option value="price">Price</option>
-              <option value="margin">Margin</option>
-            </select>
-          </div>
-        )}
-
-        {/* Desktop toolbar */}
-        {viewMode !== 'today' && viewMode !== 'reminders' && (
-          <div className="hidden md:flex items-center gap-2 px-6 py-2 bg-white border-b border-slate-200">
-            <div className="relative flex-1">
-              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-              <input
-                type="text"
-                placeholder="Search..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-7 pr-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gf-lime"
-              />
-            </div>
-            {viewMode === 'jobs' && (
-              <>
-                <button
-                  onClick={() => setShowFilters(p => !p)}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-colors shrink-0 ${
-                    showFilters || activeFilterCount > 0
-                      ? 'bg-gf-lime/10 text-gf-dark-green border border-gf-lime/40'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  <SlidersHorizontal size={13} />
-                  Filters
-                  {activeFilterCount > 0 && (
-                    <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-gf-lime text-white text-[10px] font-bold">{activeFilterCount}</span>
-                  )}
-                </button>
-                <button
-                  onClick={() => setShowInactive(p => !p)}
-                  title="Show inactive jobs (Lost + past Won)"
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-colors shrink-0 ${
-                    showInactive ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  Inactive
-                </button>
-                {isFiltered && (
-                  <button onClick={handleClearFilters} title="Clear all filters"
-                    className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium text-red-500 hover:bg-red-50 transition-colors shrink-0">
-                    <X size={12} />
-                    Clear
-                  </button>
-                )}
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as 'date' | 'price' | 'margin')}
-                  className="px-2 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gf-lime shrink-0"
-                >
-                  <option value="date">Recent</option>
-                  <option value="price">Price ↓</option>
-                  <option value="margin">Margin ↓</option>
-                </select>
-              </>
-            )}
-            <button
-              type="button"
-              onClick={() => setShowReminders((prev) => !prev)}
-              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-colors shrink-0 ${
-                remindersNeedingAttentionCount > 0
-                  ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              <Bell size={13} />
-              {remindersNeedingAttentionCount > 0 && <span className="font-bold">{remindersNeedingAttentionCount}</span>}
-            </button>
-          </div>
+        {canWriteJobs && (
+          <button onClick={onNewJob}
+            className="flex items-center gap-2 h-11 px-[18px] rounded-[10px] bg-gf-dark-green text-white text-sm font-bold hover:bg-[#3f631a] transition-colors">
+            <Plus size={16} strokeWidth={2.5} />
+            New job
+          </button>
         )}
       </div>
 
-      {/* Desktop inline filter panel */}
-      {showFilters && (
-        <div className="hidden md:block bg-slate-50 border-b border-slate-200 px-6 py-3 space-y-3">
-          <div className="flex flex-wrap gap-x-6 gap-y-2">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Status</span>
-              {ALL_STATUSES.map((status) => (
-                <button key={status} onClick={() => handleStatusToggle(status)}
-                  className={`px-2.5 py-0.5 rounded-full text-xs font-medium transition-colors ${statusFilter.includes(status) ? getStatusColor(status) : 'bg-white border border-slate-200 text-slate-400'}`}>
-                  {status}
-                </button>
-              ))}
-            </div>
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Prob</span>
-              {[0, 20, 40, 60, 80, 100].map(p => (
-                <button key={p} onClick={() => setProbabilityFilter(p)}
-                  className={`px-2.5 py-0.5 rounded-full text-xs font-medium transition-colors ${probabilityFilter === p ? 'bg-blue-100 text-blue-800' : 'bg-white border border-slate-200 text-slate-400 hover:bg-slate-100'}`}>
-                  {p === 0 ? 'Any' : `≥${p}%`}
-                </button>
-              ))}
-            </div>
-          </div>
-          {availableChipBlends.length > 0 && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide shrink-0">Chip</span>
-              <select value={chipBlendFilter} onChange={(e) => setChipBlendFilter(e.target.value)}
-                className="px-2 py-1 border border-slate-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-gf-lime bg-white">
-                <option value="">All Blends</option>
-                {availableChipBlends.map((blend) => <option key={blend} value={blend}>{blend}</option>)}
-              </select>
-            </div>
-          )}
-          {availableTags.length > 0 && (
-            <div className="flex items-start gap-2 flex-wrap">
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide shrink-0 pt-0.5">Tags</span>
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <button onClick={() => setTagMatchMode('any')}
-                  className={`px-2 py-0.5 rounded text-xs font-medium ${tagMatchMode === 'any' ? 'bg-gf-lime/20 text-gf-dark-green' : 'text-slate-400 hover:text-slate-600'}`}>any</button>
-                <button onClick={() => setTagMatchMode('all')}
-                  className={`px-2 py-0.5 rounded text-xs font-medium ${tagMatchMode === 'all' ? 'bg-gf-lime/20 text-gf-dark-green' : 'text-slate-400 hover:text-slate-600'}`}>all</button>
-                <span className="text-slate-200">|</span>
-                {availableTags.map((tag) => (
-                  <button key={tag} onClick={() => handleTagToggle(tag)}
-                    className={`px-2.5 py-0.5 rounded-full text-xs font-medium transition-colors ${selectedTagFilters.includes(tag) ? 'bg-indigo-100 text-indigo-800' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-100'}`}>
-                    {tag}
-                  </button>
-                ))}
-                {selectedTagFilters.length > 0 && (
-                  <button onClick={() => setSelectedTagFilters([])} className="text-xs text-slate-400 hover:text-slate-600 underline">clear</button>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Overdue reminders banner */}
-      {viewMode === 'reminders' && overdueReminders.length > 0 && (
-        <div className="border-b border-red-200 bg-red-50">
-          <button
-            type="button"
-            onClick={() => setOverdueExpanded(p => !p)}
-            className="w-full flex items-center gap-2 px-3 sm:px-6 py-2.5 text-left"
-          >
-            <AlertTriangle size={14} className="text-red-500 shrink-0" />
-            <span className="text-sm font-semibold text-red-700 flex-1">
-              {overdueReminders.length} Overdue Reminder{overdueReminders.length !== 1 ? 's' : ''}
-            </span>
-            {overdueExpanded
-              ? <ChevronDown size={14} className="text-red-400 shrink-0" />
-              : <ChevronRight size={14} className="text-red-400 shrink-0" />
-            }
-          </button>
-          {overdueExpanded && (
-            <div className="divide-y divide-red-100">
-              {overdueReminders.map((reminder) => {
-                const daysOverdue = Math.floor(
-                  (new Date(localToday() + 'T00:00:00').getTime() -
-                   new Date(reminder.dueAt).getTime()) / (24 * 60 * 60 * 1000)
-                );
+      <div className="xl:flex xl:items-start xl:gap-6">
+        <section className="min-w-0 xl:flex-1 md:bg-white md:border md:border-slate-200 md:rounded-[14px] md:overflow-hidden">
+          {/* View tabs — one accent colour; only reminders needing attention show red */}
+          <div className="sticky top-0 z-10 md:static">
+            <div role="tablist" aria-label="Dashboard views" className="scrollbar-hide flex md:gap-1 bg-white border-b border-slate-200 md:px-3 overflow-x-auto">
+              {tabs.map((tab) => {
+                const selected = viewMode === tab.id;
                 return (
-                  <div key={`${reminder.jobId}-${reminder.reminderId}`}
-                    className="flex items-start gap-3 px-3 sm:px-6 py-2.5 hover:bg-red-100/50 transition-colors">
-                    <button onClick={() => onEditJob(reminder.jobId)} className="flex-1 min-w-0 text-left">
-                      <div className="text-sm font-medium text-slate-900 truncate">{reminder.subject}</div>
-                      <div className="text-xs text-slate-500 truncate">
-                        {reminder.jobName}{reminder.customerName ? ` · ${reminder.customerName}` : ''}
-                      </div>
-                      <div className="text-xs font-medium text-red-600 mt-0.5">
-                        {daysOverdue === 0 ? 'Due today' : daysOverdue === 1 ? '1 day overdue' : `${daysOverdue} days overdue`}
-                        {' · '}{new Date(reminder.dueAt).toLocaleDateString()}
-                      </div>
-                    </button>
-                    <div className="flex items-center gap-1 shrink-0 pt-0.5">
-                      <button type="button" onClick={() => handleCompleteReminder(reminder)}
-                        className="p-1.5 rounded text-green-600 hover:bg-green-100 transition-colors" title="Mark complete" disabled={updatingReminder}>
-                        <Check size={14} />
-                      </button>
-                      <button type="button" onClick={() => handleDeleteReminder(reminder)}
-                        className="p-1.5 rounded text-red-600 hover:bg-red-100 transition-colors" title="Delete reminder" disabled={updatingReminder}>
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </div>
+                  <button key={tab.id} type="button" role="tab" aria-selected={selected}
+                    onClick={() => { setViewMode(tab.id); if (tab.id === 'today') setSelectedDay(localToday()); }}
+                    className={`flex-1 md:flex-none flex items-center justify-center gap-1.5 md:gap-2 h-12 md:h-[52px] px-2 md:px-3 text-sm whitespace-nowrap border-b-[3px] transition-colors ${
+                      selected ? 'font-extrabold text-slate-900 border-gf-lime' : 'font-semibold text-slate-600 border-transparent hover:text-slate-900'
+                    }`}>
+                    <span className="md:hidden">{tab.label}</span>
+                    <span className="hidden md:inline">{tab.longLabel}</span>
+                    {tab.count > 0 && (
+                      <span className={`num min-w-[20px] px-1.5 md:px-2 py-0.5 rounded-full text-xs text-center ${
+                        tab.alert ? 'bg-red-100 text-red-800 font-extrabold' : 'bg-slate-100 text-slate-700 font-bold'
+                      } ${tab.alert || tab.id === viewMode ? '' : 'hidden md:inline'}`}>{tab.count}</span>
+                    )}
+                  </button>
                 );
               })}
             </div>
+          </div>
+
+          {/* Find missing reminders */}
+          {viewMode === 'reminders' && (
+            <div className="flex items-center justify-end px-4 py-2 bg-white border-b border-slate-100">
+              <button
+                type="button"
+                onClick={handleFindMissingReminders}
+                disabled={checkingMissingReminders}
+                className="inline-flex items-center gap-1.5 min-h-11 md:min-h-9 px-3 text-[13px] font-bold text-gf-dark-green rounded-lg hover:bg-green-50 transition-colors disabled:opacity-60"
+              >
+                <Search size={14} />
+                {checkingMissingReminders ? 'Checking…' : 'Find jobs missing a reminder'}
+              </button>
+            </div>
           )}
-        </div>
-      )}
+
+          {starError && <p role="alert" className="px-4 pt-3 text-sm text-red-700">{starError}</p>}
+
+          {/* Hot jobs strip — phones and tablets (desktop shows the side panel instead) */}
+          <section aria-labelledby="hot-jobs-heading" className="xl:hidden px-4 pt-2">
+            <div className="flex items-center gap-1.5">
+              <Star size={14} className="text-amber-700" fill="currentColor" />
+              <h2 id="hot-jobs-heading" className="flex-1 text-[13px] font-extrabold text-slate-900">Hot jobs · {hotJobs.length}</h2>
+              <button type="button" aria-expanded={hotJobsExpanded} aria-controls="hot-jobs-list" onClick={toggleHotJobsExpanded}
+                className="min-h-11 px-1 text-[13px] font-bold text-slate-600">
+                {hotJobsExpanded ? 'Hide' : 'Show'}
+              </button>
+            </div>
+            <div id="hot-jobs-list" className={hotJobsExpanded ? 'pb-1' : 'hidden'}>
+              {hotJobs.length === 0 ? (
+                <p className="text-[13px] text-slate-600">{hotJobsEmptyText}</p>
+              ) : (
+                <ul className="scrollbar-hide flex gap-2 overflow-x-auto -mr-4 pr-4">
+                  {hotJobs.map(({ job }) => (
+                    <li key={job.id} className="w-[168px] shrink-0">
+                      <button type="button" onClick={() => onEditJob(job.id)}
+                        className="w-full text-left px-3 py-2.5 bg-white border border-slate-200 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gf-lime">
+                        <span className="block truncate text-sm font-bold text-slate-900">{job.name || 'Untitled Job'}</span>
+                        <span className="block truncate mt-0.5 text-[13px] text-slate-600">{job.status} · {formatPrice(job.totalPrice)}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </section>
+
+          {/* Mobile toolbar (Jobs tab only) */}
+          {viewMode === 'jobs' && (
+            <div className="md:hidden flex items-center gap-2 px-4 py-2">
+              <button
+                onClick={() => setShowFilterSheet(true)}
+                className="min-w-0 flex items-center gap-2 h-11 px-3.5 rounded-[10px] border border-slate-300 bg-white text-[13px] font-bold text-slate-700"
+              >
+                <SlidersHorizontal size={14} className="shrink-0" />
+                <span className="truncate">{statusFilter.join(', ')}</span>
+                {activeFilterCount > 0 && (
+                  <span className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded-full bg-gf-dark-green text-white text-[11px] font-bold">{activeFilterCount}</span>
+                )}
+              </button>
+              <div className="flex-1" />
+              <select
+                aria-label="Sort jobs"
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as 'date' | 'price' | 'margin')}
+                className="shrink-0 h-11 px-2 rounded-[10px] border-0 bg-transparent text-[13px] font-bold text-slate-700"
+              >
+                <option value="date">Recent</option>
+                <option value="price">Price</option>
+                <option value="margin">Margin</option>
+              </select>
+            </div>
+          )}
+
+          {/* Desktop toolbar (Jobs tab only) */}
+          {viewMode === 'jobs' && (
+            <div className="hidden md:flex flex-wrap items-center gap-2 px-4 py-3 border-b border-slate-200">
+              <div role="group" aria-label="Status" className="flex flex-wrap items-center gap-1.5">
+                {ALL_STATUSES.map((status) => {
+                  const pressed = statusFilter.includes(status);
+                  return (
+                    <button key={status} type="button" aria-pressed={pressed} onClick={() => handleStatusToggle(status)}
+                      className={`h-9 px-3.5 rounded-full border text-[13px] transition-colors ${
+                        pressed ? 'bg-slate-900 border-slate-900 text-white font-bold' : 'bg-white border-slate-300 text-slate-600 font-semibold hover:bg-slate-50'
+                      }`}>
+                      {status} · <span className="num">{statusCounts[status]}</span>
+                    </button>
+                  );
+                })}
+                <span className="w-px h-5 bg-slate-200 mx-1" aria-hidden="true" />
+                <button type="button" aria-pressed={showInactive} onClick={() => setShowInactive(p => !p)}
+                  title="Also show Won jobs installed more than 5 days ago"
+                  className={`h-9 px-3.5 rounded-full border text-[13px] transition-colors ${
+                    showInactive ? 'bg-slate-900 border-slate-900 text-white font-bold' : 'bg-white border-slate-300 text-slate-600 font-semibold hover:bg-slate-50'
+                  }`}>
+                  Past installs
+                </button>
+              </div>
+              <div className="flex items-center gap-2 ml-auto">
+              {isFiltered && (
+                <button onClick={handleClearFilters}
+                  className="flex items-center gap-1 h-9 px-2.5 rounded-lg text-[13px] font-bold text-red-700 hover:bg-red-50 transition-colors">
+                  <X size={14} />
+                  Clear
+                </button>
+              )}
+              <button type="button" aria-expanded={showFilters} onClick={() => setShowFilters(p => !p)}
+                className={`flex items-center gap-2 h-9 px-3.5 rounded-lg border text-[13px] font-bold transition-colors ${
+                  showFilters ? 'bg-slate-100 border-slate-300 text-slate-900' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
+                }`}>
+                <SlidersHorizontal size={14} />
+                More filters
+                {moreFilterCount > 0 && (
+                  <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gf-dark-green text-white text-[11px] font-bold">{moreFilterCount}</span>
+                )}
+              </button>
+              <label className="flex items-center gap-2 text-[13px] text-slate-600">
+                Sort
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as 'date' | 'price' | 'margin')}
+                  className="h-9 px-2.5 border border-slate-300 rounded-lg bg-white text-[13px] font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-gf-lime"
+                >
+                  <option value="date">Most recent</option>
+                  <option value="price">Price</option>
+                  <option value="margin">Margin</option>
+                </select>
+              </label>
+              </div>
+            </div>
+          )}
+
+          {/* Desktop "More filters" panel */}
+          {viewMode === 'jobs' && showFilters && (
+            <div className="hidden md:flex flex-wrap items-start gap-x-8 gap-y-3 bg-slate-50 border-b border-slate-200 px-4 py-3">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs font-bold text-slate-600 mr-1">Probability</span>
+                {[0, 20, 40, 60, 80, 100].map(p => (
+                  <button key={p} type="button" aria-pressed={probabilityFilter === p} onClick={() => setProbabilityFilter(p)}
+                    className={`h-8 px-3 rounded-full border text-xs transition-colors ${probabilityFilter === p ? 'bg-slate-900 border-slate-900 text-white font-bold' : 'bg-white border-slate-300 text-slate-600 font-semibold hover:bg-slate-100'}`}>
+                    {p === 0 ? 'Any' : `≥${p}%`}
+                  </button>
+                ))}
+              </div>
+              {availableChipBlends.length > 0 && (
+                <label className="flex items-center gap-2 text-xs font-bold text-slate-600">
+                  Chip blend
+                  <select value={chipBlendFilter} onChange={(e) => setChipBlendFilter(e.target.value)}
+                    className="h-8 px-2 border border-slate-300 rounded-lg text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-gf-lime bg-white">
+                    <option value="">All blends</option>
+                    {availableChipBlends.map((blend) => <option key={blend} value={blend}>{blend}</option>)}
+                  </select>
+                </label>
+              )}
+              {availableTags.length > 0 && (
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-xs font-bold text-slate-600 mr-1">Tags</span>
+                  <select aria-label="Tag match mode" value={tagMatchMode} onChange={(e) => setTagMatchMode(e.target.value as 'any' | 'all')}
+                    className="h-8 px-2 border border-slate-300 rounded-lg text-xs font-semibold text-slate-700 bg-white">
+                    <option value="any">Match any</option>
+                    <option value="all">Match all</option>
+                  </select>
+                  {availableTags.map((tag) => {
+                    const pressed = selectedTagFilters.includes(tag);
+                    return (
+                      <button key={tag} type="button" aria-pressed={pressed} onClick={() => handleTagToggle(tag)}
+                        className={`h-8 px-3 rounded-full border text-xs transition-colors ${pressed ? 'bg-slate-900 border-slate-900 text-white font-bold' : 'bg-white border-slate-300 text-slate-600 font-semibold hover:bg-slate-100'}`}>
+                        {tag}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
       {/* =========== TAB CONTENT =========== */}
 
       {/* Needs Contact tab */}
       {viewMode === 'needs-contact' && (
-        <div className="md:bg-white md:divide-y md:divide-slate-100">
+        <div className="pb-3 md:pb-0">
           {needsContactJobs.length === 0 ? (
             <div className="p-12 text-center">
-              <PhoneCall size={24} className="mx-auto mb-2 text-slate-300" />
-              <p className="text-sm text-slate-500">No pending jobs need contact right now.</p>
+              <PhoneCall size={24} className="mx-auto mb-2 text-slate-400" />
+              <p className="text-sm text-slate-600">No pending jobs need contact right now.</p>
             </div>
           ) : (
-            <div className="px-3.5 md:px-0 py-2 md:py-0 flex flex-col gap-2 md:gap-0">
-              {needsContactJobs.map(({ job, daysSince }) => (
-                <button key={job.id} onClick={() => onEditJob(job.id)}
-                  className="w-full bg-white border border-[#fed7aa] md:border-0 md:border-b md:border-slate-100 rounded-[14px] md:rounded-none px-4 md:px-6 py-3.5 md:py-3 flex items-center gap-3 text-left hover:bg-orange-50/60 active:bg-orange-50 transition-colors">
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[14.5px] font-bold text-[#0f172a] truncate">{job.name || 'Untitled Job'}</div>
-                    {job.customerName && <div className="text-xs text-slate-400 mt-0.5">{job.customerName}</div>}
-                  </div>
-                  <span className={`num text-[15px] font-extrabold shrink-0 ${daysSince > 60 ? 'text-red-500' : 'text-[#ea580c]'}`}>{daysSince}d</span>
-                </button>
-              ))}
-            </div>
+            <>
+              {listHeading(`No contact in over ${dashboardPricing.staleContactDays ?? 30} days`, needsContactJobs.length)}
+              <div className={LIST_CLASS}>
+                {needsContactJobs.map(({ job, daysSince }) => (
+                  <button key={job.id} onClick={() => onEditJob(job.id)} className={ROW_CLASS}>
+                    <span className="flex-1 min-w-0">
+                      <span className="block truncate text-[15px] font-bold text-slate-900">{job.name || 'Untitled Job'}</span>
+                      <span className="block truncate mt-0.5 text-[13px] text-slate-600">
+                        {[job.customerName, job.status, formatPrice(job.totalPrice)].filter(Boolean).join(' · ')}
+                      </span>
+                    </span>
+                    <span className={`num shrink-0 text-[13px] font-bold ${daysSince > 60 ? 'text-red-800' : 'text-slate-700'}`}>{daysSince} days</span>
+                    <ChevronRight size={16} className="shrink-0 text-slate-400" />
+                  </button>
+                ))}
+              </div>
+            </>
           )}
         </div>
       )}
 
       {/* Today tab */}
       {viewMode === 'today' && (
-        <div className="md:bg-white">
+        <div className="pb-3 md:pb-0">
           {/* Day navigation */}
-          <div className="flex items-center gap-2 px-3.5 md:px-6 py-2.5 bg-white border-b border-slate-200">
+          <div className="flex items-center gap-2 px-4 py-2 bg-white border-b border-slate-200">
             <button
               type="button"
               onClick={() => setSelectedDay(d => addDaysToLocalDate(d, -1))}
               aria-label="Previous day"
-              className="flex items-center justify-center w-9 h-9 rounded-[10px] border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+              className="flex items-center justify-center w-11 h-11 rounded-[10px] border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors"
             >
-              <ChevronLeft size={17} />
+              <ChevronLeft size={18} />
             </button>
             <div className="flex-1 text-center min-w-0">
-              <div className="text-[14px] font-bold text-slate-900 truncate">
+              <div className="text-[15px] font-bold text-slate-900 truncate">
                 {isSelectedDayToday ? 'Today' : selectedDayLabel}
               </div>
-              {!isSelectedDayToday && (
+              {isSelectedDayToday ? (
+                <div className="text-xs text-slate-600">{selectedDayLabel}</div>
+              ) : (
                 <button
                   type="button"
                   onClick={() => setSelectedDay(localToday())}
-                  className="text-[11px] font-bold text-blue-600 hover:text-blue-800 transition-colors"
+                  className="text-xs font-bold text-gf-dark-green hover:underline"
                 >
                   Back to today
                 </button>
-              )}
-              {isSelectedDayToday && (
-                <div className="text-[11px] font-medium text-slate-400">{selectedDayLabel}</div>
               )}
             </div>
             <button
               type="button"
               onClick={() => setSelectedDay(d => addDaysToLocalDate(d, 1))}
               aria-label="Next day"
-              className="flex items-center justify-center w-9 h-9 rounded-[10px] border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+              className="flex items-center justify-center w-11 h-11 rounded-[10px] border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors"
             >
-              <ChevronRight size={17} />
+              <ChevronRight size={18} />
             </button>
           </div>
           {dayTotalCount === 0 ? (
             <div className="p-12 text-center">
-              <Calendar size={24} className="mx-auto mb-2 text-slate-300" />
-              <p className="text-sm text-slate-500">
+              <Calendar size={24} className="mx-auto mb-2 text-slate-400" />
+              <p className="text-sm text-slate-600">
                 Nothing scheduled for {isSelectedDayToday ? 'today' : selectedDayLabel}.
               </p>
             </div>
           ) : (
-            <div className="px-3.5 md:px-0 py-3 md:py-0 space-y-3.5 md:space-y-0 md:divide-y md:divide-slate-200">
+            <>
               {dayItems.installs.length > 0 && (
-                <div>
-                  <div className="text-[11px] font-extrabold text-[#15803d] tracking-[0.5px] uppercase mb-[7px] pl-1 md:hidden">{isSelectedDayToday ? 'Installs Today' : 'Installs'}</div>
-                  <div className="hidden md:flex items-center gap-2 px-6 py-2 bg-green-50">
-                    <Wrench size={13} className="text-green-600" />
-                    <span className="text-xs font-semibold text-green-700 uppercase tracking-wide">Installs</span>
-                    <span className="text-[10px] font-bold text-green-600">({dayItems.installs.length})</span>
-                  </div>
-                  <div className="flex flex-col gap-2 md:gap-0 md:divide-y md:divide-slate-100">
+                <>
+                  {listHeading('Installs', dayItems.installs.length, <Wrench size={14} />)}
+                  <div className={LIST_CLASS}>
                     {dayItems.installs.map(({ job, dayNumber, totalDays }) => (
-                      <button key={job.id} onClick={() => onEditJob(job.id)}
-                        className="w-full bg-white border border-[#bbf7d0] border-l-[3px] border-l-[#22c55e] md:border-0 md:border-b md:border-slate-100 rounded-[13px] md:rounded-none px-[15px] md:px-6 py-[13px] md:py-3 flex items-center gap-3 text-left hover:bg-green-50/60 transition-colors">
-                        <div className="flex-1 min-w-0">
-                          <div className="text-[14.5px] font-bold text-[#0f172a] truncate">{job.name || 'Untitled Job'}</div>
-                          {job.customerName && <div className="text-xs text-slate-400 mt-0.5">{job.customerName}</div>}
-                        </div>
+                      <button key={job.id} onClick={() => onEditJob(job.id)} className={ROW_CLASS}>
+                        <span className="flex-1 min-w-0">
+                          <span className="block truncate text-[15px] font-bold text-slate-900">{job.name || 'Untitled Job'}</span>
+                          {job.customerName && <span className="block truncate mt-0.5 text-[13px] text-slate-600">{job.customerName}</span>}
+                        </span>
                         {totalDays > 1 && (
-                          <span className="text-xs font-medium text-green-700 bg-green-100 px-1.5 py-0.5 rounded shrink-0">Day {dayNumber}/{totalDays}</span>
+                          <span className="num shrink-0 px-2.5 py-0.5 rounded-full bg-slate-100 text-xs font-bold text-slate-700">Day {dayNumber} of {totalDays}</span>
                         )}
+                        <ChevronRight size={16} className="shrink-0 text-slate-400" />
                       </button>
                     ))}
                   </div>
-                </div>
+                </>
               )}
               {dayItems.estimates.length > 0 && (
-                <div>
-                  <div className="text-[11px] font-extrabold text-purple-700 tracking-[0.5px] uppercase mb-[7px] pl-1 md:hidden">{isSelectedDayToday ? 'Estimates Today' : 'Estimates'}</div>
-                  <div className="hidden md:flex items-center gap-2 px-6 py-2 bg-purple-50">
-                    <FileSearch size={13} className="text-purple-600" />
-                    <span className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Estimates</span>
-                    <span className="text-[10px] font-bold text-purple-600">({dayItems.estimates.length})</span>
-                  </div>
-                  <div className="flex flex-col gap-2 md:gap-0 md:divide-y md:divide-slate-100">
+                <>
+                  {listHeading('Estimates', dayItems.estimates.length, <FileSearch size={14} />)}
+                  <div className={LIST_CLASS}>
                     {dayItems.estimates.map(({ job }) => (
-                      <button key={job.id} onClick={() => onEditJob(job.id)}
-                        className="w-full bg-white border border-slate-200 md:border-0 md:border-b md:border-slate-100 rounded-[13px] md:rounded-none px-[15px] md:px-6 py-[13px] md:py-3 flex items-center gap-3 text-left hover:bg-purple-50/60 transition-colors">
-                        <div className="flex-1 min-w-0">
-                          <div className="text-[14.5px] font-bold text-[#0f172a] truncate">{job.name || 'Untitled Job'}</div>
-                          {job.customerName && <div className="text-xs text-slate-400 mt-0.5">{job.customerName}</div>}
-                        </div>
-                        <span className={`shrink-0 px-[9px] py-[3px] rounded-full text-[11px] font-extrabold ${getStatusColor(job.status)}`}>{job.status}</span>
+                      <button key={job.id} onClick={() => onEditJob(job.id)} className={ROW_CLASS}>
+                        <span className="flex-1 min-w-0">
+                          <span className="block truncate text-[15px] font-bold text-slate-900">{job.name || 'Untitled Job'}</span>
+                          {job.customerName && <span className="block truncate mt-0.5 text-[13px] text-slate-600">{job.customerName}</span>}
+                        </span>
+                        <span className={`shrink-0 px-2.5 py-0.5 rounded-full text-xs font-bold ${getStatusColor(job.status)}`}>{job.status}</span>
+                        <ChevronRight size={16} className="shrink-0 text-slate-400" />
                       </button>
                     ))}
                   </div>
-                </div>
+                </>
               )}
               {dayItems.reminders.length > 0 && (
-                <div>
-                  <div className="text-[11px] font-extrabold text-[#1d4ed8] tracking-[0.5px] uppercase mb-[7px] pl-1 md:hidden">{isSelectedDayToday ? 'Reminders Today' : 'Reminders'}</div>
-                  <div className="hidden md:flex items-center gap-2 px-6 py-2 bg-blue-50">
-                    <Bell size={13} className="text-blue-600" />
-                    <span className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Reminders</span>
-                    <span className="text-[10px] font-bold text-blue-600">({dayItems.reminders.length})</span>
-                  </div>
-                  <div className="flex flex-col gap-2 md:gap-0 md:divide-y md:divide-slate-100">
+                <>
+                  {listHeading('Reminders', dayItems.reminders.length, <Bell size={14} />)}
+                  <div className={LIST_CLASS}>
                     {dayItems.reminders.map(({ job, reminder }) => (
-                      <button key={reminder.id} onClick={() => onEditJob(job.id)}
-                        className="w-full bg-white border border-[#bfdbfe] border-l-[3px] border-l-[#3b82f6] md:border-0 md:border-b md:border-slate-100 rounded-[13px] md:rounded-none px-[15px] md:px-6 py-[13px] md:py-3 flex items-center gap-3 text-left hover:bg-blue-50/60 transition-colors">
-                        <div className="flex-1 min-w-0">
-                          <div className="text-[14.5px] font-bold text-[#0f172a] truncate">{reminder.subject}</div>
-                          <div className="text-xs text-slate-400 mt-0.5">{job.name || 'Untitled Job'}{job.customerName ? ` · ${job.customerName}` : ''}</div>
-                        </div>
-                        <div className="flex items-center gap-1 text-xs text-blue-600 shrink-0">
-                          <Clock size={11} />
-                          <span>{reminder.dueTime}</span>
-                        </div>
+                      <button key={reminder.id} onClick={() => onEditJob(job.id)} className={ROW_CLASS}>
+                        <span className="flex-1 min-w-0">
+                          <span className="block truncate text-[15px] font-bold text-slate-900">{reminder.subject}</span>
+                          <span className="block truncate mt-0.5 text-[13px] text-slate-600">{job.name || 'Untitled Job'}{job.customerName ? ` · ${job.customerName}` : ''}</span>
+                        </span>
+                        {reminder.dueTime && <span className="num shrink-0 text-[13px] font-bold text-slate-700">{reminder.dueTime}</span>}
+                        <ChevronRight size={16} className="shrink-0 text-slate-400" />
                       </button>
                     ))}
                   </div>
-                </div>
+                </>
               )}
-            </div>
+            </>
           )}
         </div>
       )}
 
-      {/* Reminders tab */}
+      {/* Reminders tab — grouped by urgency so overdue items are listed once, at the top */}
       {viewMode === 'reminders' && (
-        <div className="md:bg-white">
+        <div className="pb-3 md:pb-0">
           {remindersByDue.length === 0 ? (
             <div className="p-12 text-center">
-              <Bell size={24} className="mx-auto mb-2 text-slate-300" />
-              <p className="text-sm text-slate-500">No pending reminders.</p>
+              <Bell size={24} className="mx-auto mb-2 text-slate-400" />
+              <p className="text-sm text-slate-600">No pending reminders.</p>
             </div>
           ) : (
-            <div className="px-3.5 md:px-0 py-2.5 md:py-0 flex flex-col gap-2 md:gap-0 md:divide-y md:divide-slate-100">
-              {remindersByDue.map((reminder) => {
-                const now = Date.now();
-                const dueAtTime = new Date(reminder.dueAt).getTime();
-                const startOfTomorrow = new Date();
-                startOfTomorrow.setHours(24, 0, 0, 0);
-                const isPastDue = dueAtTime < now;
-                const isDueTodayOrPast = dueAtTime < startOfTomorrow.getTime();
-                return (
-                  <div key={`${reminder.jobId}-${reminder.reminderId}`}
-                    className={`bg-white border border-slate-200 md:border-0 md:border-b md:border-slate-100 rounded-[14px] md:rounded-none px-4 md:px-6 py-3.5 md:py-3 flex items-start gap-3 ${
-                      isPastDue ? 'md:bg-red-50' : isDueTodayOrPast ? 'md:bg-amber-50' : ''
-                    }`}>
-                    <button onClick={() => onEditJob(reminder.jobId)} className="flex-1 min-w-0 text-left">
-                      <div className="text-[14.5px] font-bold text-[#0f172a] truncate">{reminder.subject}</div>
-                      <div className="text-xs text-slate-400 mt-0.5 truncate">{reminder.jobName}</div>
-                      {reminder.details && <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{reminder.details}</p>}
-                      <p className={`num text-xs font-bold mt-1.5 ${isPastDue ? 'text-[#dc2626]' : isDueTodayOrPast ? 'text-[#a16207]' : 'text-slate-500'}`}>
-                        {new Date(reminder.dueAt).toLocaleString()}
-                      </p>
-                    </button>
-                    <div className="flex items-center gap-1 shrink-0 pt-0.5">
-                      <button type="button" onClick={() => handleCompleteReminder(reminder)}
-                        className="p-1.5 rounded text-green-600 hover:bg-green-50 transition-colors" title="Mark complete" disabled={updatingReminder}>
-                        <Check size={14} />
+            reminderGroups.map((group) => (
+              <Fragment key={group.id}>
+                {listHeading(group.label, group.items.length,
+                  group.id === 'overdue' ? <span className="w-2 h-2 rounded-full bg-red-700" aria-hidden="true" /> : undefined,
+                  group.id === 'overdue' ? 'text-red-800' : undefined)}
+                <div className={LIST_CLASS}>
+                  {group.items.map((reminder) => (
+                    <div key={`${reminder.jobId}-${reminder.reminderId}`}
+                      className="bg-white border border-slate-200 rounded-[14px] md:border-0 md:border-t md:border-slate-100 md:rounded-none pl-4 pr-2 py-2 flex items-center gap-1">
+                      <button onClick={() => onEditJob(reminder.jobId)} className="flex-1 min-w-0 py-1 text-left">
+                        <span className="block truncate text-[15px] font-bold text-slate-900">{reminder.subject}</span>
+                        <span className="block truncate mt-0.5 text-[13px] text-slate-600">
+                          <span className={group.id === 'overdue' ? 'font-bold text-red-800' : group.id === 'today' ? 'font-bold text-slate-900' : ''}>
+                            {reminderDueText(reminder.dueAt, group.id)}
+                          </span>
+                          {' · '}{reminder.jobName}{reminder.customerName ? ` · ${reminder.customerName}` : ''}
+                        </span>
+                        {reminder.details && <span className="block truncate mt-0.5 text-[13px] text-slate-600">{reminder.details}</span>}
                       </button>
-                      <button type="button" onClick={() => handleDeleteReminder(reminder)}
-                        className="p-1.5 rounded text-red-600 hover:bg-red-50 transition-colors" title="Delete reminder" disabled={updatingReminder}>
-                        <Trash2 size={14} />
+                      <button type="button" onClick={() => handleCompleteReminder(reminder)} disabled={updatingReminder}
+                        aria-label={`Mark "${reminder.subject}" done`} title="Mark done"
+                        className="shrink-0 flex items-center justify-center w-11 h-11 rounded-full border border-slate-300 text-slate-700 hover:border-gf-dark-green hover:bg-green-50 hover:text-gf-dark-green transition-colors disabled:opacity-50">
+                        <Check size={18} strokeWidth={2.5} />
+                      </button>
+                      <button type="button" onClick={() => handleDeleteReminder(reminder)} disabled={updatingReminder}
+                        aria-label={`Delete "${reminder.subject}"`} title="Delete reminder"
+                        className="shrink-0 flex items-center justify-center w-11 h-11 rounded-lg text-slate-500 hover:bg-red-50 hover:text-red-700 transition-colors disabled:opacity-50">
+                        <Trash2 size={16} />
                       </button>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  ))}
+                </div>
+              </Fragment>
+            ))
           )}
         </div>
       )}
 
       {/* Jobs tab content */}
       {viewMode !== 'jobs' ? null : loading ? (
-        <div className="p-12 text-center text-sm text-slate-500">Loading jobs...</div>
+        <div className="p-12 text-center text-sm text-slate-600">Loading jobs…</div>
       ) : filteredAndSortedJobs.length === 0 ? (
         <div className="p-12 text-center">
-          <p className="text-sm text-slate-500 mb-4">
-            {jobsWithCalc.length === 0 ? "No jobs yet. Create your first job to get started!" : "No jobs match the current filters."}
+          <p className="text-sm text-slate-600 mb-4">
+            {jobsWithCalc.length === 0 ? 'No jobs yet. Create your first job to get started.' : 'No jobs match the current filters.'}
           </p>
           {jobsWithCalc.length === 0 && canWriteJobs && (
-            <button onClick={onNewJob} className="inline-flex items-center gap-2 px-4 py-2 bg-gf-lime text-white rounded-lg font-semibold hover:bg-gf-dark-green transition-colors text-sm">
-              <Plus size={16} /> Create Job
+            <button onClick={onNewJob} className="inline-flex items-center gap-2 h-11 px-4 bg-gf-dark-green text-white rounded-[10px] font-bold hover:bg-[#3f631a] transition-colors text-sm">
+              <Plus size={16} /> Create job
+            </button>
+          )}
+          {jobsWithCalc.length > 0 && isFiltered && (
+            <button onClick={handleClearFilters} className="inline-flex items-center h-11 px-4 rounded-[10px] border border-slate-300 bg-white text-sm font-bold text-slate-700 hover:bg-slate-50">
+              Clear filters
             </button>
           )}
           {(hasMoreOlderJobs || olderJobsMessage) && (
             <div className="mt-3 flex flex-col items-center gap-2">
               {hasMoreOlderJobs && (
-                <button
-                  type="button"
-                  onClick={handleLoadOlderJobs}
-                  disabled={loadingOlderJobs}
-                  className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-white border border-slate-300 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  {loadingOlderJobs ? 'Loading...' : 'Load Older Jobs'}
+                <button type="button" onClick={handleLoadOlderJobs} disabled={loadingOlderJobs}
+                  className="min-h-11 md:min-h-9 px-3.5 rounded-lg bg-white border border-slate-300 text-[13px] font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-60 disabled:cursor-not-allowed">
+                  {loadingOlderJobs ? 'Loading…' : 'Load older jobs'}
                 </button>
               )}
-              {olderJobsMessage && (
-                <p className="text-xs text-slate-500 text-center">{olderJobsMessage}</p>
-              )}
+              {olderJobsMessage && <p className="text-xs text-slate-600 text-center">{olderJobsMessage}</p>}
             </div>
           )}
         </div>
       ) : (
         <>
           {/* Mobile card list */}
-          <div className="md:hidden px-3.5 py-2.5 pb-[120px] flex flex-col gap-2.5">
+          <div className="md:hidden px-4 pt-1 pb-3 flex flex-col gap-2.5">
             {displayItems.map((item) => {
-              if (item.type === 'group') {
-                const isExpanded = expandedGroups.has(item.groupId);
-                const isBundled = item.groupType === 'bundled';
-                const aggMarginPct = item.aggregateTotalPrice > 0 ? ((item.aggregateTotalPrice - item.aggregateTotalCosts) / item.aggregateTotalPrice) * 100 : 0;
-                return (
-                  <div key={item.groupId} className={`${isBundled ? 'bg-[#eff6ff]' : 'bg-[#faf5ff]'} border ${isBundled ? 'border-[#bfdbfe]' : 'border-[#e9d5ff]'} rounded-[16px] overflow-hidden`}>
-                    <div onClick={() => toggleGroup(item.groupId)}
-                      className="flex items-center gap-[9px] px-4 py-[13px] cursor-pointer">
-                      {isBundled
-                        ? <Link size={16} className="text-blue-500 shrink-0" />
-                        : <Shuffle size={16} className="text-purple-600 shrink-0" />
-                      }
-                      <div className="flex-1 min-w-0">
-                        <div className="font-bold text-[15px] text-[#0f172a] truncate">{item.customerName}</div>
-                        <div className={`text-xs font-semibold mt-0.5 ${isBundled ? 'text-blue-600' : 'text-[#9333ea]'}`}>
-                          {isBundled ? `${item.jobs.length} bundled parts` : `${item.jobs.length} alternative estimates`}
-                        </div>
-                      </div>
-                      {isBundled && <span className={`num text-xs font-extrabold ${getMarginColor(aggMarginPct)}`}>{aggMarginPct.toFixed(0)}%</span>}
-                      <ChevronDown size={18} className={`text-purple-300 shrink-0 transition-transform ${isExpanded ? '' : '-rotate-90'}`} />
-                    </div>
-                    {isExpanded && (
-                      <div className="px-3 pb-3 flex flex-col gap-2">
-                        {item.jobs.map(({ job, calc }) => {
-                          const marginPct = job.totalPrice > 0 ? ((job.totalPrice - calc.totalCosts) / job.totalPrice) * 100 : 0;
-                          return (
-                            <div key={job.id} onClick={() => onEditJob(job.id)}
-                              className={`bg-white border ${isBundled ? 'border-[#bfdbfe] border-l-[3px] border-l-[#60a5fa]' : 'border-[#e9d5ff] border-l-[3px] border-l-[#c084fc]'} rounded-[11px] px-[13px] py-3 cursor-pointer flex items-center justify-between gap-2`}>
-                              <div className="min-w-0 flex-1">
-                                <div className="font-bold text-sm text-[#0f172a] truncate">{job.name || 'Untitled Job'}</div>
-                                <div className={`num text-xs font-bold mt-0.5 ${getMarginColor(marginPct)}`}>{marginPct.toFixed(0)}% margin</div>
-                              </div>
-                              {starButton(job)}
-                              <span className="num text-[17px] font-extrabold text-[#0f172a] shrink-0">${job.totalPrice.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              }
-
-              const { job, calc } = item.jobWithCalc;
-              const marginPct = job.totalPrice > 0 ? ((job.totalPrice - calc.totalCosts) / job.totalPrice) * 100 : 0;
-              const metaParts: string[] = [];
-              if (job.customerName) metaParts.push(job.customerName);
-              if (job.estimateDate) {
-                const [y, m, d] = job.estimateDate.split('-').map(Number);
-                if (y && m && d) metaParts.push(new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
-              }
-              if (job.floorFootage) metaParts.push(`${job.floorFootage} ft²`);
-
+              if (item.type !== 'group') return renderJobCard(item.jobWithCalc);
+              const isExpanded = expandedGroups.has(item.groupId);
+              const isBundled = item.groupType === 'bundled';
+              const aggMarginPct = marginOf(item.aggregateTotalPrice, item.aggregateTotalCosts);
               return (
-                <div key={job.id} onClick={() => onEditJob(job.id)}
-                  className="bg-white border border-slate-200 rounded-[16px] px-4 py-3.5 cursor-pointer shadow-[0_1px_2px_rgba(15,23,42,0.04)] active:bg-slate-50 transition-colors">
-                  <div className="flex items-start justify-between gap-2.5">
-                    <div className="min-w-0 flex-1">
-                      <span className="font-bold text-[15.5px] text-[#0f172a] truncate block">{job.name || 'Untitled Job'}</span>
-                      {metaParts.length > 0 && (
-                        <div className="text-[12.5px] text-slate-400 mt-[3px] truncate">{metaParts.join(' · ')}</div>
-                      )}
-                    </div>
-                    {starButton(job)}
-                    <span className={`shrink-0 px-[9px] py-[3px] rounded-full text-[11px] font-extrabold ${getStatusColor(job.status)}`}>
-                      {job.status}
+                <div key={item.groupId} className="bg-slate-100 border border-slate-200 rounded-[14px] overflow-hidden">
+                  <button type="button" aria-expanded={isExpanded} onClick={() => toggleGroup(item.groupId)}
+                    className="w-full flex items-center gap-2.5 px-4 py-3 text-left">
+                    {isBundled
+                      ? <Link size={16} className="text-slate-600 shrink-0" />
+                      : <Shuffle size={16} className="text-slate-600 shrink-0" />
+                    }
+                    <span className="flex-1 min-w-0">
+                      <span className="block truncate text-base font-bold text-slate-900">{item.customerName}</span>
+                      <span className="block mt-0.5 text-[13px] text-slate-600">
+                        {isBundled ? `Bundle of ${item.jobs.length} jobs` : `${item.jobs.length} alternative estimates`}
+                      </span>
                     </span>
-                  </div>
-                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-[#f1f5f9]">
-                    <div className="flex gap-[5px] flex-wrap">
-                      {(job.tags || []).slice(0, 3).map((tag) => (
-                        <span key={tag} className="text-[11px] font-semibold text-slate-500 bg-[#f1f5f9] px-2 py-[3px] rounded-[6px]">{tag}</span>
-                      ))}
+                    {isBundled && (
+                      <span className="shrink-0 text-right">
+                        <span className="num block text-[17px] font-extrabold text-slate-900">{formatPrice(item.aggregateTotalPrice)}</span>
+                        <span className={`num block text-[13px] font-bold ${getMarginColor(aggMarginPct)}`}>{aggMarginPct.toFixed(0)}% margin</span>
+                      </span>
+                    )}
+                    <ChevronDown size={18} className={`text-slate-500 shrink-0 transition-transform ${isExpanded ? '' : '-rotate-90'}`} />
+                  </button>
+                  {isExpanded && (
+                    <div className="px-2.5 pb-2.5 flex flex-col gap-2">
+                      {item.jobs.map(renderJobCard)}
                     </div>
-                    <div className="flex items-baseline gap-2.5 shrink-0">
-                      <span className={`num text-[12.5px] font-extrabold ${getMarginColor(marginPct)}`}>{marginPct.toFixed(0)}%</span>
-                      <span className="num text-[20px] font-extrabold text-[#0f172a] tracking-tight">${job.totalPrice.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
-                    </div>
-                  </div>
+                  )}
                 </div>
               );
             })}
@@ -1485,155 +1419,108 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
 
           {/* Desktop table */}
           <div className="hidden md:block overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full min-w-[470px]">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-200">
-                  <th className="px-4 lg:px-6 py-3 text-left text-sm font-semibold text-slate-700">Job Name</th>
-                  <th className="px-4 lg:px-6 py-3 text-center text-sm font-semibold text-slate-700">Status</th>
-                  <th className="px-4 lg:px-6 py-3 text-right text-sm font-semibold text-slate-700">Total Cost</th>
-                  <th className="px-4 lg:px-6 py-3 text-right text-sm font-semibold text-slate-700">Total Price</th>
-                  <th className="px-4 lg:px-6 py-3 text-right text-sm font-semibold text-slate-700">Actual Margin</th>
-                  <th className="px-4 lg:px-6 py-3 text-right text-sm font-semibold text-slate-700">Date</th>
-                  <th className="px-4 lg:px-6 py-3 text-right text-sm font-semibold text-slate-700">Action</th>
+                <tr className="text-left text-xs text-slate-600">
+                  <th scope="col" className="px-4 py-3 font-bold">Job</th>
+                  <th scope="col" className="px-4 py-3 font-bold">Status</th>
+                  <th scope="col" className="hidden lg:table-cell px-4 py-3 font-bold">Estimate</th>
+                  <th scope="col" className="px-4 py-3 font-bold text-right">Price</th>
+                  <th scope="col" className="px-4 py-3 font-bold text-right">Margin</th>
+                  <th scope="col" className="px-2 py-3 w-[104px]"><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody>
                 {displayItems.map((item) => {
-                  if (item.type === 'group') {
-                    const isExpanded = expandedGroups.has(item.groupId);
-                    const isBundled = item.groupType === 'bundled';
-                    const aggMarginPct = item.aggregateTotalPrice > 0 ? ((item.aggregateTotalPrice - item.aggregateTotalCosts) / item.aggregateTotalPrice) * 100 : 0;
-                    return (
-                      <>
-                        <tr key={`group-${item.groupId}`}
-                          className={`border-b border-slate-200 cursor-pointer transition-colors ${isBundled ? 'bg-blue-50 hover:bg-blue-100' : 'bg-purple-50 hover:bg-purple-100'}`}
-                          onClick={() => toggleGroup(item.groupId)}>
-                          <td className="px-4 lg:px-6 py-3 text-sm font-semibold text-slate-900" colSpan={isBundled ? 1 : 5}>
-                            <div className="flex items-center gap-2">
-                              {isExpanded ? <ChevronDown size={14} className="text-slate-500 shrink-0" /> : <ChevronRight size={14} className="text-slate-500 shrink-0" />}
-                              {isBundled ? <Link size={13} className="text-blue-600 shrink-0" /> : <Shuffle size={13} className="text-purple-600 shrink-0" />}
-                              <span>{item.customerName}</span>
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${isBundled ? 'bg-blue-200 text-blue-800' : 'bg-purple-200 text-purple-800'}`}>
-                                {isBundled ? `Bundle · ${item.jobs.length} parts` : `${item.jobs.length} Alternatives`}
-                              </span>
-                            </div>
-                          </td>
-                          {isBundled && (
-                            <>
-                              <td className="px-4 lg:px-6 py-3 text-sm text-center text-slate-400">—</td>
-                              <td className="px-4 lg:px-6 py-3 text-sm text-right text-slate-700 font-medium">${item.aggregateTotalCosts.toFixed(0)}</td>
-                              <td className="px-4 lg:px-6 py-3 text-sm text-right font-semibold text-slate-900">${item.aggregateTotalPrice.toFixed(0)}</td>
-                              <td className={`px-4 lg:px-6 py-3 text-sm text-right font-bold ${aggMarginPct >= 30 ? 'text-green-600' : 'text-orange-600'}`}>{aggMarginPct.toFixed(0)}%</td>
-                              <td className="px-4 lg:px-6 py-3 text-sm text-right text-slate-400">—</td>
-                              <td className="px-4 lg:px-6 py-3 text-sm text-right text-slate-400">—</td>
-                            </>
-                          )}
-                        </tr>
-                        {isExpanded && item.jobs.map(({ job, calc }) => {
-                          const marginPct = job.totalPrice > 0 ? ((job.totalPrice - calc.totalCosts) / job.totalPrice) * 100 : 0;
-                          return (
-                            <tr key={job.id} className="border-b border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => onEditJob(job.id)}>
-                              <td className="py-3 text-sm font-medium text-slate-900">
-                                <div className="flex items-center">
-                                  <div className={`w-1 self-stretch mr-3 rounded-r ${isBundled ? 'bg-blue-300' : 'bg-purple-300'}`} style={{minHeight: '100%'}} />
-                                  <div className="px-2 lg:px-3">
-                                    <div>{job.name || 'Untitled Job'}</div>
-                                    {(job.tags || []).length > 0 && (
-                                      <div className="mt-0.5 flex flex-wrap gap-1">
-                                        {(job.tags || []).slice(0, 3).map((tag) => (
-                                          <span key={tag} className="inline-block px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium">{tag}</span>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="px-4 lg:px-6 py-3 text-sm text-center">
-                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(job.status)}`}>{job.status}</span>
-                              </td>
-                              <td className="px-4 lg:px-6 py-3 text-sm text-slate-600 text-right">${calc.totalCosts.toFixed(0)}</td>
-                              <td className="px-4 lg:px-6 py-3 text-sm font-semibold text-slate-900 text-right">${job.totalPrice.toFixed(0)}</td>
-                              <td className={`px-4 lg:px-6 py-3 text-sm font-semibold text-right ${marginPct >= 30 ? 'text-green-600' : 'text-orange-600'}`}>{marginPct.toFixed(0)}%</td>
-                              <td className="px-4 lg:px-6 py-3 text-sm text-slate-600 text-right">{new Date(job.createdAt).toLocaleDateString()}</td>
-                              <td className="px-4 lg:px-6 py-3 text-sm text-right">
-                                <div className="flex items-center justify-end gap-2">
-                                  {starButton(job)}
-                          <button onClick={(e) => { e.stopPropagation(); onViewJobSheet(job.id); }} className="text-green-600 hover:text-green-800" title="Job Sheet"><FileText size={18} /></button>
-                                  <button className="text-gf-dark-green font-medium text-xs lg:text-sm">Edit</button>
-                                  {canWriteJobs && (<button onClick={(e) => { e.stopPropagation(); handleDeleteJob(job.id); }} className="text-red-600 hover:text-red-800"><Trash2 size={18} /></button>)}
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </>
-                    );
-                  }
-
-                  const { job, calc } = item.jobWithCalc;
-                  const marginPct = job.totalPrice > 0 ? ((job.totalPrice - calc.totalCosts) / job.totalPrice) * 100 : 0;
+                  if (item.type !== 'group') return renderJobRow(item.jobWithCalc, false);
+                  const isExpanded = expandedGroups.has(item.groupId);
+                  const isBundled = item.groupType === 'bundled';
+                  const aggMarginPct = marginOf(item.aggregateTotalPrice, item.aggregateTotalCosts);
                   return (
-                    <tr key={job.id} className="border-b border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => onEditJob(job.id)}>
-                      <td className="px-4 lg:px-6 py-4 text-sm font-medium text-slate-900">
-                        <div>{job.name || 'Untitled Job'}</div>
-                        {(job.tags || []).length > 0 && (
-                          <div className="mt-1 flex flex-wrap gap-1">
-                            {(job.tags || []).slice(0, 3).map((tag) => (
-                              <span key={tag} className="inline-block px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium">{tag}</span>
-                            ))}
-                          </div>
+                    <Fragment key={`group-${item.groupId}`}>
+                      <tr className="border-t border-slate-100 bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer" onClick={() => toggleGroup(item.groupId)}>
+                        <td className="px-4 py-3" colSpan={isBundled ? 2 : 6}>
+                          <button type="button" aria-expanded={isExpanded} className="flex items-center gap-2 text-left">
+                            <ChevronRight size={14} className={`text-slate-500 shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                            <span>
+                              <span className="block text-[15px] font-bold text-slate-900">{item.customerName}</span>
+                              <span className="block mt-0.5 text-[13px] text-slate-600">
+                                {isBundled ? `Bundle of ${item.jobs.length} jobs` : `${item.jobs.length} alternative estimates`}
+                              </span>
+                            </span>
+                          </button>
+                        </td>
+                        {isBundled && (
+                          <>
+                            <td className="hidden lg:table-cell" />
+                            <td className="num px-4 py-3 text-right text-[15px] font-extrabold text-slate-900">{formatPrice(item.aggregateTotalPrice)}</td>
+                            <td className={`num px-4 py-3 text-right text-sm font-bold ${getMarginColor(aggMarginPct)}`}>{aggMarginPct.toFixed(0)}%</td>
+                            <td className="px-2 py-3" />
+                          </>
                         )}
-                      </td>
-                      <td className="px-4 lg:px-6 py-4 text-sm text-center">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(job.status)}`}>{job.status}</span>
-                      </td>
-                      <td className="px-4 lg:px-6 py-4 text-sm text-slate-600 text-right">${calc.totalCosts.toFixed(0)}</td>
-                      <td className="px-4 lg:px-6 py-4 text-sm font-semibold text-slate-900 text-right">${job.totalPrice.toFixed(0)}</td>
-                      <td className={`px-4 lg:px-6 py-4 text-sm font-semibold text-right ${marginPct >= 30 ? 'text-green-600' : 'text-orange-600'}`}>{marginPct.toFixed(0)}%</td>
-                      <td className="px-4 lg:px-6 py-4 text-sm text-slate-600 text-right">{new Date(job.createdAt).toLocaleDateString()}</td>
-                      <td className="px-4 lg:px-6 py-4 text-sm text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          {starButton(job)}
-                          <button onClick={(e) => { e.stopPropagation(); onViewJobSheet(job.id); }} className="text-green-600 hover:text-green-800" title="Job Sheet"><FileText size={18} /></button>
-                          <button className="text-gf-dark-green font-medium text-xs lg:text-sm">Edit</button>
-                          {canWriteJobs && (<button onClick={(e) => { e.stopPropagation(); handleDeleteJob(job.id); }} className="text-red-600 hover:text-red-800"><Trash2 size={18} /></button>)}
-                        </div>
-                      </td>
-                    </tr>
+                      </tr>
+                      {isExpanded && item.jobs.map((jwc) => renderJobRow(jwc, true))}
+                    </Fragment>
                   );
                 })}
               </tbody>
             </table>
           </div>
-          {(hasMoreOlderJobs || olderJobsMessage) && (
-            <div className="border-t border-slate-200 bg-slate-50 px-3 sm:px-6 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-center gap-2">
-              {hasMoreOlderJobs && (
-                <button
-                  type="button"
-                  onClick={handleLoadOlderJobs}
-                  disabled={loadingOlderJobs}
-                  className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-white border border-slate-300 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  {loadingOlderJobs ? 'Loading...' : 'Load Older Jobs'}
-                </button>
-              )}
-              {olderJobsMessage && (
-                <p className="text-xs text-slate-500 text-center">{olderJobsMessage}</p>
-              )}
-            </div>
-          )}
+          {loadOlderFooter}
         </>
       )}
+        </section>
 
-      {/* Mobile FAB */}
-      {canWriteJobs && viewMode === 'jobs' && (
-        <div className="md:hidden sticky bottom-[22px] z-[18] flex justify-end px-5 pointer-events-none -mt-[78px]">
-          <button onClick={onNewJob}
-            className="pointer-events-auto flex items-center gap-2 px-[22px] py-[15px] rounded-full bg-gradient-to-r from-gf-lime to-gf-dark-green text-white text-[15px] font-extrabold shadow-lg shadow-gf-lime/25 active:scale-95 transition-transform">
-            <Plus size={20} strokeWidth={2.6} />
-            New Job
-          </button>
-        </div>
+        {/* Hot jobs side panel — desktop */}
+        <aside aria-labelledby="hot-jobs-panel-heading" className="hidden xl:flex flex-col gap-3 w-[280px] shrink-0 bg-white border border-slate-200 rounded-[14px] p-4">
+          <div className="flex items-center gap-2">
+            <Star size={16} className="text-amber-700" fill="currentColor" />
+            <h2 id="hot-jobs-panel-heading" className="flex-1 font-heading text-base font-bold text-slate-900">Hot jobs</h2>
+            <span className="num text-[13px] text-slate-600">{hotJobs.length}</span>
+          </div>
+          {hotJobs.length > 0 && (
+            <ul className="flex flex-col gap-2 max-h-[60vh] overflow-y-auto">
+              {hotJobs.map(({ job }) => (
+                <li key={job.id} className="flex items-center rounded-[10px] border border-slate-200 hover:border-slate-300 transition-colors">
+                  <button type="button" onClick={() => onEditJob(job.id)}
+                    className="min-w-0 flex-1 pl-3 py-2.5 text-left rounded-[10px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gf-lime">
+                    <span className="flex justify-between gap-2 text-sm font-bold text-slate-900">
+                      <span className="truncate">{job.name || 'Untitled Job'}</span>
+                      <span className="num shrink-0">{formatPrice(job.totalPrice)}</span>
+                    </span>
+                    <span className="block truncate mt-0.5 text-[13px] text-slate-600">{job.customerName || 'No customer'} · {job.status}</span>
+                  </button>
+                  {starButton(job)}
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="text-xs text-slate-600">{hotJobs.length === 0 ? hotJobsEmptyText : 'Star any job to pin it here for the whole team.'}</p>
+        </aside>
+      </div>
+
+      {/* Row actions menu (desktop table) */}
+      {rowMenu && rowMenuJob && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setRowMenu(null)} />
+          <div role="menu" style={{ top: rowMenu.top, right: rowMenu.right }}
+            className="fixed z-50 w-44 py-1 bg-white border border-slate-200 rounded-[10px] shadow-lg text-sm font-semibold text-slate-700">
+            <button type="button" role="menuitem" onClick={() => { setRowMenu(null); onEditJob(rowMenuJob.id); }}
+              className="w-full flex items-center gap-2.5 px-3 h-10 text-left hover:bg-slate-50">
+              <Pencil size={15} /> Edit job
+            </button>
+            <button type="button" role="menuitem" onClick={() => { setRowMenu(null); onViewJobSheet(rowMenuJob.id); }}
+              className="w-full flex items-center gap-2.5 px-3 h-10 text-left hover:bg-slate-50">
+              <FileText size={15} /> Job sheet
+            </button>
+            {canWriteJobs && (
+              <button type="button" role="menuitem" onClick={() => { setRowMenu(null); handleDeleteJob(rowMenuJob.id); }}
+                className="w-full flex items-center gap-2.5 px-3 h-10 text-left text-red-700 hover:bg-red-50">
+                <Trash2 size={15} /> Delete
+              </button>
+            )}
+          </div>
+        </>
       )}
 
       {/* Mobile filter bottom sheet */}
@@ -1658,6 +1545,10 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
                 </button>
               ))}
             </div>
+            <label className="flex items-center justify-between gap-3 min-h-11 mb-[18px] text-sm font-bold text-slate-700">
+              Show past installs
+              <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} className="w-5 h-5 accent-gf-dark-green" />
+            </label>
             <div className="text-[11px] font-extrabold text-slate-400 tracking-[0.5px] uppercase mb-2">Min Probability</div>
             <div className="flex gap-[7px] flex-wrap mb-[22px]">
               {[0, 20, 40, 60, 80, 100].map(p => (
