@@ -324,6 +324,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
     setTagMatchMode('any');
     setSearchQuery('');
     setSortBy('date');
+    setShowInactive(false);
   };
 
   // Filter and sort jobs
@@ -418,33 +419,41 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
   type DisplayItem = GroupDisplayItem | JobDisplayItem;
 
   const displayItems = useMemo((): DisplayItem[] => {
-    const groupMap = new Map<string, JobWithCalc[]>();
-    const ungrouped: JobWithCalc[] = [];
+    // Build rows in the already-sorted job order; a group takes the position of its first member
+    const items: DisplayItem[] = [];
+    const groups = new Map<string, GroupDisplayItem>();
 
     for (const jwc of filteredAndSortedJobs) {
-      if (jwc.job.groupId) {
-        const existing = groupMap.get(jwc.job.groupId) || [];
-        existing.push(jwc);
-        groupMap.set(jwc.job.groupId, existing);
+      const createdMs = new Date(jwc.job.createdAt).getTime();
+      if (!jwc.job.groupId) {
+        items.push({ type: 'job', jobWithCalc: jwc, sortKey: createdMs });
+        continue;
+      }
+      const group = groups.get(jwc.job.groupId);
+      if (group) {
+        group.jobs.push(jwc);
+        group.sortKey = Math.max(group.sortKey, createdMs);
+        group.aggregateTotalPrice += jwc.job.totalPrice;
+        group.aggregateTotalCosts += jwc.calc.totalCosts;
       } else {
-        ungrouped.push(jwc);
+        const created: GroupDisplayItem = {
+          type: 'group',
+          groupId: jwc.job.groupId,
+          groupType: jwc.job.groupType || 'alternative',
+          customerName: jwc.job.customerName || 'Unknown Customer',
+          jobs: [jwc],
+          sortKey: createdMs,
+          aggregateTotalPrice: jwc.job.totalPrice,
+          aggregateTotalCosts: jwc.calc.totalCosts,
+        };
+        groups.set(jwc.job.groupId, created);
+        items.push(created);
       }
     }
 
-    const items: DisplayItem[] = [];
-    for (const [groupId, jobs] of groupMap.entries()) {
-      const sortKey = Math.max(...jobs.map(j => new Date(j.job.createdAt).getTime()));
-      const customerName = jobs[0]?.job.customerName || 'Unknown Customer';
-      const groupType = jobs[0]?.job.groupType || 'alternative';
-      const aggregateTotalPrice = jobs.reduce((s, j) => s + j.job.totalPrice, 0);
-      const aggregateTotalCosts = jobs.reduce((s, j) => s + j.calc.totalCosts, 0);
-      items.push({ type: 'group', groupId, groupType, customerName, jobs, sortKey, aggregateTotalPrice, aggregateTotalCosts });
-    }
-    for (const jwc of ungrouped) {
-      items.push({ type: 'job', jobWithCalc: jwc, sortKey: new Date(jwc.job.createdAt).getTime() });
-    }
-    return items.sort((a, b) => b.sortKey - a.sortKey);
-  }, [filteredAndSortedJobs]);
+    // Price and margin sorts keep the job order; "Most recent" orders groups by their newest job
+    return sortBy === 'date' ? items.sort((a, b) => b.sortKey - a.sortKey) : items;
+  }, [filteredAndSortedJobs, sortBy]);
 
   const toggleGroup = (groupId: string) => {
     setExpandedGroups(prev => {
@@ -707,7 +716,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
     return count;
   }, [statusFilter, probabilityFilter, chipBlendFilter, selectedTagFilters]);
 
-  const isFiltered = activeFilterCount > 0 || !!searchQuery;
+  const isFiltered = activeFilterCount > 0 || !!searchQuery || showInactive;
   // Filters that live behind the desktop "More filters" button (status has its own chips)
   const moreFilterCount = (probabilityFilter > 0 ? 1 : 0) + (chipBlendFilter ? 1 : 0) + (selectedTagFilters.length > 0 ? 1 : 0);
 
@@ -850,12 +859,14 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
       <tr key={job.id} className="border-t border-slate-100 hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => onEditJob(job.id)}>
         <td className={`py-3 pr-4 ${inGroup ? 'pl-10' : 'pl-4'}`}>
           <div className="text-[15px] font-bold text-slate-900">{job.name || 'Untitled Job'}</div>
-          {meta && <div className="mt-0.5 text-[13px] text-slate-600">{meta}</div>}
+          <div className="mt-0.5 text-[13px] text-slate-600">
+            <span className="lg:hidden">{formatJobDate(job)}{meta ? ' · ' : ''}</span>{meta}
+          </div>
         </td>
         <td className="px-4 py-3">
           <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${getStatusColor(job.status)}`}>{job.status}</span>
         </td>
-        <td className="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">{formatJobDate(job)}</td>
+        <td className="hidden lg:table-cell px-4 py-3 text-sm text-slate-700 whitespace-nowrap">{formatJobDate(job)}</td>
         <td className="num px-4 py-3 text-right text-[15px] font-extrabold text-slate-900">{formatPrice(job.totalPrice)}</td>
         <td className={`num px-4 py-3 text-right text-sm font-bold ${getMarginColor(marginPct)}`}>{marginPct.toFixed(0)}%</td>
         <td className="px-2 py-1.5 text-right whitespace-nowrap">
@@ -950,8 +961,8 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
         )}
       </div>
 
-      <div className="lg:flex lg:items-start lg:gap-6">
-        <section className="min-w-0 lg:flex-1 md:bg-white md:border md:border-slate-200 md:rounded-[14px] md:overflow-hidden">
+      <div className="xl:flex xl:items-start xl:gap-6">
+        <section className="min-w-0 xl:flex-1 md:bg-white md:border md:border-slate-200 md:rounded-[14px] md:overflow-hidden">
           {/* View tabs — one accent colour; only reminders needing attention show red */}
           <div className="sticky top-0 z-10 md:static">
             <div role="tablist" aria-label="Dashboard views" className="scrollbar-hide flex md:gap-1 bg-white border-b border-slate-200 md:px-3 overflow-x-auto">
@@ -994,7 +1005,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
           {starError && <p role="alert" className="px-4 pt-3 text-sm text-red-700">{starError}</p>}
 
           {/* Hot jobs strip — phones and tablets (desktop shows the side panel instead) */}
-          <section aria-labelledby="hot-jobs-heading" className="lg:hidden px-4 pt-2">
+          <section aria-labelledby="hot-jobs-heading" className="xl:hidden px-4 pt-2">
             <div className="flex items-center gap-1.5">
               <Star size={14} className="text-amber-700" fill="currentColor" />
               <h2 id="hot-jobs-heading" className="flex-1 text-[13px] font-extrabold text-slate-900">Hot jobs · {hotJobs.length}</h2>
@@ -1408,12 +1419,12 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
 
           {/* Desktop table */}
           <div className="hidden md:block overflow-x-auto">
-            <table className="w-full min-w-[600px]">
+            <table className="w-full min-w-[470px]">
               <thead>
                 <tr className="text-left text-xs text-slate-600">
                   <th scope="col" className="px-4 py-3 font-bold">Job</th>
                   <th scope="col" className="px-4 py-3 font-bold">Status</th>
-                  <th scope="col" className="px-4 py-3 font-bold">Estimate</th>
+                  <th scope="col" className="hidden lg:table-cell px-4 py-3 font-bold">Estimate</th>
                   <th scope="col" className="px-4 py-3 font-bold text-right">Price</th>
                   <th scope="col" className="px-4 py-3 font-bold text-right">Margin</th>
                   <th scope="col" className="px-2 py-3 w-[104px]"><span className="sr-only">Actions</span></th>
@@ -1428,7 +1439,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
                   return (
                     <Fragment key={`group-${item.groupId}`}>
                       <tr className="border-t border-slate-100 bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer" onClick={() => toggleGroup(item.groupId)}>
-                        <td className="px-4 py-3" colSpan={isBundled ? 3 : 6}>
+                        <td className="px-4 py-3" colSpan={isBundled ? 2 : 6}>
                           <button type="button" aria-expanded={isExpanded} className="flex items-center gap-2 text-left">
                             <ChevronRight size={14} className={`text-slate-500 shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
                             <span>
@@ -1441,6 +1452,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
                         </td>
                         {isBundled && (
                           <>
+                            <td className="hidden lg:table-cell" />
                             <td className="num px-4 py-3 text-right text-[15px] font-extrabold text-slate-900">{formatPrice(item.aggregateTotalPrice)}</td>
                             <td className={`num px-4 py-3 text-right text-sm font-bold ${getMarginColor(aggMarginPct)}`}>{aggMarginPct.toFixed(0)}%</td>
                             <td className="px-2 py-3" />
@@ -1460,7 +1472,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
         </section>
 
         {/* Hot jobs side panel — desktop */}
-        <aside aria-labelledby="hot-jobs-panel-heading" className="hidden lg:flex flex-col gap-3 w-[280px] shrink-0 bg-white border border-slate-200 rounded-[14px] p-4">
+        <aside aria-labelledby="hot-jobs-panel-heading" className="hidden xl:flex flex-col gap-3 w-[280px] shrink-0 bg-white border border-slate-200 rounded-[14px] p-4">
           <div className="flex items-center gap-2">
             <Star size={16} className="text-amber-700" fill="currentColor" />
             <h2 id="hot-jobs-panel-heading" className="flex-1 font-heading text-base font-bold text-slate-900">Hot jobs</h2>
