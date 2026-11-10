@@ -2,33 +2,75 @@ import type { Lead, LeadContactAttempt, LeadContactChannel } from '../types/inde
 import { addDaysToLocalDate, timestampToLocalDateString, toLocalDateString } from './dateUtils.js';
 
 export interface LeadContactSummary {
+  /** Calls made to the lead */
   calls: number;
+  /** Texts sent to the lead */
   texts: number;
   /** Most recent attempt of either kind, absent when the lead was never contacted */
   lastContactedAt?: string;
+  /** Most recent call or text from the lead, absent when they never reached back */
+  lastInboundAt?: string;
+}
+
+/** Whether an entry is the lead reaching the business, not an attempt made to them. */
+export function isInboundContact(attempt: Pick<LeadContactAttempt, 'direction'>): boolean {
+  return attempt.direction === 'inbound';
+}
+
+/** Entries reported by GoHighLevel. The server restores them if a save drops them, so they are not editable here. */
+export function isGhlContact(attempt: Pick<LeadContactAttempt, 'source'>): boolean {
+  return attempt.source === 'ghl';
 }
 
 function validAttempts(lead: Pick<Lead, 'contactLog'>): LeadContactAttempt[] {
   return (lead.contactLog ?? []).filter((attempt) => !Number.isNaN(new Date(attempt.at).getTime()));
 }
 
+/**
+ * Counts and "last contacted" cover attempts only — the business reaching out.
+ * A lead calling in or replying is not an attempt, and counting it would make a
+ * lead nobody has called back look freshly contacted; it is reported separately
+ * as lastInboundAt.
+ */
 export function summarizeLeadContacts(lead: Pick<Lead, 'contactLog'>): LeadContactSummary {
   let calls = 0;
   let texts = 0;
   let lastContactedAt: string | undefined;
+  let lastInboundAt: string | undefined;
   let lastTime = -Infinity;
+  let lastInboundTime = -Infinity;
 
   for (const attempt of validAttempts(lead)) {
+    const time = new Date(attempt.at).getTime();
+    if (isInboundContact(attempt)) {
+      if (time > lastInboundTime) {
+        lastInboundTime = time;
+        lastInboundAt = attempt.at;
+      }
+      continue;
+    }
     if (attempt.channel === 'call') calls += 1;
     if (attempt.channel === 'text') texts += 1;
-    const time = new Date(attempt.at).getTime();
     if (time > lastTime) {
       lastTime = time;
       lastContactedAt = attempt.at;
     }
   }
 
-  return { calls, texts, lastContactedAt };
+  const summary: LeadContactSummary = { calls, texts, lastContactedAt };
+  if (lastInboundAt) summary.lastInboundAt = lastInboundAt;
+  return summary;
+}
+
+/** Short label for a GHL-reported entry: "Outbound · voicemail · 0:42" */
+export function describeContactOutcome(attempt: LeadContactAttempt): string {
+  const parts = [isInboundContact(attempt) ? 'Inbound' : 'Outbound'];
+  if (attempt.status) parts.push(attempt.status.replace(/-/g, ' '));
+  if (attempt.durationSeconds) {
+    const minutes = Math.floor(attempt.durationSeconds / 60);
+    parts.push(`${minutes}:${String(attempt.durationSeconds % 60).padStart(2, '0')}`);
+  }
+  return parts.join(' · ');
 }
 
 /** Newest first, for display */

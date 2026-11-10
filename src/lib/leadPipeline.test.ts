@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
+  buildContactLogEntry,
   buildDedupeKey,
+  classifyGhlMessage,
   looksLikeRealFirstName,
   normalizeGhlWebhook,
   nextLeadStageForEvent,
@@ -504,5 +506,143 @@ describe('GHL lead pipeline', () => {
 
   test('leaves a stored address alone when the webhook carries no address at all', () => {
     assert.deepEqual(resolveLeadAddressMerge(storedStratham, {}), {});
+  });
+});
+
+describe('GHL call and text tracking', () => {
+  const appCall = {
+    type: 'OutboundMessage',
+    locationId: 'loc-1',
+    contactId: 'contact-1',
+    conversationId: 'conv-1',
+    messageId: 'msg-1',
+    messageType: 'CALL',
+    direction: 'outbound',
+    dateAdded: '2026-11-10T15:30:00.000Z',
+    status: 'completed',
+    callStatus: 'voicemail',
+    callDuration: 42,
+  };
+
+  test('reads an app-webhook outbound call, preferring callStatus as the outcome', () => {
+    const normalized = normalizeGhlWebhook(appCall);
+
+    assert.equal(normalized.eventType, 'contact.call');
+    assert.equal(normalized.lead.ghlContactId, 'contact-1');
+    assert.deepEqual(normalized.contact, {
+      channel: 'call',
+      direction: 'outbound',
+      at: '2026-11-10T15:30:00.000Z',
+      status: 'voicemail',
+      durationSeconds: 42,
+      ghlMessageId: 'msg-1',
+    });
+    assert.deepEqual(normalized.reviewReasons, []);
+    assert.equal(normalized.appointment, undefined);
+  });
+
+  test('reads an app-webhook inbound text, taking direction from the event name when absent', () => {
+    const normalized = normalizeGhlWebhook({
+      type: 'InboundMessage',
+      contactId: 'contact-1',
+      messageId: 'msg-2',
+      messageType: 'SMS',
+      body: 'Sounds good',
+      dateAdded: '2026-11-10T16:00:00.000Z',
+    });
+
+    assert.equal(normalized.eventType, 'contact.text');
+    assert.equal(normalized.contact?.direction, 'inbound');
+    assert.equal(normalized.contact?.durationSeconds, undefined);
+  });
+
+  test('accepts the TYPE_ spellings of the message type', () => {
+    const sms = classifyGhlMessage({ type: 'OutboundMessage', contactId: 'c', messageTypeString: 'TYPE_SMS' });
+    assert.equal(sms.kind === 'contact' && sms.contact.channel, 'text');
+  });
+
+  test('flags other channels as unsupported so they are never stored as leads', () => {
+    assert.deepEqual(
+      classifyGhlMessage({ type: 'OutboundMessage', contactId: 'c', messageType: 'Email' }),
+      { kind: 'unsupported', messageType: 'Email' }
+    );
+    assert.equal(classifyGhlMessage({ type: 'InboundMessage', contactId: 'c' }).kind, 'unsupported');
+  });
+
+  test('reads a workflow webhook identified by its event_type custom data', () => {
+    const normalized = normalizeGhlWebhook({
+      contact_id: 'contact-1',
+      first_name: 'Jane',
+      phone: '+16035550100',
+      customData: { event_type: 'contact.call', direction: 'Outbound', call_status: 'No Answer' },
+    });
+
+    assert.equal(normalized.eventType, 'contact.call');
+    assert.equal(normalized.contact?.direction, 'outbound');
+    assert.equal(normalized.contact?.status, 'no-answer');
+    assert.equal(normalized.contact?.at, undefined, 'arrival time is used when none is sent');
+  });
+
+  test('takes the direction from an event_type suffix and defaults to outbound', () => {
+    const inbound = normalizeGhlWebhook({ contact_id: 'c', customData: { event_type: 'contact.text.inbound' } });
+    assert.equal(inbound.eventType, 'contact.text');
+    assert.equal(inbound.contact?.direction, 'inbound');
+
+    const bare = normalizeGhlWebhook({ contact_id: 'c', customData: { event_type: 'contact_text' } });
+    assert.equal(bare.contact?.direction, 'outbound');
+  });
+
+  test('drops merge fields GHL left unfilled', () => {
+    const normalized = normalizeGhlWebhook({
+      contact_id: 'c',
+      customData: { event_type: 'contact.call', call_status: '{{call.status}}', occurred_at: '{{call.date}}' },
+    });
+    assert.equal(normalized.contact?.status, undefined);
+    assert.equal(normalized.contact?.at, undefined);
+  });
+
+  test('leaves lead and appointment events alone', () => {
+    assert.equal(classifyGhlMessage({ contact_id: 'c', customData: { event_type: 'appointment.booked' } }).kind, 'none');
+    assert.equal(classifyGhlMessage({ contact_id: 'c', first_name: 'Jane' }).kind, 'none');
+    assert.equal(normalizeGhlWebhook({ contact_id: 'c', first_name: 'Jane' }).eventType, 'lead.created');
+  });
+
+  test('dedupes a redelivery but lets a status change on the same message through', () => {
+    const first = normalizeGhlWebhook(appCall).dedupeKey;
+    assert.equal(normalizeGhlWebhook({ ...appCall }).dedupeKey, first);
+    assert.notEqual(normalizeGhlWebhook({ ...appCall, callStatus: 'completed' }).dedupeKey, first);
+  });
+
+  test('keeps every delivery when nothing identifies the message', () => {
+    const payload = { contact_id: 'c', customData: { event_type: 'contact.call' } };
+    assert.notEqual(normalizeGhlWebhook(payload).dedupeKey, normalizeGhlWebhook(payload).dedupeKey);
+  });
+
+  test('builds the stored entry with a stable id per message and snake_case keys', () => {
+    const contact = normalizeGhlWebhook(appCall).contact!;
+    assert.deepEqual(buildContactLogEntry(contact, 'event-row-id', '2026-11-10T15:31:00.000Z'), {
+      id: 'ghl_msg-1',
+      channel: 'call',
+      at: '2026-11-10T15:30:00.000Z',
+      direction: 'outbound',
+      source: 'ghl',
+      status: 'voicemail',
+      duration_seconds: 42,
+    });
+
+    const anonymous = normalizeGhlWebhook({ contact_id: 'c', customData: { event_type: 'contact.text' } }).contact!;
+    assert.deepEqual(buildContactLogEntry(anonymous, 'event-row-id', '2026-11-10T15:31:00.000Z'), {
+      id: 'ghl_event-row-id',
+      channel: 'text',
+      at: '2026-11-10T15:31:00.000Z',
+      direction: 'outbound',
+      source: 'ghl',
+    });
+  });
+
+  test('a call or text never trips the anonymous-lead filter or moves the stage itself', () => {
+    const normalized = normalizeGhlWebhook(appCall);
+    assert.equal(shouldIgnoreAnonymousLead(normalized, false), false);
+    assert.equal(nextLeadStageForEvent('Engaged', normalized.eventType), 'Engaged');
   });
 });

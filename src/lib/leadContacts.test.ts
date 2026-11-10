@@ -6,6 +6,8 @@ import {
   fromDateTimeLocalValue,
   logLeadContact,
   matchesLastContactedFilter,
+  describeContactOutcome,
+  isGhlContact,
   sortedContactLog,
   summarizeLeadContacts,
   toDateTimeLocalValue,
@@ -67,6 +69,44 @@ describe('summarizeLeadContacts', () => {
   test('ignores entries with an unreadable date', () => {
     const lead: Lead = { ...baseLead, contactLog: [{ id: 'a', channel: 'call', at: 'garbage' }] };
     assert.deepEqual(summarizeLeadContacts(lead), { calls: 0, texts: 0, lastContactedAt: undefined });
+  });
+});
+
+describe('GHL-reported contacts', () => {
+  const lead: Lead = {
+    ...baseLead,
+    contactLog: [
+      { id: 'm1', channel: 'call', at: '2026-10-10T14:00:00.000Z' },
+      { id: 'ghl_1', channel: 'call', at: '2026-10-11T14:00:00.000Z', direction: 'outbound', source: 'ghl', status: 'no-answer' },
+      { id: 'ghl_2', channel: 'text', at: '2026-10-12T14:00:00.000Z', direction: 'outbound', source: 'ghl' },
+      { id: 'ghl_3', channel: 'text', at: '2026-10-13T09:00:00.000Z', direction: 'inbound', source: 'ghl' },
+    ],
+  };
+
+  test('counts attempts from both sources, and keeps inbound out of them', () => {
+    assert.deepEqual(summarizeLeadContacts(lead), {
+      calls: 2,
+      texts: 1,
+      lastContactedAt: '2026-10-12T14:00:00.000Z',
+      lastInboundAt: '2026-10-13T09:00:00.000Z',
+    });
+  });
+
+  test('a lead who only reached in has not been contacted', () => {
+    const inboundOnly: Lead = { ...baseLead, contactLog: [lead.contactLog![3]] };
+    assert.equal(summarizeLeadContacts(inboundOnly).lastContactedAt, undefined);
+    assert.equal(matchesLastContactedFilter(inboundOnly, { kind: 'never' }), true);
+  });
+
+  test('tells GHL entries from hand-logged ones and describes their outcome', () => {
+    assert.equal(isGhlContact(lead.contactLog![0]), false);
+    assert.equal(isGhlContact(lead.contactLog![1]), true);
+    assert.equal(describeContactOutcome(lead.contactLog![1]), 'Outbound · no answer');
+    assert.equal(
+      describeContactOutcome({ ...lead.contactLog![1], status: 'completed', durationSeconds: 125 }),
+      'Outbound · completed · 2:05'
+    );
+    assert.equal(describeContactOutcome(lead.contactLog![3]), 'Inbound');
   });
 });
 

@@ -231,12 +231,27 @@ export type AddressParseTier = 'A' | 'A!' | 'B' | 'C' | 'D' | 'M';
 
 export type LeadContactChannel = 'call' | 'text';
 
-/** One call or text made to a lead, kept in Lead.contactLog */
+/**
+ * One call or text with a lead, kept in Lead.contactLog.
+ *
+ * Entries logged by hand in the app carry only id/channel/at and are attempts
+ * made to the lead. Entries reported by GoHighLevel carry source 'ghl' plus the
+ * direction and outcome; the server keeps those even if an app save omits them
+ * (see the ghl_contact_tracking migration), so the app treats them as read-only.
+ */
 export interface LeadContactAttempt {
   id: string;
   channel: LeadContactChannel;
   /** When the call or text happened (ISO timestamp) */
   at: string;
+  /** Absent means outbound: the business reaching out. 'inbound' is the lead calling or replying. */
+  direction?: 'outbound' | 'inbound';
+  /** 'ghl' when recorded by the GoHighLevel webhook; absent when logged by hand */
+  source?: 'ghl';
+  /** GHL's outcome for the call or text: completed, voicemail, no-answer, delivered, ... */
+  status?: string;
+  /** Call length in whole seconds, when GHL reports it */
+  durationSeconds?: number;
 }
 
 export interface Lead {
@@ -275,7 +290,7 @@ export interface Lead {
   stage: LeadStage;
   dispositionReason?: LeadDispositionReason;
   dispositionNotes?: string;
-  /** Calls and texts made to the lead, in any order. Null on leads never contacted. */
+  /** Calls and texts with the lead, in any order. Null on leads never contacted. */
   contactLog?: LeadContactAttempt[] | null;
   closedAt?: string;
   customerId?: string;

@@ -80,6 +80,10 @@ JWT verification off, which `config.toml` pins:
 supabase functions deploy ghl-webhook
 ```
 
+It handles lead and appointment events, and calls and texts, which it records on
+the lead's `contact_log`. How to point GoHighLevel at it is in
+[`docs/ghl-call-text-webhooks.md`](../docs/ghl-call-text-webhooks.md).
+
 ## Security model
 
 Every table has RLS enabled. For org-scoped data tables:

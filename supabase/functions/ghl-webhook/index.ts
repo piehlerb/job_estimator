@@ -1,6 +1,9 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
 import {
   IGNORED_ANONYMOUS_LEAD_REASON,
+  IGNORED_UNKNOWN_CONTACT_REASON,
+  buildContactLogEntry,
+  classifyGhlMessage,
   normalizeGhlWebhook,
   nextLeadStageForEvent,
   resolveLeadAddressMerge,
@@ -74,6 +77,12 @@ async function sha256Hex(value: string): Promise<string> {
 function pickIncomingSecret(req: Request, payload: Record<string, unknown>): string | undefined {
   const headerSecret = req.headers.get('x-ghl-webhook-secret')?.trim();
   if (headerSecret) return headerSecret;
+
+  // GHL app webhooks (the InboundMessage / OutboundMessage events) post to a
+  // bare URL: no custom headers and no custom body fields. The query string is
+  // the only place such a sender can carry the secret.
+  const querySecret = new URL(req.url).searchParams.get('secret')?.trim();
+  if (querySecret) return querySecret;
 
   const customData = payload.customData;
   const candidates = [
@@ -264,6 +273,15 @@ Deno.serve(async (req) => {
   }
 
   const webhookSource = source as SourceRow;
+
+  // App webhooks fire for every message on the location, on every channel. Only
+  // calls and texts are tracked; the rest are acknowledged and dropped unstored,
+  // so one email blast doesn't write an event row per recipient.
+  const message = classifyGhlMessage(payload);
+  if (message.kind === 'unsupported') {
+    return jsonResponse(200, { ok: true, ignored: true, reason: 'unsupported_message_type' });
+  }
+
   const normalized = normalizeGhlWebhook(payload);
   const nowIso = new Date().toISOString();
 
@@ -315,6 +333,49 @@ Deno.serve(async (req) => {
 
     if (leadLookupError) {
       throw leadLookupError;
+    }
+
+    // Calls and texts are logged on a lead that already exists and never create
+    // one: these payloads may carry nothing but a contact id, and most contacts a
+    // location messages (past customers, vendors) are not leads at all. The lead
+    // row is not merged either — only the contact log, stage and timestamps move.
+    if (normalized.contact) {
+      if (!existingLead) {
+        await supabase
+          .from('ghl_webhook_events')
+          .update({
+            processing_status: 'ignored',
+            processed_at: nowIso,
+            error_message: IGNORED_UNKNOWN_CONTACT_REASON,
+          })
+          .eq('id', eventRow.id);
+
+        return jsonResponse(200, { ok: true, ignored: true, reason: 'unknown_contact' });
+      }
+
+      const leadId = (existingLead as LeadRow).id;
+      // An atomic append in SQL: a read-modify-write here would drop one of two
+      // webhooks that land together, which a call and its follow-up text do.
+      const { error: contactError } = await supabase.rpc('record_lead_contact', {
+        p_lead_id: leadId,
+        p_entry: buildContactLogEntry(normalized.contact, eventRow.id, nowIso),
+        // Same rule as logging a call by hand: reaching out moves New along.
+        p_mark_attempted: normalized.contact.direction === 'outbound',
+      });
+
+      if (contactError) {
+        throw contactError;
+      }
+
+      await supabase
+        .from('ghl_webhook_events')
+        .update({
+          processing_status: 'processed',
+          processed_at: nowIso,
+        })
+        .eq('id', eventRow.id);
+
+      return jsonResponse(200, { ok: true, leadId });
     }
 
     // A nameless first contact is a spam call, not a lead. The event row above

@@ -22,6 +22,8 @@ import { LEAD_DISPOSITION_REASONS, LEAD_STAGES } from '../lib/leadPipeline';
 import { applyLeadEdit } from '../lib/leadMutations';
 import {
   fromDateTimeLocalValue,
+  describeContactOutcome,
+  isGhlContact,
   logLeadContact,
   matchesLastContactedFilter,
   sortedContactLog,
@@ -688,6 +690,11 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
                             ? `Last ${formatRelativeDate(contacts.lastContactedAt)}`
                             : 'Not contacted yet'}
                         </div>
+                        {contacts.lastInboundAt && (
+                          <div className="text-xs text-emerald-700" title={formatDateTime(contacts.lastInboundAt)}>
+                            Heard back {formatRelativeDate(contacts.lastInboundAt)}
+                          </div>
+                        )}
                         {canEdit && (
                           <div className="mt-2 flex gap-1.5">
                             <button
@@ -952,7 +959,26 @@ export default function Leads({ onNewJobFromLead, onEditJob }: LeadsProps) {
                     <p className="mt-2 text-sm text-slate-500">No calls or texts logged yet.</p>
                   ) : (
                     <ul className="mt-2 divide-y divide-slate-100 rounded-lg border border-slate-200">
-                      {editForm.contactLog.map((attempt) => (
+                      {editForm.contactLog.map((attempt) => isGhlContact(attempt) ? (
+                        <li key={attempt.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2 text-sm">
+                          <span className="inline-flex items-center gap-1 font-medium text-slate-800">
+                            {attempt.channel === 'call' ? (
+                              <Phone size={13} className="text-slate-400" />
+                            ) : (
+                              <MessageSquare size={13} className="text-slate-400" />
+                            )}
+                            {attempt.channel === 'call' ? 'Call' : 'Text'}
+                          </span>
+                          <span className="text-slate-600">{formatDateTime(attempt.at)}</span>
+                          <span className="text-xs capitalize text-slate-500">{describeContactOutcome(attempt)}</span>
+                          <span
+                            className="ml-auto rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600"
+                            title="Recorded automatically from GoHighLevel"
+                          >
+                            GHL
+                          </span>
+                        </li>
+                      ) : (
                         <li key={attempt.id} className="flex flex-wrap items-center gap-2 px-3 py-2">
                           <select
                             value={attempt.channel}

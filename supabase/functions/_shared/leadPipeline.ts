@@ -33,7 +33,9 @@ export type GhlWebhookEventType =
   | 'appointment.booked'
   | 'appointment.rescheduled'
   | 'appointment.canceled'
-  | 'appointment.completed';
+  | 'appointment.completed'
+  | 'contact.call'
+  | 'contact.text';
 
 export type LeadAppointmentStatus = 'booked' | 'rescheduled' | 'canceled' | 'no_show' | 'completed';
 
@@ -84,11 +86,27 @@ export interface NormalizedWebhookAppointment {
   assignedUser?: string;
 }
 
+/** A call or text between the business and a lead, as reported by GHL. */
+export interface NormalizedWebhookContact {
+  channel: 'call' | 'text';
+  /** 'outbound' is the business reaching out — an attempt. 'inbound' is the lead. */
+  direction: 'outbound' | 'inbound';
+  /** When it happened, if the payload says. The receiver falls back to arrival time. */
+  at?: string;
+  /** GHL's outcome, lower-cased: completed, voicemail, no-answer, delivered, ... */
+  status?: string;
+  /** Calls only, whole seconds. */
+  durationSeconds?: number;
+  ghlMessageId?: string;
+}
+
 export interface NormalizedGhlWebhook {
   eventType: GhlWebhookEventType;
   dedupeKey: string;
   lead: NormalizedWebhookLead;
   appointment?: NormalizedWebhookAppointment;
+  /** Present on 'contact.call' and 'contact.text' events only. */
+  contact?: NormalizedWebhookContact;
   sourceWorkflow?: string;
   reviewReasons: string[];
 }
@@ -483,14 +501,191 @@ export function stageForLinkedJobStatus(status: 'Won' | 'Lost' | 'Pending' | 'Ve
   return 'Quoted';
 }
 
-export function normalizeGhlWebhook(payload: Record<string, unknown>): NormalizedGhlWebhook {
-  const eventType = normalizeEventType(readFirstString(payload, [
-    'event_type',
-    'eventType',
-    'type',
-    'customData.event_type',
-    'customData.eventType',
+/**
+ * How a payload relates to call/text tracking.
+ *
+ * - 'none': not a message event; handle it as a lead or appointment event.
+ * - 'unsupported': a GHL message on a channel that is not tracked (email, chat,
+ *   social DMs). The receiver acknowledges these without storing them — a single
+ *   email campaign would otherwise write one event row per recipient.
+ * - 'contact': a call or text to record on the lead.
+ */
+export type GhlMessageClassification =
+  | { kind: 'none' }
+  | { kind: 'unsupported'; messageType: string }
+  | { kind: 'contact'; contact: NormalizedWebhookContact };
+
+const CALL_MESSAGE_TYPES = new Set(['call', 'voicemail', 'custom_call', 'ivr_call']);
+const TEXT_MESSAGE_TYPES = new Set(['sms', 'custom_sms', 'text']);
+
+const CALL_EVENT_NAMES = new Set(['contact.call', 'call', 'call.logged', 'call.status', 'call.details']);
+const TEXT_EVENT_NAMES = new Set(['contact.text', 'contact.sms', 'text', 'sms', 'message.sms', 'message.text']);
+
+function normalizeDirection(value?: string): 'outbound' | 'inbound' | undefined {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized) return undefined;
+  if (normalized.startsWith('in')) return 'inbound';
+  if (normalized.startsWith('out')) return 'outbound';
+  return undefined;
+}
+
+/** A timestamp only if it parses; a merge field GHL left unfilled must not become the time. */
+function parsedIsoOrUndefined(value?: string): string | undefined {
+  if (!value) return undefined;
+  const normalized = normalizeIso(value);
+  return normalized && !Number.isNaN(new Date(normalized).getTime()) ? normalized : undefined;
+}
+
+function normalizeContactStatus(value?: string): string | undefined {
+  const normalized = value?.trim().toLowerCase().replace(/[\s_]+/g, '-');
+  // An unfilled merge field arrives as the literal '{{...}}' text.
+  if (!normalized || normalized.includes('{{')) return undefined;
+  return normalized.slice(0, 40);
+}
+
+/**
+ * Recognize a call or text in either shape GHL sends it:
+ *
+ * 1. App webhooks (`type: 'OutboundMessage' | 'InboundMessage'`), which fire for
+ *    every message on the location — calls and texts sent by hand included — and
+ *    carry the channel in `messageType`.
+ * 2. Workflow webhooks, identified by an `event_type` custom-data value of
+ *    'contact.call' or 'contact.text' with an optional `direction`, the same way
+ *    the lead and appointment workflows identify themselves.
+ */
+export function classifyGhlMessage(payload: Record<string, unknown>): GhlMessageClassification {
+  const appEventType = readFirstString(payload, ['type'])?.toLowerCase();
+  const isAppMessage = appEventType === 'outboundmessage' || appEventType === 'inboundmessage';
+
+  let channel: 'call' | 'text' | undefined;
+  let direction: 'outbound' | 'inbound' | undefined;
+
+  if (isAppMessage) {
+    const rawMessageType = readFirstString(payload, ['messageType', 'messageTypeString', 'message_type']) || '';
+    const messageType = rawMessageType.toLowerCase().replace(/^type_/, '');
+    if (CALL_MESSAGE_TYPES.has(messageType)) channel = 'call';
+    else if (TEXT_MESSAGE_TYPES.has(messageType)) channel = 'text';
+    else return { kind: 'unsupported', messageType: rawMessageType || 'unknown' };
+
+    // The event name is the fallback: `direction` is absent on some payloads.
+    direction =
+      normalizeDirection(readFirstString(payload, ['direction'])) ||
+      (appEventType === 'inboundmessage' ? 'inbound' : 'outbound');
+  } else {
+    let eventName = readFirstString(payload, [
+      'event_type',
+      'eventType',
+      'customData.event_type',
+      'customData.eventType',
+    ])?.toLowerCase().replace(/_/g, '.');
+    if (!eventName) return { kind: 'none' };
+
+    // 'contact.call.outbound' and 'contact.text.inbound' carry the direction inline.
+    const suffix = eventName.match(/\.(inbound|outbound)$/)?.[1];
+    if (suffix) eventName = eventName.slice(0, -(suffix.length + 1));
+
+    if (CALL_EVENT_NAMES.has(eventName)) channel = 'call';
+    else if (TEXT_EVENT_NAMES.has(eventName)) channel = 'text';
+    else return { kind: 'none' };
+
+    direction =
+      normalizeDirection(suffix) ||
+      normalizeDirection(readFirstString(payload, [
+        'customData.direction',
+        'direction',
+        'message.direction',
+        'customData.call_direction',
+        'customData.message_direction',
+      ])) ||
+      'outbound';
+  }
+
+  const duration = Number(readFirstString(payload, [
+    'callDuration',
+    'call_duration',
+    'customData.call_duration',
+    'customData.duration',
+    'meta.callDuration',
   ]));
+
+  return {
+    kind: 'contact',
+    contact: {
+      channel,
+      direction,
+      at: parsedIsoOrUndefined(readFirstString(payload, [
+        'dateAdded',
+        'date_added',
+        'customData.occurred_at',
+        'customData.occurredAt',
+        'occurred_at',
+      ])),
+      // callStatus is the outcome (voicemail, no-answer); `status` alone reads
+      // 'completed' for a call that merely finished ringing out to voicemail.
+      status: normalizeContactStatus(readFirstString(payload, [
+        'callStatus',
+        'call_status',
+        'customData.call_status',
+        'customData.status',
+        'meta.callStatus',
+        'status',
+        'message.status',
+      ])),
+      durationSeconds: channel === 'call' && Number.isFinite(duration) && duration >= 0
+        ? Math.round(duration)
+        : undefined,
+      ghlMessageId: readFirstString(payload, [
+        'messageId',
+        'message_id',
+        'customData.message_id',
+        'customData.messageId',
+        'message.id',
+      ]),
+    },
+  };
+}
+
+/**
+ * The contact_log element written for a webhook-reported call or text. Keys are
+ * snake_case because the app's sync layer converts JSON keys in both directions
+ * (`duration_seconds` here is `durationSeconds` on LeadContactAttempt).
+ *
+ * `id` is derived from the GHL message id, so a later webhook for the same
+ * message (a call moving from ringing to completed) replaces the entry rather
+ * than adding a second attempt.
+ */
+export function buildContactLogEntry(
+  contact: NormalizedWebhookContact,
+  fallbackId: string,
+  nowIso: string
+): Record<string, string | number> {
+  const entry: Record<string, string | number> = {
+    id: `ghl_${contact.ghlMessageId || fallbackId}`.replace(/[^a-zA-Z0-9_-]/g, '_'),
+    channel: contact.channel,
+    at: contact.at || nowIso,
+    direction: contact.direction,
+    source: 'ghl',
+  };
+  if (contact.status) entry.status = contact.status;
+  if (contact.durationSeconds !== undefined) entry.duration_seconds = contact.durationSeconds;
+  return entry;
+}
+
+export const IGNORED_UNKNOWN_CONTACT_REASON =
+  'Ignored: call/text for a GHL contact that is not a lead here.';
+
+export function normalizeGhlWebhook(payload: Record<string, unknown>): NormalizedGhlWebhook {
+  const message = classifyGhlMessage(payload);
+  const contact = message.kind === 'contact' ? message.contact : undefined;
+  const eventType: GhlWebhookEventType = contact
+    ? (contact.channel === 'call' ? 'contact.call' : 'contact.text')
+    : normalizeEventType(readFirstString(payload, [
+        'event_type',
+        'eventType',
+        'type',
+        'customData.event_type',
+        'customData.eventType',
+      ]));
   const ghlContactId = readFirstString(payload, [
     'contact_id',
     'contactId',
@@ -656,12 +851,26 @@ export function normalizeGhlWebhook(payload: Record<string, unknown>): Normalize
       }
     : undefined;
 
-  const dedupeKey = readFirstString(payload, ['dedupe_key', 'dedupeKey', 'event_id', 'eventId']) || buildDedupeKey({
-    eventType,
-    ghlContactId,
-    ghlAppointmentId,
-    scheduledStartAt,
-  });
+  const dedupeKey = readFirstString(payload, ['dedupe_key', 'dedupeKey', 'event_id', 'eventId']) || (contact
+    ? buildDedupeKey({
+        eventType,
+        ghlContactId,
+        // A retry of the same delivery collapses; a status change on the same
+        // message (ringing -> completed) is a new event and updates the entry.
+        // Without a message id nothing identifies the call, so every delivery
+        // is kept rather than risk merging two real calls.
+        fallbackId: contact.ghlMessageId
+          ? [contact.ghlMessageId, contact.direction, contact.status, contact.durationSeconds]
+              .filter((part) => part !== undefined && part !== '')
+              .join(':')
+          : `${contact.direction}:${contact.at || crypto.randomUUID()}`,
+      })
+    : buildDedupeKey({
+        eventType,
+        ghlContactId,
+        ghlAppointmentId,
+        scheduledStartAt,
+      }));
   const reviewReasons: string[] = [];
 
   if (!lead.ghlContactId && !lead.phone && !lead.email) {
@@ -676,6 +885,7 @@ export function normalizeGhlWebhook(payload: Record<string, unknown>): Normalize
     dedupeKey,
     lead,
     appointment,
+    contact,
     sourceWorkflow: normalizeWhitespace(readFirstString(payload, ['workflow', 'workflow_name', 'workflowName', 'workflow.name'])),
     reviewReasons,
   };

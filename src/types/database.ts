@@ -2132,6 +2132,10 @@ export type Database = {
         Returns: boolean
       }
       permission_rank: { Args: { p_value: Json }; Returns: number }
+      record_lead_contact: {
+        Args: { p_entry: Json; p_lead_id: string; p_mark_attempted?: boolean }
+        Returns: boolean
+      }
       title_case: { Args: { input_text: string }; Returns: string }
     }
     Enums: {
