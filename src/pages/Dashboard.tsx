@@ -1,4 +1,4 @@
-import { Plus, Trash2, FileText, Search, Bell, Check, X, ChevronDown, ChevronLeft, ChevronRight, Link, Shuffle, PhoneCall, SlidersHorizontal, Calendar, Clock, Wrench, FileSearch, AlertTriangle } from 'lucide-react';
+import { Plus, Trash2, FileText, Search, Bell, Check, X, ChevronDown, ChevronLeft, ChevronRight, Link, Shuffle, PhoneCall, SlidersHorizontal, Calendar, Wrench, FileSearch } from 'lucide-react';
 import { useState, useEffect, useMemo, useRef, Fragment } from 'react';
 import { Star, MoreHorizontal, Pencil } from 'lucide-react';
 import JobStarButton from '../components/JobStarButton';
@@ -31,6 +31,7 @@ interface ReminderItem {
   subject: string;
   details?: string;
   dueAt: string;
+  customerName?: string;
 }
 
 const ALL_STATUSES: JobStatus[] = ['Pending', 'Verbal', 'Won', 'Lost'];
@@ -107,7 +108,6 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
   const [nextReminderFor, setNextReminderFor] = useState<{ jobId: string; jobName: string; customerName?: string } | null>(null);
   const [nextReminderForm, setNextReminderForm] = useState({ subject: '', dueDate: '', dueTime: '', details: '' });
   const [commTemplates, setCommTemplates] = useState<CommunicationTemplate[]>([]);
-  const [overdueExpanded, setOverdueExpanded] = useState(true);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [showFilterSheet, setShowFilterSheet] = useState(false);
   const [rowMenu, setRowMenu] = useState<{ jobId: string; top: number; right: number } | null>(null);
@@ -455,30 +455,6 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
     });
   };
 
-  const overdueReminders = useMemo(() => {
-    const todayStr = localToday();
-    const items: (ReminderItem & { customerName?: string })[] = [];
-
-    jobsWithCalc.forEach(({ job }) => {
-      if (job.status !== 'Pending') return;
-      (job.reminders || [])
-        .filter(r => !r.completed && r.dueDate <= todayStr)
-        .forEach(r => {
-          items.push({
-            reminderId: r.id,
-            jobId: job.id,
-            jobName: job.name || 'Untitled Job',
-            subject: r.subject,
-            details: r.details,
-            dueAt: r.dueAt,
-            customerName: job.customerName,
-          });
-        });
-    });
-
-    return items.sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime());
-  }, [jobsWithCalc]);
-
   const remindersByDue = useMemo((): ReminderItem[] => {
     const allReminders: ReminderItem[] = [];
 
@@ -493,6 +469,7 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
             subject: reminder.subject,
             details: reminder.details,
             dueAt: reminder.dueAt,
+            customerName: job.customerName,
           });
         });
     });
@@ -806,6 +783,34 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
       </div>
     );
   }
+
+  // Shared list styling for the Contact, Today and Reminders tabs: cards on phones, plain rows on desktop
+  const LIST_CLASS = 'px-4 md:px-0 flex flex-col gap-2.5 md:gap-0';
+  const ROW_CLASS = 'w-full bg-white border border-slate-200 rounded-[14px] md:border-0 md:border-t md:border-slate-100 md:rounded-none px-4 py-3 min-h-[60px] flex items-center gap-3 text-left hover:bg-slate-50 active:bg-slate-50 transition-colors';
+  const listHeading = (label: string, count: number, icon?: React.ReactNode, tone = 'text-slate-900') => (
+    <h2 className={`flex items-center gap-2 px-4 pt-4 pb-2 md:py-2.5 md:bg-slate-50 md:border-t md:border-slate-200 md:first:border-t-0 text-[13px] font-extrabold ${tone}`}>
+      {icon}
+      <span>{label} · <span className="num">{count}</span></span>
+    </h2>
+  );
+
+  // Reminders split by urgency: before today, today, and later
+  const startOfTodayMs = new Date(localToday() + 'T00:00:00').getTime();
+  const startOfTomorrowMs = startOfTodayMs + 24 * 60 * 60 * 1000;
+  const dueMs = (reminder: ReminderItem) => new Date(reminder.dueAt).getTime();
+  const reminderGroups = [
+    { id: 'overdue' as const, label: 'Overdue', items: remindersByDue.filter(r => dueMs(r) < startOfTodayMs) },
+    { id: 'today' as const, label: 'Today', items: remindersByDue.filter(r => dueMs(r) >= startOfTodayMs && dueMs(r) < startOfTomorrowMs) },
+    { id: 'upcoming' as const, label: 'Upcoming', items: remindersByDue.filter(r => dueMs(r) >= startOfTomorrowMs) },
+  ].filter(group => group.items.length > 0);
+  const reminderDueText = (dueAt: string, group: 'overdue' | 'today' | 'upcoming') => {
+    const due = new Date(dueAt);
+    const time = due.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    if (group === 'today') return time;
+    if (group === 'upcoming') return `${due.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}, ${time}`;
+    const daysLate = Math.floor((startOfTodayMs - due.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+    return daysLate === 1 ? '1 day late' : `${daysLate} days late`;
+  };
 
   const marginOf = (price: number, costs: number) => (price > 0 ? ((price - costs) / price) * 100 : 0);
   const formatPrice = (value: number) => `$${value.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
@@ -1146,256 +1151,186 @@ export default function Dashboard({ onNewJob, onEditJob, onViewJobSheet }: Dashb
             </div>
           )}
 
-      {/* Overdue reminders banner */}
-      {viewMode === 'reminders' && overdueReminders.length > 0 && (
-        <div className="border-b border-red-200 bg-red-50">
-          <button
-            type="button"
-            onClick={() => setOverdueExpanded(p => !p)}
-            className="w-full flex items-center gap-2 px-3 sm:px-6 py-2.5 text-left"
-          >
-            <AlertTriangle size={14} className="text-red-500 shrink-0" />
-            <span className="text-sm font-semibold text-red-700 flex-1">
-              {overdueReminders.length} Overdue Reminder{overdueReminders.length !== 1 ? 's' : ''}
-            </span>
-            {overdueExpanded
-              ? <ChevronDown size={14} className="text-red-400 shrink-0" />
-              : <ChevronRight size={14} className="text-red-400 shrink-0" />
-            }
-          </button>
-          {overdueExpanded && (
-            <div className="divide-y divide-red-100">
-              {overdueReminders.map((reminder) => {
-                const daysOverdue = Math.floor(
-                  (new Date(localToday() + 'T00:00:00').getTime() -
-                   new Date(reminder.dueAt).getTime()) / (24 * 60 * 60 * 1000)
-                );
-                return (
-                  <div key={`${reminder.jobId}-${reminder.reminderId}`}
-                    className="flex items-start gap-3 px-3 sm:px-6 py-2.5 hover:bg-red-100/50 transition-colors">
-                    <button onClick={() => onEditJob(reminder.jobId)} className="flex-1 min-w-0 text-left">
-                      <div className="text-sm font-medium text-slate-900 truncate">{reminder.subject}</div>
-                      <div className="text-xs text-slate-500 truncate">
-                        {reminder.jobName}{reminder.customerName ? ` · ${reminder.customerName}` : ''}
-                      </div>
-                      <div className="text-xs font-medium text-red-600 mt-0.5">
-                        {daysOverdue === 0 ? 'Due today' : daysOverdue === 1 ? '1 day overdue' : `${daysOverdue} days overdue`}
-                        {' · '}{new Date(reminder.dueAt).toLocaleDateString()}
-                      </div>
-                    </button>
-                    <div className="flex items-center gap-1 shrink-0 pt-0.5">
-                      <button type="button" onClick={() => handleCompleteReminder(reminder)}
-                        className="p-1.5 rounded text-green-600 hover:bg-green-100 transition-colors" title="Mark complete" disabled={updatingReminder}>
-                        <Check size={14} />
-                      </button>
-                      <button type="button" onClick={() => handleDeleteReminder(reminder)}
-                        className="p-1.5 rounded text-red-600 hover:bg-red-100 transition-colors" title="Delete reminder" disabled={updatingReminder}>
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
       {/* =========== TAB CONTENT =========== */}
 
       {/* Needs Contact tab */}
       {viewMode === 'needs-contact' && (
-        <div className="md:bg-white md:divide-y md:divide-slate-100">
+        <div className="pb-3 md:pb-0">
           {needsContactJobs.length === 0 ? (
             <div className="p-12 text-center">
-              <PhoneCall size={24} className="mx-auto mb-2 text-slate-300" />
-              <p className="text-sm text-slate-500">No pending jobs need contact right now.</p>
+              <PhoneCall size={24} className="mx-auto mb-2 text-slate-400" />
+              <p className="text-sm text-slate-600">No pending jobs need contact right now.</p>
             </div>
           ) : (
-            <div className="px-3.5 md:px-0 py-2 md:py-0 flex flex-col gap-2 md:gap-0">
-              {needsContactJobs.map(({ job, daysSince }) => (
-                <button key={job.id} onClick={() => onEditJob(job.id)}
-                  className="w-full bg-white border border-[#fed7aa] md:border-0 md:border-b md:border-slate-100 rounded-[14px] md:rounded-none px-4 md:px-6 py-3.5 md:py-3 flex items-center gap-3 text-left hover:bg-orange-50/60 active:bg-orange-50 transition-colors">
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[14.5px] font-bold text-[#0f172a] truncate">{job.name || 'Untitled Job'}</div>
-                    {job.customerName && <div className="text-xs text-slate-400 mt-0.5">{job.customerName}</div>}
-                  </div>
-                  <span className={`num text-[15px] font-extrabold shrink-0 ${daysSince > 60 ? 'text-red-500' : 'text-[#ea580c]'}`}>{daysSince}d</span>
-                </button>
-              ))}
-            </div>
+            <>
+              {listHeading(`No contact in over ${dashboardPricing.staleContactDays ?? 30} days`, needsContactJobs.length)}
+              <div className={LIST_CLASS}>
+                {needsContactJobs.map(({ job, daysSince }) => (
+                  <button key={job.id} onClick={() => onEditJob(job.id)} className={ROW_CLASS}>
+                    <span className="flex-1 min-w-0">
+                      <span className="block truncate text-[15px] font-bold text-slate-900">{job.name || 'Untitled Job'}</span>
+                      <span className="block truncate mt-0.5 text-[13px] text-slate-600">
+                        {[job.customerName, job.status, formatPrice(job.totalPrice)].filter(Boolean).join(' · ')}
+                      </span>
+                    </span>
+                    <span className={`num shrink-0 text-[13px] font-bold ${daysSince > 60 ? 'text-red-800' : 'text-slate-700'}`}>{daysSince} days</span>
+                    <ChevronRight size={16} className="shrink-0 text-slate-400" />
+                  </button>
+                ))}
+              </div>
+            </>
           )}
         </div>
       )}
 
       {/* Today tab */}
       {viewMode === 'today' && (
-        <div className="md:bg-white">
+        <div className="pb-3 md:pb-0">
           {/* Day navigation */}
-          <div className="flex items-center gap-2 px-3.5 md:px-6 py-2.5 bg-white border-b border-slate-200">
+          <div className="flex items-center gap-2 px-4 py-2 bg-white border-b border-slate-200">
             <button
               type="button"
               onClick={() => setSelectedDay(d => addDaysToLocalDate(d, -1))}
               aria-label="Previous day"
-              className="flex items-center justify-center w-9 h-9 rounded-[10px] border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+              className="flex items-center justify-center w-11 h-11 rounded-[10px] border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors"
             >
-              <ChevronLeft size={17} />
+              <ChevronLeft size={18} />
             </button>
             <div className="flex-1 text-center min-w-0">
-              <div className="text-[14px] font-bold text-slate-900 truncate">
+              <div className="text-[15px] font-bold text-slate-900 truncate">
                 {isSelectedDayToday ? 'Today' : selectedDayLabel}
               </div>
-              {!isSelectedDayToday && (
+              {isSelectedDayToday ? (
+                <div className="text-xs text-slate-600">{selectedDayLabel}</div>
+              ) : (
                 <button
                   type="button"
                   onClick={() => setSelectedDay(localToday())}
-                  className="text-[11px] font-bold text-blue-600 hover:text-blue-800 transition-colors"
+                  className="text-xs font-bold text-gf-dark-green hover:underline"
                 >
                   Back to today
                 </button>
-              )}
-              {isSelectedDayToday && (
-                <div className="text-[11px] font-medium text-slate-400">{selectedDayLabel}</div>
               )}
             </div>
             <button
               type="button"
               onClick={() => setSelectedDay(d => addDaysToLocalDate(d, 1))}
               aria-label="Next day"
-              className="flex items-center justify-center w-9 h-9 rounded-[10px] border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+              className="flex items-center justify-center w-11 h-11 rounded-[10px] border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors"
             >
-              <ChevronRight size={17} />
+              <ChevronRight size={18} />
             </button>
           </div>
           {dayTotalCount === 0 ? (
             <div className="p-12 text-center">
-              <Calendar size={24} className="mx-auto mb-2 text-slate-300" />
-              <p className="text-sm text-slate-500">
+              <Calendar size={24} className="mx-auto mb-2 text-slate-400" />
+              <p className="text-sm text-slate-600">
                 Nothing scheduled for {isSelectedDayToday ? 'today' : selectedDayLabel}.
               </p>
             </div>
           ) : (
-            <div className="px-3.5 md:px-0 py-3 md:py-0 space-y-3.5 md:space-y-0 md:divide-y md:divide-slate-200">
+            <>
               {dayItems.installs.length > 0 && (
-                <div>
-                  <div className="text-[11px] font-extrabold text-[#15803d] tracking-[0.5px] uppercase mb-[7px] pl-1 md:hidden">{isSelectedDayToday ? 'Installs Today' : 'Installs'}</div>
-                  <div className="hidden md:flex items-center gap-2 px-6 py-2 bg-green-50">
-                    <Wrench size={13} className="text-green-600" />
-                    <span className="text-xs font-semibold text-green-700 uppercase tracking-wide">Installs</span>
-                    <span className="text-[10px] font-bold text-green-600">({dayItems.installs.length})</span>
-                  </div>
-                  <div className="flex flex-col gap-2 md:gap-0 md:divide-y md:divide-slate-100">
+                <>
+                  {listHeading('Installs', dayItems.installs.length, <Wrench size={14} />)}
+                  <div className={LIST_CLASS}>
                     {dayItems.installs.map(({ job, dayNumber, totalDays }) => (
-                      <button key={job.id} onClick={() => onEditJob(job.id)}
-                        className="w-full bg-white border border-[#bbf7d0] border-l-[3px] border-l-[#22c55e] md:border-0 md:border-b md:border-slate-100 rounded-[13px] md:rounded-none px-[15px] md:px-6 py-[13px] md:py-3 flex items-center gap-3 text-left hover:bg-green-50/60 transition-colors">
-                        <div className="flex-1 min-w-0">
-                          <div className="text-[14.5px] font-bold text-[#0f172a] truncate">{job.name || 'Untitled Job'}</div>
-                          {job.customerName && <div className="text-xs text-slate-400 mt-0.5">{job.customerName}</div>}
-                        </div>
+                      <button key={job.id} onClick={() => onEditJob(job.id)} className={ROW_CLASS}>
+                        <span className="flex-1 min-w-0">
+                          <span className="block truncate text-[15px] font-bold text-slate-900">{job.name || 'Untitled Job'}</span>
+                          {job.customerName && <span className="block truncate mt-0.5 text-[13px] text-slate-600">{job.customerName}</span>}
+                        </span>
                         {totalDays > 1 && (
-                          <span className="text-xs font-medium text-green-700 bg-green-100 px-1.5 py-0.5 rounded shrink-0">Day {dayNumber}/{totalDays}</span>
+                          <span className="num shrink-0 px-2.5 py-0.5 rounded-full bg-slate-100 text-xs font-bold text-slate-700">Day {dayNumber} of {totalDays}</span>
                         )}
+                        <ChevronRight size={16} className="shrink-0 text-slate-400" />
                       </button>
                     ))}
                   </div>
-                </div>
+                </>
               )}
               {dayItems.estimates.length > 0 && (
-                <div>
-                  <div className="text-[11px] font-extrabold text-purple-700 tracking-[0.5px] uppercase mb-[7px] pl-1 md:hidden">{isSelectedDayToday ? 'Estimates Today' : 'Estimates'}</div>
-                  <div className="hidden md:flex items-center gap-2 px-6 py-2 bg-purple-50">
-                    <FileSearch size={13} className="text-purple-600" />
-                    <span className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Estimates</span>
-                    <span className="text-[10px] font-bold text-purple-600">({dayItems.estimates.length})</span>
-                  </div>
-                  <div className="flex flex-col gap-2 md:gap-0 md:divide-y md:divide-slate-100">
+                <>
+                  {listHeading('Estimates', dayItems.estimates.length, <FileSearch size={14} />)}
+                  <div className={LIST_CLASS}>
                     {dayItems.estimates.map(({ job }) => (
-                      <button key={job.id} onClick={() => onEditJob(job.id)}
-                        className="w-full bg-white border border-slate-200 md:border-0 md:border-b md:border-slate-100 rounded-[13px] md:rounded-none px-[15px] md:px-6 py-[13px] md:py-3 flex items-center gap-3 text-left hover:bg-purple-50/60 transition-colors">
-                        <div className="flex-1 min-w-0">
-                          <div className="text-[14.5px] font-bold text-[#0f172a] truncate">{job.name || 'Untitled Job'}</div>
-                          {job.customerName && <div className="text-xs text-slate-400 mt-0.5">{job.customerName}</div>}
-                        </div>
-                        <span className={`shrink-0 px-[9px] py-[3px] rounded-full text-[11px] font-extrabold ${getStatusColor(job.status)}`}>{job.status}</span>
+                      <button key={job.id} onClick={() => onEditJob(job.id)} className={ROW_CLASS}>
+                        <span className="flex-1 min-w-0">
+                          <span className="block truncate text-[15px] font-bold text-slate-900">{job.name || 'Untitled Job'}</span>
+                          {job.customerName && <span className="block truncate mt-0.5 text-[13px] text-slate-600">{job.customerName}</span>}
+                        </span>
+                        <span className={`shrink-0 px-2.5 py-0.5 rounded-full text-xs font-bold ${getStatusColor(job.status)}`}>{job.status}</span>
+                        <ChevronRight size={16} className="shrink-0 text-slate-400" />
                       </button>
                     ))}
                   </div>
-                </div>
+                </>
               )}
               {dayItems.reminders.length > 0 && (
-                <div>
-                  <div className="text-[11px] font-extrabold text-[#1d4ed8] tracking-[0.5px] uppercase mb-[7px] pl-1 md:hidden">{isSelectedDayToday ? 'Reminders Today' : 'Reminders'}</div>
-                  <div className="hidden md:flex items-center gap-2 px-6 py-2 bg-blue-50">
-                    <Bell size={13} className="text-blue-600" />
-                    <span className="text-xs font-semibold text-blue-700 uppercase tracking-wide">Reminders</span>
-                    <span className="text-[10px] font-bold text-blue-600">({dayItems.reminders.length})</span>
-                  </div>
-                  <div className="flex flex-col gap-2 md:gap-0 md:divide-y md:divide-slate-100">
+                <>
+                  {listHeading('Reminders', dayItems.reminders.length, <Bell size={14} />)}
+                  <div className={LIST_CLASS}>
                     {dayItems.reminders.map(({ job, reminder }) => (
-                      <button key={reminder.id} onClick={() => onEditJob(job.id)}
-                        className="w-full bg-white border border-[#bfdbfe] border-l-[3px] border-l-[#3b82f6] md:border-0 md:border-b md:border-slate-100 rounded-[13px] md:rounded-none px-[15px] md:px-6 py-[13px] md:py-3 flex items-center gap-3 text-left hover:bg-blue-50/60 transition-colors">
-                        <div className="flex-1 min-w-0">
-                          <div className="text-[14.5px] font-bold text-[#0f172a] truncate">{reminder.subject}</div>
-                          <div className="text-xs text-slate-400 mt-0.5">{job.name || 'Untitled Job'}{job.customerName ? ` · ${job.customerName}` : ''}</div>
-                        </div>
-                        <div className="flex items-center gap-1 text-xs text-blue-600 shrink-0">
-                          <Clock size={11} />
-                          <span>{reminder.dueTime}</span>
-                        </div>
+                      <button key={reminder.id} onClick={() => onEditJob(job.id)} className={ROW_CLASS}>
+                        <span className="flex-1 min-w-0">
+                          <span className="block truncate text-[15px] font-bold text-slate-900">{reminder.subject}</span>
+                          <span className="block truncate mt-0.5 text-[13px] text-slate-600">{job.name || 'Untitled Job'}{job.customerName ? ` · ${job.customerName}` : ''}</span>
+                        </span>
+                        {reminder.dueTime && <span className="num shrink-0 text-[13px] font-bold text-slate-700">{reminder.dueTime}</span>}
+                        <ChevronRight size={16} className="shrink-0 text-slate-400" />
                       </button>
                     ))}
                   </div>
-                </div>
+                </>
               )}
-            </div>
+            </>
           )}
         </div>
       )}
 
-      {/* Reminders tab */}
+      {/* Reminders tab — grouped by urgency so overdue items are listed once, at the top */}
       {viewMode === 'reminders' && (
-        <div className="md:bg-white">
+        <div className="pb-3 md:pb-0">
           {remindersByDue.length === 0 ? (
             <div className="p-12 text-center">
-              <Bell size={24} className="mx-auto mb-2 text-slate-300" />
-              <p className="text-sm text-slate-500">No pending reminders.</p>
+              <Bell size={24} className="mx-auto mb-2 text-slate-400" />
+              <p className="text-sm text-slate-600">No pending reminders.</p>
             </div>
           ) : (
-            <div className="px-3.5 md:px-0 py-2.5 md:py-0 flex flex-col gap-2 md:gap-0 md:divide-y md:divide-slate-100">
-              {remindersByDue.map((reminder) => {
-                const now = Date.now();
-                const dueAtTime = new Date(reminder.dueAt).getTime();
-                const startOfTomorrow = new Date();
-                startOfTomorrow.setHours(24, 0, 0, 0);
-                const isPastDue = dueAtTime < now;
-                const isDueTodayOrPast = dueAtTime < startOfTomorrow.getTime();
-                return (
-                  <div key={`${reminder.jobId}-${reminder.reminderId}`}
-                    className={`bg-white border border-slate-200 md:border-0 md:border-b md:border-slate-100 rounded-[14px] md:rounded-none px-4 md:px-6 py-3.5 md:py-3 flex items-start gap-3 ${
-                      isPastDue ? 'md:bg-red-50' : isDueTodayOrPast ? 'md:bg-amber-50' : ''
-                    }`}>
-                    <button onClick={() => onEditJob(reminder.jobId)} className="flex-1 min-w-0 text-left">
-                      <div className="text-[14.5px] font-bold text-[#0f172a] truncate">{reminder.subject}</div>
-                      <div className="text-xs text-slate-400 mt-0.5 truncate">{reminder.jobName}</div>
-                      {reminder.details && <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{reminder.details}</p>}
-                      <p className={`num text-xs font-bold mt-1.5 ${isPastDue ? 'text-[#dc2626]' : isDueTodayOrPast ? 'text-[#a16207]' : 'text-slate-500'}`}>
-                        {new Date(reminder.dueAt).toLocaleString()}
-                      </p>
-                    </button>
-                    <div className="flex items-center gap-1 shrink-0 pt-0.5">
-                      <button type="button" onClick={() => handleCompleteReminder(reminder)}
-                        className="p-1.5 rounded text-green-600 hover:bg-green-50 transition-colors" title="Mark complete" disabled={updatingReminder}>
-                        <Check size={14} />
+            reminderGroups.map((group) => (
+              <Fragment key={group.id}>
+                {listHeading(group.label, group.items.length,
+                  group.id === 'overdue' ? <span className="w-2 h-2 rounded-full bg-red-700" aria-hidden="true" /> : undefined,
+                  group.id === 'overdue' ? 'text-red-800' : undefined)}
+                <div className={LIST_CLASS}>
+                  {group.items.map((reminder) => (
+                    <div key={`${reminder.jobId}-${reminder.reminderId}`}
+                      className="bg-white border border-slate-200 rounded-[14px] md:border-0 md:border-t md:border-slate-100 md:rounded-none pl-4 pr-2 py-2 flex items-center gap-1">
+                      <button onClick={() => onEditJob(reminder.jobId)} className="flex-1 min-w-0 py-1 text-left">
+                        <span className="block truncate text-[15px] font-bold text-slate-900">{reminder.subject}</span>
+                        <span className="block truncate mt-0.5 text-[13px] text-slate-600">
+                          <span className={group.id === 'overdue' ? 'font-bold text-red-800' : group.id === 'today' ? 'font-bold text-slate-900' : ''}>
+                            {reminderDueText(reminder.dueAt, group.id)}
+                          </span>
+                          {' · '}{reminder.jobName}{reminder.customerName ? ` · ${reminder.customerName}` : ''}
+                        </span>
+                        {reminder.details && <span className="block truncate mt-0.5 text-[13px] text-slate-600">{reminder.details}</span>}
                       </button>
-                      <button type="button" onClick={() => handleDeleteReminder(reminder)}
-                        className="p-1.5 rounded text-red-600 hover:bg-red-50 transition-colors" title="Delete reminder" disabled={updatingReminder}>
-                        <Trash2 size={14} />
+                      <button type="button" onClick={() => handleCompleteReminder(reminder)} disabled={updatingReminder}
+                        aria-label={`Mark "${reminder.subject}" done`} title="Mark done"
+                        className="shrink-0 flex items-center justify-center w-11 h-11 rounded-full border border-slate-300 text-slate-700 hover:border-gf-dark-green hover:bg-green-50 hover:text-gf-dark-green transition-colors disabled:opacity-50">
+                        <Check size={18} strokeWidth={2.5} />
+                      </button>
+                      <button type="button" onClick={() => handleDeleteReminder(reminder)} disabled={updatingReminder}
+                        aria-label={`Delete "${reminder.subject}"`} title="Delete reminder"
+                        className="shrink-0 flex items-center justify-center w-11 h-11 rounded-lg text-slate-500 hover:bg-red-50 hover:text-red-700 transition-colors disabled:opacity-50">
+                        <Trash2 size={16} />
                       </button>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  ))}
+                </div>
+              </Fragment>
+            ))
           )}
         </div>
       )}
