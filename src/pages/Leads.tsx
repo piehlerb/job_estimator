@@ -20,6 +20,7 @@ import { useCanEdit } from '../hooks/useAreaAccess';
 import ViewOnlyNotice from '../components/ViewOnlyNotice';
 import { LEAD_DISPOSITION_REASONS, LEAD_STAGES } from '../lib/leadPipeline';
 import { applyLeadEdit } from '../lib/leadMutations';
+import { stageBadgeClass } from '../lib/leadStageStyles';
 import {
   fromDateTimeLocalValue,
   logLeadContact,
@@ -143,30 +144,6 @@ function formatRelativeDate(value?: string): string {
   if (diffDays === 1) return 'Yesterday';
   if (diffDays < 30) return `${diffDays} days ago`;
   return date.toLocaleDateString();
-}
-
-function stageBadgeClass(stage: LeadStage): string {
-  switch (stage) {
-    case 'Won':
-      return 'bg-green-100 text-green-800';
-    case 'Lost':
-      return 'bg-red-100 text-red-800';
-    case 'Disqualified':
-      return 'bg-slate-200 text-slate-700';
-    case 'Call Booked':
-      return 'bg-cyan-100 text-cyan-800';
-    case 'Estimate Booked':
-    case 'Estimate Completed':
-      return 'bg-blue-100 text-blue-800';
-    case 'Quoted':
-      return 'bg-purple-100 text-purple-800';
-    case 'Contact Attempted':
-    case 'Engaged':
-      return 'bg-amber-100 text-amber-800';
-    case 'New':
-    default:
-      return 'bg-slate-100 text-slate-700';
-  }
 }
 
 function appointmentBadgeClass(status?: LeadAppointment['status']): string {

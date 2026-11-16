@@ -7,6 +7,7 @@ import { loadAllHistoricalJobsFromSupabase } from '../lib/sync';
 import ZipGeographyReport from '../components/ZipGeographyReport';
 import LeadTrackingReport from '../components/LeadTrackingReport';
 import LeadCreatedDateReport from '../components/LeadCreatedDateReport';
+import LeadLastContactedReport from '../components/LeadLastContactedReport';
 import SpreadRateReport from '../components/SpreadRateReport';
 import { localToday, toLocalDateString } from '../lib/dateUtils';
 import { useCanEdit } from '../hooks/useAreaAccess';
@@ -58,7 +59,7 @@ interface EmployeeHoursRow {
 const ALL_STATUSES: JobStatus[] = ['Pending', 'Verbal', 'Won', 'Lost'];
 type DateRangePreset = 'all' | '30d' | '90d' | 'ytd' | 'custom';
 type DateFieldMode = 'install' | 'created';
-type ReportView = 'tags' | 'monthly-won' | 'employee-hours' | 'expenses' | 'spread-rates' | 'lead-tracking' | 'leads-by-created-date' | 'zip-geography';
+type ReportView = 'tags' | 'monthly-won' | 'employee-hours' | 'expenses' | 'spread-rates' | 'lead-tracking' | 'leads-by-created-date' | 'leads-last-contacted' | 'zip-geography';
 
 function getDefaultEmpStart() {
   const d = new Date();
@@ -643,6 +644,7 @@ export default function Reporting({ onEditJob }: ReportingProps) {
           { id: 'spread-rates', label: 'Spread Rates' },
           { id: 'lead-tracking', label: 'Lead Tracking' },
           { id: 'leads-by-created-date', label: 'Leads by Date' },
+          { id: 'leads-last-contacted', label: 'Last Contacted' },
           { id: 'zip-geography', label: 'ZIP Geography' },
         ] as { id: ReportView; label: string }[]).map(({ id, label }) => (
           <button
@@ -1262,6 +1264,7 @@ export default function Reporting({ onEditJob }: ReportingProps) {
 
           {/* ===== LEADS BY CREATED DATE ===== */}
           {activeView === 'leads-by-created-date' && <LeadCreatedDateReport leads={leads} appointments={leadAppointments} />}
+          {activeView === 'leads-last-contacted' && <LeadLastContactedReport leads={leads} />}
 
           {/* ===== LEAD TRACKING ===== */}
           {activeView === 'lead-tracking' && <LeadTrackingReport leads={leads} appointments={leadAppointments} spendRecords={adSpendRecords} saveSpend={handleSaveSpend} canEditSpend={canEditSpend} />}
